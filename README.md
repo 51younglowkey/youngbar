@@ -15,7 +15,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 - **Reorder**: ⌘-drag in the real menu bar (verified with a swap-and-restore test) and drag rows in the layout table.
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
 - **Layout table**: Name / Icon / Hide / Always Hidden, with system items included. Date and Control Center keep their macOS-fixed position but can be hidden.
-- **Appearance**: system / light / dark, four accent themes (forest, sakura, amber, graphite), and solid / translucent / vibrant strip materials.
+- **Appearance**: liquid-glass settings window, system / light / dark, four accent themes (forest, sakura, amber, graphite), and solid / translucent / vibrant strip materials.
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Local only**: no telemetry, no network. Menu-bar crops are cached in `~/Library/Application Support/YoungBar/pictures.json` and can be cleared from the menu.
 

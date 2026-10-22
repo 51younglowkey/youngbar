@@ -157,6 +157,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if ProcessInfo.processInfo.environment["YOUNGBAR_CONCEALTEST"] == "1" {
                 await runConcealTest()
             }
+            if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSSHOT"] == "1" {
+                showWindow()
+                try? await Task.sleep(for: .milliseconds(700))
+                await captureScreen(to: "settings-full.png")
+            }
             if let raw = ProcessInfo.processInfo.environment["YOUNGBAR_CLOSEWINDOW_PID"], let pid = pid_t(raw) {
                 await runWindowCleanup(pid: pid)
             }
@@ -738,22 +743,67 @@ final class BarApp: NSObject, NSApplicationDelegate {
         for item in snapshot.items { present.insert(item.id.sectionKey.rawValue) }
         for id in snapshot.concealed { present.insert(id.sectionKey.rawValue) }
         presentKeys = present
-        for item in snapshot.items.sorted(by: { ($0.frame?.minX ?? .greatestFiniteMagnitude) < ($1.frame?.minX ?? .greatestFiniteMagnitude) }) where item.id.bundleID != Bundle.main.bundleIdentifier && MenuBarPolicy.isSectionManageable(item.id) {
+
+        var orderChanged = false
+        let deduped = uniqueKeys(savedOrder)
+        if deduped.count != savedOrder.count {
+            savedOrder = deduped
+            orderChanged = true
+        }
+        for item in snapshot.items.sorted(by: { ($0.frame?.minX ?? .greatestFiniteMagnitude) < ($1.frame?.minX ?? .greatestFiniteMagnitude) })
+        where item.id.bundleID != Bundle.main.bundleIdentifier && MenuBarPolicy.isSectionManageable(item.id) {
             let key = item.id.sectionKey.rawValue
             catalog[key] = item
-            if !savedOrder.contains(key) { savedOrder.append(key) }
+            if !savedOrder.contains(key), let frame = item.frame {
+                // New items belong where they actually sit, not at the end.
+                let index = savedOrder.firstIndex { existing in
+                    guard let existingFrame = catalog[existing]?.frame else { return false }
+                    return existingFrame.minX > frame.minX
+                } ?? savedOrder.endIndex
+                savedOrder.insert(key, at: index)
+                orderChanged = true
+            }
             if let bundle = item.id.bundleID, bundle != PelmetBundle.agentID {
                 knownBundles[bundle] = item.appName ?? appName(for: bundle)
             }
         }
         for id in snapshot.concealed where catalog[id.sectionKey.rawValue] == nil {
             catalog[id.sectionKey.rawValue] = ObservedItem(id: id, frame: nil, appName: nil)
-            if !savedOrder.contains(id.sectionKey.rawValue) { savedOrder.append(id.sectionKey.rawValue) }
+            if !savedOrder.contains(id.sectionKey.rawValue) {
+                savedOrder.append(id.sectionKey.rawValue)
+                orderChanged = true
+            }
         }
         for key in modes.keys where catalog[key] == nil {
             catalog[key] = ObservedItem(id: ItemID(rawValue: key), frame: nil, appName: nil)
-            if !savedOrder.contains(key) { savedOrder.append(key) }
+            if !savedOrder.contains(key) {
+                savedOrder.append(key)
+                orderChanged = true
+            }
         }
+        reconcileVisibleOrder(snapshot)
+        let finalOrder = uniqueKeys(savedOrder)
+        if finalOrder != savedOrder { savedOrder = finalOrder; orderChanged = true }
+        if orderChanged { UserDefaults.standard.set(savedOrder, forKey: "itemOrder") }
+    }
+
+    /// The table is the user's ordering model, but it must not drift from the
+    /// real bar. Whenever the visible items disagree with their saved order,
+    /// rewrite just those slots to the actual left-to-right order and persist.
+    private func reconcileVisibleOrder(_ snapshot: EngineSnapshot) {
+        guard !busy, !capturing else { return }
+        let actual = uniqueKeys(snapshot.items
+            .filter { $0.frame != nil }
+            .sorted { ($0.frame?.minX ?? 0) < ($1.frame?.minX ?? 0) }
+            .map { $0.id.sectionKey.rawValue })
+            .filter { savedOrder.contains($0) }
+        guard actual.count > 1 else { return }
+        let savedVisible = savedOrder.filter { actual.contains($0) }
+        guard savedVisible != actual else { return }
+        var iterator = actual.makeIterator()
+        savedOrder = savedOrder.map { actual.contains($0) ? (iterator.next() ?? $0) : $0 }
+        UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
+        Task { await engine.setModel(currentModel()) }
     }
 
     private func name(for key: String) -> String {
@@ -773,6 +823,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         if let bundle = id.bundleID { return knownBundles[bundle] ?? appName(for: bundle) }
         return key
+    }
+
+    private func uniqueKeys(_ keys: [String]) -> [String] {
+        var seen = Set<String>()
+        return keys.filter { seen.insert($0).inserted }
     }
 
     private func orderedKeys() -> [String] {

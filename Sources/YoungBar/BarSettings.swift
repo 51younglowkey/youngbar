@@ -24,6 +24,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     var onSpacing: ((Int) -> Void)?
 
     private let window: NSWindow
+    private let glass = NSGlassEffectView()
+    private let scrim = NSView()
+    private let sidebar = NSVisualEffectView()
+    private let sidebarTint = NSView()
     private let generalPage = NSView()
     private let layoutPage = NSView()
     private let appearancePage = NSView()
@@ -60,6 +64,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         super.init()
         window.title = "YoungBar"
         window.isReleasedWhenClosed = false
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.center()
         window.contentView = buildRoot()
         selectPage("general")
@@ -70,13 +78,30 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func buildRoot() -> NSView {
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 660))
         root.wantsLayer = true
-        root.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        root.layer?.backgroundColor = NSColor.clear.cgColor
 
-        let sidebar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 200, height: 660))
+        glass.frame = root.bounds
+        glass.autoresizingMask = [.width, .height]
+        glass.style = .regular
+        glass.cornerRadius = 0
+        root.addSubview(glass)
+
+        scrim.frame = root.bounds
+        scrim.autoresizingMask = [.width, .height]
+        scrim.wantsLayer = true
+        root.addSubview(scrim)
+
+        sidebar.frame = NSRect(x: 0, y: 0, width: 200, height: 660)
         sidebar.material = .sidebar
         sidebar.blendingMode = .withinWindow
         sidebar.state = .active
+        sidebar.wantsLayer = true
         root.addSubview(sidebar)
+
+        sidebarTint.frame = sidebar.bounds
+        sidebarTint.autoresizingMask = [.width, .height]
+        sidebarTint.wantsLayer = true
+        sidebar.addSubview(sidebarTint, positioned: .below, relativeTo: nil)
 
         let icon = NSImageView(frame: NSRect(x: 64, y: 546, width: 72, height: 72))
         let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
@@ -119,7 +144,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         let content = NSView(frame: NSRect(x: 200, y: 0, width: 660, height: 660))
         content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        content.layer?.backgroundColor = NSColor.clear.cgColor
         root.addSubview(content)
 
         generalPage.frame = content.bounds
@@ -411,6 +436,12 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             button.layer?.borderColor = NSColor.labelColor.cgColor
         }
         for button in navButtons.values { button.highlightColor = theme.accent }
+        glass.tintColor = theme.accent.withAlphaComponent(0.10)
+        sidebarTint.layer?.backgroundColor = theme.accent.withAlphaComponent(0.08).cgColor
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        scrim.layer?.backgroundColor = (isDark
+            ? NSColor.black.withAlphaComponent(0.46)
+            : NSColor.white.withAlphaComponent(0.58)).cgColor
         emptyLabel.isHidden = !entries.isEmpty
         emptyLabel.stringValue = axTrusted ? "正在读取菜单栏图标…" : "需要辅助功能权限后才能读取菜单栏项目。" 
     }

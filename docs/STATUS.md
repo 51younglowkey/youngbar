@@ -45,7 +45,7 @@
 | 卡片式布局 | ✅ 每条独立圆角行，整行可拖，无表头/边框 |
 | 一页布局 | ✅ 行高按项目数自动压缩，12 项一屏放下 | `docs/images/settings-layout.png` | `docs/images/settings-layout.png` |
 | 布局顺序校准 | ✅ 新项按真实 x 插入；可见项每次刷新校准并持久化 | `itemOrder` 以有道翻译开头；`docs/images/settings-layout.png` |
-| 外观主题 | ✅ 深/浅/跟随系统 + 4 主题（蓝/粉/黄/透明）+ 3 种收纳条；预览使用真实 SF Symbols | `docs/images/appearance-zh.png`、`appearance-en.png` |
+| 外观主题 | ✅ 深/浅/跟随系统 + 4 主题（蓝/粉/黄/透明）+ 3 种收纳条；预览用真实符号并按原始宽高比绘制 | `docs/images/appearance-zh.png`、`appearance-en.png` |
 | 语言 | ✅ 中文 / English，设置内切换并重建设置窗口 | `docs/images/general-en.png` |
 | 主题图标 | ✅ 蓝猫 / 粉羊 / 黄兔 / 透明三小只随主题切换（侧栏、关于） | `appearance-{blue,pink,yellow}.png` |
 | 主题应用范围 | ✅ 界面 + 收纳条 / 仅界面 / 仅收纳条 | `docs/images/appearance-zh.png` |
@@ -77,7 +77,7 @@
 
 ## 4. 界面
 
-![通用设置（中文）](images/general-zh.png)
+![设置（中文）](images/general-zh.png)
 
 ![General（English）](images/general-en.png)
 

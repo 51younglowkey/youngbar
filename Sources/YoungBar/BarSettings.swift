@@ -139,23 +139,18 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         subtitle.textColor = .secondaryLabelColor
         sidebar.addSubview(subtitle)
 
-        for (index, item) in [("layout", L10n.t("菜单栏布局", "Layout"), "list.bullet.rectangle"),
+        for (index, item) in [("layout", L10n.t("布局", "Layout"), "list.bullet.rectangle"),
                               ("appearance", L10n.t("外观", "Appearance"), "paintpalette"),
-                              ("general", L10n.t("通用设置", "General"), "gearshape")].enumerated() {
+                              ("general", L10n.t("设置", "Settings"), "gearshape")].enumerated() {
             let button = SidebarButton(title: "", target: self, action: #selector(navigate(_:)))
             button.identifier = .init(item.0)
             button.labelText = item.1
             button.symbolName = item.2
-            let y: CGFloat = item.0 == "general" ? 60 : 420 - CGFloat(index) * 40
-            button.frame = NSRect(x: 0, y: y, width: 200, height: 36)
+            button.frame = NSRect(x: 0, y: 420 - CGFloat(index) * 40, width: 200, height: 36)
             button.isBordered = false
             sidebar.addSubview(button)
             navButtons[item.0] = button
         }
-
-        let sidebarLine = NSBox(frame: NSRect(x: 16, y: 112, width: 168, height: 1))
-        sidebarLine.boxType = .separator
-        sidebar.addSubview(sidebarLine)
 
         let content = NSView(frame: NSRect(x: 200, y: 0, width: 660, height: 692))
         content.wantsLayer = true
@@ -175,7 +170,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildGeneralPage() {
-        addHeader(to: generalPage, title: L10n.t("通用设置", "General"),
+        addHeader(to: generalPage, title: L10n.t("设置", "Settings"),
                   subtitle: L10n.t("控制 YoungBar 如何显示、展开与自动收起。",
                                    "Control how YoungBar appears, expands and hides."))
 

@@ -154,21 +154,26 @@ final class ThemePreviewView: NSView {
 
         let symbolColor: NSColor = (color == .clear && !isDark) || color.isLightStrip ? .black : .white
 
-        func drawSymbol(_ name: String, x: CGFloat, size: CGFloat = 15) {
-            guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return }
-            let scaled = image.withSymbolConfiguration(.init(pointSize: size, weight: .regular)) ?? image
-            let tinted = tintedImage(scaled, color: symbolColor)
-            tinted.draw(in: NSRect(x: x, y: rect.midY - size / 2, width: size, height: size),
-                        from: .zero, operation: .sourceOver, fraction: 0.95)
+        func drawSymbol(_ name: String, x: CGFloat, height: CGFloat = 14) -> CGFloat {
+            guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 13, weight: .regular)) else { return 0 }
+            let ratio = image.size.height > 0 ? image.size.width / image.size.height : 1
+            let width = height * ratio
+            let tinted = tintedImage(image, color: symbolColor)
+            tinted.draw(in: NSRect(x: x, y: rect.midY - height / 2, width: width, height: height),
+                        from: .zero, operation: .sourceOver, fraction: 0.95,
+                        respectFlipped: true, hints: nil)
+            return width
         }
 
-        drawSymbol("wifi", x: 14)
-        drawSymbol("battery.75percent", x: 34)
-        drawSymbol("clock", x: 54)
+        var cursor: CGFloat = 14
+        for name in ["wifi", "battery.75percent", "clock"] {
+            cursor += drawSymbol(name, x: cursor) + 10
+        }
 
         symbolColor.withAlphaComponent(0.18).setFill()
         NSRect(x: rect.maxX - 42, y: 9, width: 1, height: rect.height - 18).fill()
-        drawSymbol("gearshape", x: rect.maxX - 31, size: 16)
+        _ = drawSymbol("gearshape", x: rect.maxX - 31, height: 15)
     }
 }
 

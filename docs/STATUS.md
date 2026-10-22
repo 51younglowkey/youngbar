@@ -12,7 +12,7 @@
 |---|---|
 | 命令 | `cd youngbar && sh Scripts/build.sh` |
 | 产物 | `build/YoungBar.app`（ad-hoc 签名） |
-| 标识 | `dev.leorea.youngbar`，显示名 **YoungBar**，版本 0.3.0 |
+| 标识 | `dev.leorea.youngbar`，显示名 **YoungBar**，版本 0.1.0 |
 | 工具链 | Swift 6.3.3 / macOS 27.0.1 arm64 |
 | 结果 | 构建通过（2026-10-21） |
 
@@ -56,7 +56,7 @@
 | 主题图标 | ✅ 蓝猫 / 粉羊 / 黄兔 / 透明三小只随主题切换（侧栏、关于） | `appearance-{blue,pink,yellow}.png` |
 | 主题应用范围 | ✅ 界面 + 收纳条 / 仅界面 / 仅收纳条 | `docs/images/appearance-zh.png` |
 | 透明主题 | ✅ 跟随系统：深色玻璃白图标 / 浅色玻璃黑图标，界面中性 | `appearance-clear.png` | `docs/images/appearance-{dark,light}.png`、`shelf-sakura.png` |
-| 关于窗口 | ✅ 菜单打开，显示版本 0.3.0 (3) | `abouttest.json`；`docs/images/about.png` |
+| 关于窗口 | ✅ 菜单打开，显示版本 0.1.0 (3) | `abouttest.json`；`docs/images/about.png` |
 | 全局快捷键 | ✅ ⌃⌥B 展开 / 收起，无需鼠标 | `hotkeytest.json`：`opened:true`、`closed:true`、`passed:true` |
 | 收纳条齿轮 | ✅ 真实点击打开设置并收起收纳条 | `geartest.json`：`settingsOpened:true`、`shelfClosed:true`、`passed:true` |
 | 展开时控件 | ✅ 保持 `ellipsis`，不再换成 `●` | `docs/images/shelf-expanded.png` |

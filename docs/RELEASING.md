@@ -23,14 +23,14 @@ The script copies `LICENSE` and `THIRD_PARTY_NOTICES.md` into
 ## 3. Tag and source
 
 ```sh
-git tag -s v0.3.0 -m "YoungBar 0.3.0"
-git push origin v0.3.0
+git tag -s v0.1.0 -m "YoungBar 0.1.0"
+git push origin v0.1.0
 ```
 
 Create a GitHub release from the tag. Attach:
 
-- `YoungBar-0.3.0.zip` (the app)
-- `YoungBar-0.3.0-source.zip` (or GitHub's source archive link)
+- `YoungBar-0.1.0.zip` (the app)
+- `YoungBar-0.1.0-source.zip` (or GitHub's source archive link)
 - `SHA256SUMS`
 
 Release notes must include:

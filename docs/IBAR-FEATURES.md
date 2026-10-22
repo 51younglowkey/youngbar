@@ -2,7 +2,7 @@
 
 Target: installed `/Applications/iBar Pro.app`, version 1.4.6. No update or modification of the original application. YoungBar uses Dimble's GPLv3 PelmetCore/PelmetEngine and an original AppKit interface.
 
-Last updated: 2026-10-22, YoungBar 0.3.0.
+Last updated: 2026-10-22, YoungBar 0.1.0.
 
 ## Evidence and its boundary
 

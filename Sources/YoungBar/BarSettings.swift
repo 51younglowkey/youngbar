@@ -142,7 +142,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         title.alignment = .center
         title.autoresizingMask = [.minYMargin]
         sidebar.addSubview(title)
-        let subtitle = label("YoungBar 0.3.0", NSRect(x: 16, y: 492, width: 168, height: 16),
+        let subtitle = label("YoungBar 0.1.0", NSRect(x: 16, y: 492, width: 168, height: 16),
                              .systemFont(ofSize: 11))
         subtitle.alignment = .center
         subtitle.textColor = .secondaryLabelColor
@@ -292,8 +292,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         messageField.font = .systemFont(ofSize: 10.5)
         generalPage.addSubview(messageField)
 
-        let version = label(L10n.t("YoungBar 0.3.0 · GPLv3 · 基于 Dimble / Pelmet",
-                                   "YoungBar 0.3.0 · GPLv3 · Built on Dimble / Pelmet"),
+        let version = label(L10n.t("YoungBar 0.1.0 · GPLv3 · 基于 Dimble / Pelmet",
+                                   "YoungBar 0.1.0 · GPLv3 · Built on Dimble / Pelmet"),
                             NSRect(x: 32, y: 4, width: 596, height: 14),
                             .systemFont(ofSize: 10))
         version.alignment = .center
@@ -373,8 +373,6 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         appearanceModeControl.action = #selector(appearanceModeChanged)
         appearanceModeControl.frame = NSRect(x: 32, y: 508, width: 300, height: 28)
         appearancePage.addSubview(appearanceModeControl)
-        appearancePage.addSubview(hint(L10n.t("跟随系统会随 macOS 的浅色/深色切换。",
-                                             "System follows macOS light/dark mode."), y: 492))
 
         appearancePage.addSubview(sectionLabel(L10n.t("主题色", "Palette"), y: 464))
         for (index, theme) in ThemeColor.allCases.enumerated() {
@@ -398,16 +396,12 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         scopeControl.action = #selector(scopeChanged)
         scopeControl.frame = NSRect(x: 32, y: 340, width: 360, height: 28)
         appearancePage.addSubview(scopeControl)
-        appearancePage.addSubview(hint(L10n.t("决定主题只影响设置界面、只影响收纳条，还是两者都变。",
-                                             "Choose whether the theme affects the window, the strip, or both."), y: 324))
 
         appearancePage.addSubview(sectionLabel(L10n.t("收纳条", "Strip"), y: 292))
         stripStyleControl.target = self
         stripStyleControl.action = #selector(stripStyleChanged)
         stripStyleControl.frame = NSRect(x: 32, y: 260, width: 300, height: 28)
         appearancePage.addSubview(stripStyleControl)
-        appearancePage.addSubview(hint(L10n.t("毛玻璃会透出桌面内容；纯色最稳。",
-                                             "Glass shows the desktop through the strip; Solid is the most stable."), y: 244))
 
         appearancePage.addSubview(sectionLabel(L10n.t("菜单栏按钮", "Menu-bar button"), y: 212))
         for (index, symbol) in ControlIcon.symbols.enumerated() {

@@ -76,3 +76,7 @@ YoungBar is licensed under **GPL-3.0-only**. The full text is in [LICENSE](LICEN
 `Vendor/PelmetCore` and `Vendor/PelmetEngine` come from the [Dimble source repository](https://github.com/fif7y/dimble), commit `23a5412` (0.3.2, build 71), originally named Pelmet, under GPLv3. The vendored manifests drop the upstream probe executable and tests; implementation files are retained. A copy of the license sits in `Vendor/LICENSE`.
 
 YoungBar's own UI and app code are original. The interaction model is informed by iBar Pro 1.4.6; no iBar assets, icons, or code are included. Theme artwork is user-supplied and is **not yet cleared for public distribution**; see [docs/FAQ.md](docs/FAQ.md).
+
+## Contact
+
+Rights-holder and removal requests: **wuyiyang.studio@gmail.com**

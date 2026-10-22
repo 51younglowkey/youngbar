@@ -2012,8 +2012,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "YoungBar",
-            .applicationVersion: "0.3.0",
-            .version: "3",
+            .applicationVersion: "0.1.0",
+            .version: "1",
             .credits: credits,
         ])
     }

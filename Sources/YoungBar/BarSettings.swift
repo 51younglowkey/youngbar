@@ -32,7 +32,6 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let generalPage = NSView()
     private let layoutPage = NSView()
     private let appearancePage = NSView()
-    private let buttonPage = NSView()
     private let table = NSTableView()
     private let layoutScroll = NSScrollView()
     private let pasteType = NSPasteboard.PasteboardType("dev.leorea.youngbar.layout")
@@ -140,29 +139,23 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         subtitle.textColor = .secondaryLabelColor
         sidebar.addSubview(subtitle)
 
-        for (index, item) in [("general", L10n.t("通用设置", "General"), "gearshape"),
-                              ("layout", L10n.t("菜单栏布局", "Layout"), "list.bullet.rectangle"),
+        for (index, item) in [("layout", L10n.t("菜单栏布局", "Layout"), "list.bullet.rectangle"),
                               ("appearance", L10n.t("外观", "Appearance"), "paintpalette"),
-                              ("button", L10n.t("按钮", "Button"), "cursorarrow")].enumerated() {
-            let button = SidebarButton(title: item.1, target: self, action: #selector(navigate(_:)))
+                              ("general", L10n.t("通用设置", "General"), "gearshape")].enumerated() {
+            let button = SidebarButton(title: "", target: self, action: #selector(navigate(_:)))
             button.identifier = .init(item.0)
-            button.frame = NSRect(x: 20, y: 420 - CGFloat(index) * 40, width: 168, height: 36)
-            button.image = NSImage(systemSymbolName: item.2, accessibilityDescription: nil)
-            button.image?.size = NSSize(width: 17, height: 17)
-            button.imagePosition = .imageLeading
-            button.alignment = .left
-            button.font = .systemFont(ofSize: 13, weight: .medium)
+            button.labelText = item.1
+            button.symbolName = item.2
+            let y: CGFloat = item.0 == "general" ? 60 : 420 - CGFloat(index) * 40
+            button.frame = NSRect(x: 0, y: y, width: 200, height: 36)
             button.isBordered = false
-            button.contentTintColor = .labelColor
             sidebar.addSubview(button)
             navButtons[item.0] = button
         }
 
-        let footer = label(L10n.t("v0.3.0 · GPLv3\n基于 Dimble / Pelmet", "v0.3.0 · GPLv3\nBuilt on Dimble / Pelmet"), NSRect(x: 16, y: 24, width: 168, height: 40),
-                           .systemFont(ofSize: 10))
-        footer.textColor = .tertiaryLabelColor
-        footer.maximumNumberOfLines = 2
-        sidebar.addSubview(footer)
+        let sidebarLine = NSBox(frame: NSRect(x: 16, y: 112, width: 168, height: 1))
+        sidebarLine.boxType = .separator
+        sidebar.addSubview(sidebarLine)
 
         let content = NSView(frame: NSRect(x: 200, y: 0, width: 660, height: 692))
         content.wantsLayer = true
@@ -172,48 +165,53 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.frame = content.bounds
         layoutPage.frame = content.bounds
         appearancePage.frame = content.bounds
-        buttonPage.frame = content.bounds
         content.addSubview(generalPage)
         content.addSubview(layoutPage)
         content.addSubview(appearancePage)
-        content.addSubview(buttonPage)
         buildGeneralPage()
         buildLayoutPage()
         buildAppearancePage()
-        buildButtonPage()
         return root
     }
 
     private func buildGeneralPage() {
-        addHeader(to: generalPage, title: L10n.t("通用设置", "General"), subtitle: L10n.t("控制 YoungBar 如何显示、展开与自动收起。", "Control how YoungBar appears, expands and hides."))
+        addHeader(to: generalPage, title: L10n.t("通用设置", "General"),
+                  subtitle: L10n.t("控制 YoungBar 如何显示、展开与自动收起。",
+                                   "Control how YoungBar appears, expands and hides."))
 
-        generalPage.addSubview(sectionLabel(L10n.t("启动与显示", "Startup & Display"), y: 520))
+        // Startup
+        generalPage.addSubview(sectionLabel(L10n.t("启动", "Startup"), y: 532))
+        generalPage.addSubview(sectionLine(y: 522))
+        loginCheck.target = self
+        loginCheck.action = #selector(loginChanged)
+        loginCheck.frame = NSRect(x: 32, y: 492, width: 300, height: 24)
+        generalPage.addSubview(loginCheck)
 
         let languageLabel = label(L10n.t("语言", "Language"),
-                                  NSRect(x: 412, y: 521, width: 68, height: 16),
+                                  NSRect(x: 372, y: 495, width: 62, height: 16),
                                   .systemFont(ofSize: 11, weight: .medium))
         languageLabel.textColor = .secondaryLabelColor
         generalPage.addSubview(languageLabel)
         languagePopup.addItems(withTitles: ["中文", "English"])
         languagePopup.target = self
         languagePopup.action = #selector(languageChanged)
-        languagePopup.frame = NSRect(x: 484, y: 512, width: 112, height: 28)
+        languagePopup.frame = NSRect(x: 438, y: 486, width: 158, height: 28)
         generalPage.addSubview(languagePopup)
 
-        loginCheck.target = self
-        loginCheck.action = #selector(loginChanged)
-        loginCheck.frame = NSRect(x: 32, y: 492, width: 300, height: 24)
-        generalPage.addSubview(loginCheck)
-        generalPage.addSubview(hint(L10n.t("登录后自动启动 YoungBar。", "Launch YoungBar automatically when you log in."), y: 476))
-
-        generalPage.addSubview(label(L10n.t("显示模式", "Display mode"), NSRect(x: 32, y: 446, width: 200, height: 18), .systemFont(ofSize: 12, weight: .medium)))
+        // Display & behaviour
+        generalPage.addSubview(sectionLabel(L10n.t("显示与行为", "Display & Behaviour"), y: 456))
+        generalPage.addSubview(sectionLine(y: 446))
+        generalPage.addSubview(label(L10n.t("显示模式", "Display mode"),
+                                     NSRect(x: 32, y: 424, width: 160, height: 18),
+                                     .systemFont(ofSize: 12, weight: .medium)))
         modeControl.target = self
         modeControl.action = #selector(modeChanged)
-        modeControl.frame = NSRect(x: 32, y: 414, width: 250, height: 28)
+        modeControl.frame = NSRect(x: 32, y: 394, width: 250, height: 28)
+        modeControl.toolTip = L10n.t("聚合模式把收纳项收进一条工具条。",
+                                     "Aggregate mode collects concealed items into one strip.")
         generalPage.addSubview(modeControl)
-        generalPage.addSubview(hint(L10n.t("聚合模式把收纳项放进一条工具条；普通模式直接展开原生菜单栏。", "Aggregate mode puts concealed items into one strip; Standard mode expands the native menu bar."), y: 400))
 
-        var y: CGFloat = 374
+        var y: CGFloat = 362
         for (check, key) in [(keepCheck, "keepShelfOpen"), (hoverCheck, "hoverExpand"), (blankCheck, "blankClick")] {
             check.target = self
             check.action = #selector(optionChanged(_:))
@@ -223,54 +221,76 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             y -= 26
         }
 
-        generalPage.addSubview(label(L10n.t("再次自动隐藏", "Auto-hide after"), NSRect(x: 32, y: 296, width: 110, height: 18), .systemFont(ofSize: 12, weight: .medium)))
+        generalPage.addSubview(label(L10n.t("再次自动隐藏", "Auto-hide after"),
+                                     NSRect(x: 32, y: 280, width: 120, height: 18),
+                                     .systemFont(ofSize: 12, weight: .medium)))
         delaySlider.target = self
         delaySlider.action = #selector(delayChanged)
         delaySlider.isContinuous = true
-        delaySlider.frame = NSRect(x: 146, y: 294, width: 280, height: 24)
+        delaySlider.frame = NSRect(x: 156, y: 278, width: 270, height: 24)
+        delaySlider.toolTip = L10n.t("点击收纳项后，它在菜单栏上保持原生的时长。",
+                                     "How long a clicked item stays native on the bar.")
         generalPage.addSubview(delaySlider)
-        delayValue.frame = NSRect(x: 436, y: 297, width: 80, height: 18)
+        delayValue.frame = NSRect(x: 436, y: 281, width: 80, height: 18)
         generalPage.addSubview(delayValue)
-        generalPage.addSubview(hint(L10n.t("点击收纳项后，它在菜单栏上保持原生的时长（5–60 秒，对齐 iBar 的滑杆）。", "How long a clicked item stays native on the bar (5–60 s, matching iBar)."), y: 278))
 
+        // Menu bar
+        generalPage.addSubview(sectionLabel(L10n.t("菜单栏", "Menu Bar"), y: 240))
+        generalPage.addSubview(sectionLine(y: 230))
         generalPage.addSubview(label(L10n.t("菜单栏图标间隙", "Menu-bar icon spacing"),
-                                     NSRect(x: 32, y: 248, width: 190, height: 18),
+                                     NSRect(x: 32, y: 206, width: 190, height: 18),
                                      .systemFont(ofSize: 12, weight: .medium)))
-        spacingPopup.addItems(withTitles: [L10n.t("默认间隙", "Default"), L10n.t("较小间隙", "Smaller"), L10n.t("小间隙", "Small"), L10n.t("无间隙", "None")])
+        spacingPopup.addItems(withTitles: [L10n.t("默认间隙", "Default"), L10n.t("较小间隙", "Smaller"),
+                                           L10n.t("小间隙", "Small"), L10n.t("无间隙", "None")])
         spacingPopup.target = self
         spacingPopup.action = #selector(spacingChanged)
-        spacingPopup.frame = NSRect(x: 226, y: 242, width: 190, height: 28)
+        spacingPopup.frame = NSRect(x: 226, y: 200, width: 190, height: 28)
+        spacingPopup.toolTip = L10n.t("写入全局偏好，重启电脑后生效。",
+                                      "Writes a global preference; takes effect after a reboot.")
         generalPage.addSubview(spacingPopup)
-        generalPage.addSubview(hint(L10n.t("写入系统全局偏好，重启电脑后生效；随时可以改回默认。", "Writes a global preference; takes effect after a reboot. You can restore the default anytime."), y: 222))
 
-        generalPage.addSubview(sectionLabel(L10n.t("权限", "Permissions"), y: 186))
-
-        axStatus.frame = NSRect(x: 32, y: 159, width: 260, height: 18)
+        // Permissions
+        generalPage.addSubview(sectionLabel(L10n.t("权限", "Permissions"), y: 170))
+        generalPage.addSubview(sectionLine(y: 160))
+        axStatus.frame = NSRect(x: 32, y: 132, width: 360, height: 18)
         axStatus.font = .systemFont(ofSize: 12)
         generalPage.addSubview(axStatus)
         axButton.target = self
         axButton.action = #selector(axTapped)
-        axButton.frame = NSRect(x: 306, y: 152, width: 90, height: 30)
+        axButton.frame = NSRect(x: 306, y: 126, width: 90, height: 30)
         generalPage.addSubview(axButton)
 
-        captureStatus.frame = NSRect(x: 32, y: 123, width: 360, height: 18)
+        captureStatus.frame = NSRect(x: 32, y: 96, width: 360, height: 18)
         captureStatus.font = .systemFont(ofSize: 12)
         generalPage.addSubview(captureStatus)
         captureButton.target = self
         captureButton.action = #selector(captureTapped)
-        captureButton.frame = NSRect(x: 306, y: 116, width: 90, height: 30)
+        captureButton.frame = NSRect(x: 306, y: 90, width: 90, height: 30)
         generalPage.addSubview(captureButton)
 
         refreshButton.target = self
         refreshButton.action = #selector(refreshTapped)
-        refreshButton.frame = NSRect(x: 32, y: 76, width: 140, height: 30)
+        refreshButton.frame = NSRect(x: 32, y: 48, width: 140, height: 30)
         generalPage.addSubview(refreshButton)
 
-        messageField.frame = NSRect(x: 32, y: 34, width: 596, height: 34)
+        messageField.frame = NSRect(x: 32, y: 22, width: 596, height: 20)
         messageField.textColor = .secondaryLabelColor
-        messageField.font = .systemFont(ofSize: 11)
-        messageField.maximumNumberOfLines = 2
+        messageField.font = .systemFont(ofSize: 10.5)
         generalPage.addSubview(messageField)
+
+        let version = label(L10n.t("YoungBar 0.3.0 · GPLv3 · 基于 Dimble / Pelmet",
+                                   "YoungBar 0.3.0 · GPLv3 · Built on Dimble / Pelmet"),
+                            NSRect(x: 32, y: 4, width: 596, height: 14),
+                            .systemFont(ofSize: 10))
+        version.alignment = .center
+        version.textColor = .tertiaryLabelColor
+        generalPage.addSubview(version)
+    }
+
+    private func sectionLine(y: CGFloat) -> NSBox {
+        let line = NSBox(frame: NSRect(x: 32, y: y, width: 596, height: 1))
+        line.boxType = .separator
+        return line
     }
 
     private func updateRowHeight() {
@@ -330,19 +350,22 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildAppearancePage() {
-        addHeader(to: appearancePage, title: L10n.t("外观", "Appearance"), subtitle: L10n.t("颜色、深浅模式与收纳条材质。", "Colours, light/dark mode and strip material."))
+        addHeader(to: appearancePage, title: L10n.t("外观", "Appearance"),
+                  subtitle: L10n.t("颜色、深浅模式、收纳条与菜单栏按钮。",
+                                   "Colours, light/dark mode, strip and menu-bar button."))
 
-        appearancePage.addSubview(sectionLabel(L10n.t("外观模式", "Appearance mode"), y: 520))
+        appearancePage.addSubview(sectionLabel(L10n.t("外观模式", "Appearance mode"), y: 540))
         appearanceModeControl.target = self
         appearanceModeControl.action = #selector(appearanceModeChanged)
-        appearanceModeControl.frame = NSRect(x: 32, y: 486, width: 300, height: 28)
+        appearanceModeControl.frame = NSRect(x: 32, y: 508, width: 300, height: 28)
         appearancePage.addSubview(appearanceModeControl)
-        appearancePage.addSubview(hint(L10n.t("跟随系统会随 macOS 的浅色/深色切换。", "System follows macOS light/dark mode."), y: 468))
+        appearancePage.addSubview(hint(L10n.t("跟随系统会随 macOS 的浅色/深色切换。",
+                                             "System follows macOS light/dark mode."), y: 492))
 
-        appearancePage.addSubview(sectionLabel(L10n.t("主题色", "Palette"), y: 430))
+        appearancePage.addSubview(sectionLabel(L10n.t("主题色", "Palette"), y: 464))
         for (index, theme) in ThemeColor.allCases.enumerated() {
             let button = ThemeSwatchButton(title: "", target: self, action: #selector(colorPicked(_:)))
-            button.frame = NSRect(x: 32 + CGFloat(index) * 90, y: 388, width: 46, height: 28)
+            button.frame = NSRect(x: 32 + CGFloat(index) * 90, y: 424, width: 46, height: 28)
             button.isBordered = false
             button.theme = theme
             button.tag = index
@@ -350,46 +373,35 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             button.setAccessibilityLabel(theme.title)
             colorButtons.append(button)
             appearancePage.addSubview(button)
-            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 90, y: 368, width: 100, height: 16),
+            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 90, y: 404, width: 100, height: 16),
                              .systemFont(ofSize: 10.5))
-            name.alignment = .center
             name.textColor = .secondaryLabelColor
             appearancePage.addSubview(name)
         }
 
-        appearancePage.addSubview(sectionLabel(L10n.t("主题应用", "Theme scope"), y: 334))
+        appearancePage.addSubview(sectionLabel(L10n.t("主题应用", "Theme scope"), y: 372))
         scopeControl.target = self
         scopeControl.action = #selector(scopeChanged)
-        scopeControl.frame = NSRect(x: 32, y: 300, width: 360, height: 28)
+        scopeControl.frame = NSRect(x: 32, y: 340, width: 360, height: 28)
         appearancePage.addSubview(scopeControl)
-        appearancePage.addSubview(hint(L10n.t("决定主题只影响设置界面、只影响收纳条，还是两者都变。", "Choose whether the theme affects the settings window, the strip, or both."), y: 282))
+        appearancePage.addSubview(hint(L10n.t("决定主题只影响设置界面、只影响收纳条，还是两者都变。",
+                                             "Choose whether the theme affects the window, the strip, or both."), y: 324))
 
-        appearancePage.addSubview(sectionLabel(L10n.t("收纳条", "Strip"), y: 246))
+        appearancePage.addSubview(sectionLabel(L10n.t("收纳条", "Strip"), y: 292))
         stripStyleControl.target = self
         stripStyleControl.action = #selector(stripStyleChanged)
-        stripStyleControl.frame = NSRect(x: 32, y: 212, width: 300, height: 28)
+        stripStyleControl.frame = NSRect(x: 32, y: 260, width: 300, height: 28)
         appearancePage.addSubview(stripStyleControl)
-        appearancePage.addSubview(hint(L10n.t("毛玻璃会透出桌面内容；纯色最稳，半透明介于两者之间。", "Glass shows the desktop through the strip; Solid is the most stable; Translucent sits in between."), y: 194))
+        appearancePage.addSubview(hint(L10n.t("毛玻璃会透出桌面内容；纯色最稳。",
+                                             "Glass shows the desktop through the strip; Solid is the most stable."), y: 244))
 
-        appearancePage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 158))
-        preview.frame = NSRect(x: 32, y: 110, width: 360, height: 46)
-        appearancePage.addSubview(preview)
-        appearancePage.addSubview(hint(L10n.t("预览使用当前主题、应用范围与收纳条样式。", "Preview uses the current palette, scope and strip style."), y: 88))
-    }
-
-    private func buildButtonPage() {
-        addHeader(to: buttonPage,
-                  title: L10n.t("菜单栏按钮", "Menu-bar button"),
-                  subtitle: L10n.t("选择菜单栏上那个按钮的图标，也可以用你自己的图片。",
-                                   "Choose the glyph shown on the menu bar, or use your own image."))
-
-        buttonPage.addSubview(sectionLabel(L10n.t("图标", "Icon"), y: 520))
+        appearancePage.addSubview(sectionLabel(L10n.t("菜单栏按钮", "Menu-bar button"), y: 212))
         for (index, symbol) in ControlIcon.symbols.enumerated() {
             let button = NSButton(title: "", target: self, action: #selector(iconPicked(_:)))
-            button.frame = NSRect(x: 32 + CGFloat(index) * 58, y: 466, width: 44, height: 44)
+            button.frame = NSRect(x: 32 + CGFloat(index) * 54, y: 166, width: 40, height: 40)
             button.isBordered = false
             button.wantsLayer = true
-            button.layer?.cornerRadius = 9
+            button.layer?.cornerRadius = 8
             button.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: ControlIcon.title(index))
             button.imagePosition = .imageOnly
@@ -398,32 +410,22 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             button.toolTip = ControlIcon.title(index)
             button.setAccessibilityLabel(ControlIcon.title(index))
             iconButtons.append(button)
-            buttonPage.addSubview(button)
+            appearancePage.addSubview(button)
         }
 
         customIconButton.title = L10n.t("自定义图片…", "Custom image…")
         customIconButton.target = self
         customIconButton.action = #selector(customIconTapped)
-        customIconButton.frame = NSRect(x: 32, y: 404, width: 160, height: 30)
-        buttonPage.addSubview(customIconButton)
-
+        customIconButton.frame = NSRect(x: 32, y: 122, width: 150, height: 30)
+        appearancePage.addSubview(customIconButton)
         let reset = NSButton(title: L10n.t("恢复默认", "Reset"),
                              target: self, action: #selector(resetIcon))
-        reset.frame = NSRect(x: 204, y: 404, width: 100, height: 30)
-        buttonPage.addSubview(reset)
+        reset.frame = NSRect(x: 190, y: 122, width: 100, height: 30)
+        appearancePage.addSubview(reset)
 
-        buttonPage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 360))
-        let strip = NSView(frame: NSRect(x: 32, y: 300, width: 320, height: 44))
-        strip.wantsLayer = true
-        strip.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.82).cgColor
-        strip.layer?.cornerRadius = 8
-        iconPreview.frame = NSRect(x: 148, y: 10, width: 24, height: 24)
-        iconPreview.imageScaling = .scaleProportionallyDown
-        strip.addSubview(iconPreview)
-        buttonPage.addSubview(strip)
-        buttonPage.addSubview(hint(L10n.t("自定义图片建议使用 36×36 的 PNG；图标会显示在菜单栏上。",
-                                          "A 36×36 PNG works best; the glyph appears on the menu bar."),
-                                   y: 268))
+        appearancePage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 96))
+        preview.frame = NSRect(x: 32, y: 48, width: 320, height: 40)
+        appearancePage.addSubview(preview)
     }
 
     @objc private func iconPicked(_ sender: NSButton) {
@@ -478,7 +480,6 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.isHidden = id != "general"
         layoutPage.isHidden = id != "layout"
         appearancePage.isHidden = id != "appearance"
-        buttonPage.isHidden = id != "button"
         for (key, button) in navButtons { button.selected = key == id }
         if id == "layout" { table.reloadData() }
     }
@@ -640,7 +641,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     func writeSnapshots(to directory: String) {
         let base = URL(fileURLWithPath: directory, isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        for page in ["general", "layout", "appearance", "button"] {
+        for page in ["general", "layout", "appearance"] {
             selectPage(page)
             window.contentView?.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
@@ -770,12 +771,32 @@ final class SidebarButton: NSButton {
     var highlightColor: NSColor = .controlAccentColor {
         didSet { needsDisplay = true }
     }
+    var symbolName = "" {
+        didSet { needsDisplay = true }
+    }
+    var labelText = "" {
+        didSet { needsDisplay = true }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         if selected {
             highlightColor.withAlphaComponent(0.18).setFill()
             NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: 2), xRadius: 8, yRadius: 8).fill()
         }
-        super.draw(dirtyRect)
+
+        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) {
+            let tint = selected ? NSColor.labelColor : NSColor.secondaryLabelColor
+            let icon = tintedImage(image, color: tint)
+            icon.draw(in: NSRect(x: 22, y: (bounds.height - 16) / 2, width: 16, height: 16),
+                      from: .zero, operation: .sourceOver, fraction: 1)
+        }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: selected ? .semibold : .regular),
+            .foregroundColor: NSColor.labelColor,
+        ]
+        (labelText as NSString).draw(at: NSPoint(x: 46, y: (bounds.height - 17) / 2),
+                                     withAttributes: attributes)
     }
 }

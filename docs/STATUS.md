@@ -39,16 +39,16 @@
 | 定时自动收起 | ✅ 20 秒到期后自动收起 | `selftest.json`：`expirySeconds: 20`、`autoHidden: true` |
 | 收纳条 | ✅ 黑色圆角条 | `docs/images/shelf.png` |
 | 图标体系 | ✅ 全 SF Symbols；锁定/拖动改为符号，没有 emoji | `docs/images/settings-layout.png` |
-| 菜单栏按钮 | ✅ 5 个预设 + 自定义 PNG，菜单栏实时切换 | `button.png`、`menu-button-heart.png`、`menu-button-custom.png` |
+| 菜单栏按钮 | ✅ 5 个预设 + 自定义 PNG，已合并进外观页 | `docs/images/appearance-zh.png`、`menu-button-heart.png` |
 | 统一窗口 | ✅ `fullSizeContentView`，无独立标题栏；红黄绿浮在玻璃上 | `docs/images/settings-unified.png` |
 | 设置窗口玻璃 | ✅ `NSGlassEffectView` + 主题染色 + 深浅 scrim | `docs/images/settings-glass-{dark,light}.png` |
 | 卡片式布局 | ✅ 每条独立圆角行，整行可拖，无表头/边框 |
 | 一页布局 | ✅ 行高按项目数自动压缩，12 项一屏放下 | `docs/images/settings-layout.png` | `docs/images/settings-layout.png` |
 | 布局顺序校准 | ✅ 新项按真实 x 插入；可见项每次刷新校准并持久化 | `itemOrder` 以有道翻译开头；`docs/images/settings-layout.png` |
-| 外观主题 | ✅ 深/浅/跟随系统 + 4 主题（蓝/粉/黄/透明）+ 3 种收纳条；预览使用真实 SF Symbols |
-| 语言 | ✅ 中文 / English，设置内切换并重建设置窗口 | `general-en.png`、`appearance-en.png` |
+| 外观主题 | ✅ 深/浅/跟随系统 + 4 主题（蓝/粉/黄/透明）+ 3 种收纳条；预览使用真实 SF Symbols | `docs/images/appearance-zh.png`、`appearance-en.png` |
+| 语言 | ✅ 中文 / English，设置内切换并重建设置窗口 | `docs/images/general-en.png` |
 | 主题图标 | ✅ 蓝猫 / 粉羊 / 黄兔 / 透明三小只随主题切换（侧栏、关于） | `appearance-{blue,pink,yellow}.png` |
-| 主题应用范围 | ✅ 界面 + 收纳条 / 仅界面 / 仅收纳条 | `appearance-white.png`、`shelf-white.png` |
+| 主题应用范围 | ✅ 界面 + 收纳条 / 仅界面 / 仅收纳条 | `docs/images/appearance-zh.png` |
 | 透明主题 | ✅ 跟随系统：深色玻璃白图标 / 浅色玻璃黑图标，界面中性 | `appearance-clear.png` | `docs/images/appearance-{dark,light}.png`、`shelf-sakura.png` |
 | 关于窗口 | ✅ 菜单打开，显示版本 0.3.0 (3) | `abouttest.json`；`docs/images/about.png` |
 | 全局快捷键 | ✅ ⌃⌥B 展开 / 收起，无需鼠标 | `hotkeytest.json`：`opened:true`、`closed:true`、`passed:true` |
@@ -77,19 +77,17 @@
 
 ## 4. 界面
 
-![通用设置](images/settings-general.png)
+![通用设置（中文）](images/general-zh.png)
+
+![General（English）](images/general-en.png)
 
 ![菜单栏布局](images/settings-layout.png)
 
 ![收纳条（原始菜单栏内容）](images/shelf.png)
 
-![外观（蓝）](images/appearance-blue.png)
+![外观（中文）](images/appearance-zh.png)
 
-![外观（粉）](images/appearance-pink.png)
-
-![外观（黄）](images/appearance-yellow.png)
-
-![外观（白）](images/appearance-white.png)
+![Appearance（English）](images/appearance-en.png)
 
 ![设置窗口玻璃（浅色）](images/settings-glass-light.png)
 

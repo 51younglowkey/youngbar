@@ -1085,6 +1085,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
             effect.wantsLayer = true
             effect.layer?.cornerRadius = 8
             effect.layer?.masksToBounds = true
+            let tint = NSView(frame: effect.bounds)
+            tint.autoresizingMask = [.width, .height]
+            tint.wantsLayer = true
+            tint.layer?.backgroundColor = (effectiveColor.map(\.glassTint) ?? themeColor.glassTint).cgColor
+            effect.addSubview(tint)
             background = effect
         } else {
             let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))

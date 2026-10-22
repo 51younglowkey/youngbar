@@ -39,18 +39,18 @@ enum ThemeColor: Int, CaseIterable {
 
     var accent: NSColor {
         switch self {
-        case .blue: return NSColor(calibratedRed: 0.50, green: 0.72, blue: 0.85, alpha: 1)
+        case .blue: return NSColor(calibratedRed: 0.20, green: 0.45, blue: 0.95, alpha: 1)
         case .pink: return NSColor(calibratedRed: 0.85, green: 0.48, blue: 0.60, alpha: 1)
         case .yellow: return NSColor(calibratedRed: 0.90, green: 0.72, blue: 0.36, alpha: 1)
         case .black: return NSColor(calibratedWhite: 0.56, alpha: 1)
-        case .clear: return NSColor.controlAccentColor
+        case .clear: return NSColor(calibratedWhite: 0.55, alpha: 1)
         case .white: return NSColor(calibratedWhite: 0.78, alpha: 1)
         }
     }
 
     var strip: NSColor {
         switch self {
-        case .blue: return NSColor(calibratedRed: 0.10, green: 0.27, blue: 0.35, alpha: 1)
+        case .blue: return .clear
         case .pink: return NSColor(calibratedRed: 0.29, green: 0.12, blue: 0.17, alpha: 1)
         case .yellow: return NSColor(calibratedRed: 0.33, green: 0.23, blue: 0.06, alpha: 1)
         case .black: return NSColor(calibratedWhite: 0.04, alpha: 1)
@@ -60,7 +60,16 @@ enum ThemeColor: Int, CaseIterable {
     }
 
     var isLightStrip: Bool { self == .white }
-    var isTransparent: Bool { self == .clear }
+    var isTransparent: Bool { self == .clear || self == .blue }
+
+    /// Tint applied when the strip is rendered as glass.
+    var glassTint: NSColor {
+        switch self {
+        case .blue: return NSColor(calibratedRed: 0.12, green: 0.42, blue: 0.95, alpha: 0.55)
+        case .clear: return .clear
+        default: return accent.withAlphaComponent(0.18)
+        }
+    }
 
     var iconResource: String? {
         switch self {
@@ -131,6 +140,9 @@ final class ThemePreviewView: NSView {
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
         if color.isTransparent {
             NSColor(white: 0.24, alpha: 0.55).setFill(); path.fill()
+            if color != .clear {
+                color.glassTint.setFill(); path.fill()
+            }
             NSColor.white.withAlphaComponent(0.14).setStroke(); path.lineWidth = 1; path.stroke()
         } else {
             switch style {
@@ -158,5 +170,57 @@ final class ThemePreviewView: NSView {
         gear.lineWidth = 1.5
         gear.stroke()
         NSBezierPath(ovalIn: NSRect(x: rect.maxX - 25, y: rect.midY - 2, width: 4, height: 4)).fill()
+    }
+}
+
+
+/// A miniature strip used as a theme swatch: background + three symbols.
+final class ThemeSwatchButton: NSButton {
+    var theme: ThemeColor = .blue { didSet { needsDisplay = true } }
+    var selected: Bool = false { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: 2, dy: 2)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7)
+        if theme.isTransparent {
+            NSColor(white: 0.26, alpha: 0.62).setFill()
+            path.fill()
+            if theme == .clear {
+                NSGraphicsContext.saveGraphicsState()
+                path.addClip()
+                let cell = rect.width / 4
+                for row in 0..<2 {
+                    for column in 0..<4 {
+                        let light = (row + column) % 2 == 0
+                        (light ? NSColor.white.withAlphaComponent(0.22) : NSColor.black.withAlphaComponent(0.18)).setFill()
+                        NSRect(x: rect.minX + CGFloat(column) * cell, y: rect.minY + CGFloat(row) * cell,
+                               width: cell, height: cell).fill()
+                    }
+                }
+                NSGraphicsContext.restoreGraphicsState()
+            } else {
+                theme.glassTint.setFill()
+                path.fill()
+            }
+            NSColor.white.withAlphaComponent(0.16).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        } else {
+            theme.strip.setFill()
+            path.fill()
+        }
+
+        (theme.isLightStrip ? NSColor.black : NSColor.white).withAlphaComponent(0.9).setFill()
+        for index in 0..<3 {
+            let dot = NSRect(x: rect.minX + 8 + CGFloat(index) * 12, y: rect.midY - 3, width: 6, height: 6)
+            NSBezierPath(ovalIn: dot).fill()
+        }
+
+        if selected {
+            NSColor.labelColor.setStroke()
+            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: -1), xRadius: 8, yRadius: 8)
+            ring.lineWidth = 2
+            ring.stroke()
+        }
     }
 }

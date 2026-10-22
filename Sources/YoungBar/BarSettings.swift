@@ -60,7 +60,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let scopeControl = NSSegmentedControl(labels: ThemeScope.allCases.map(\.title),
                                                   trackingMode: .selectOne, target: nil, action: nil)
     private let appIconView = NSImageView()
-    private var colorButtons: [NSButton] = []
+    private var colorButtons: [ThemeSwatchButton] = []
     private let preview = ThemePreviewView()
 
     override init() {
@@ -318,12 +318,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         appearancePage.addSubview(sectionLabel("主题色", y: 430))
         for (index, theme) in ThemeColor.allCases.enumerated() {
-            let button = NSButton(title: "", target: self, action: #selector(colorPicked(_:)))
-            button.frame = NSRect(x: 32 + CGFloat(index) * 54, y: 390, width: 44, height: 25)
+            let button = ThemeSwatchButton(title: "", target: self, action: #selector(colorPicked(_:)))
+            button.frame = NSRect(x: 32 + CGFloat(index) * 54, y: 388, width: 46, height: 28)
             button.isBordered = false
-            button.wantsLayer = true
-            button.layer?.backgroundColor = (theme.isTransparent ? NSColor.white.withAlphaComponent(0.18) : theme.accent).cgColor
-            button.layer?.cornerRadius = 7
+            button.theme = theme
             button.tag = index
             button.toolTip = theme.title
             button.setAccessibilityLabel(theme.title)
@@ -513,8 +511,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         preview.color = theme
         preview.style = StripStyle(rawValue: options["stripStyle"] ?? 0) ?? .solid
         for (index, button) in colorButtons.enumerated() {
-            button.layer?.borderWidth = index == theme.rawValue ? 2 : 0
-            button.layer?.borderColor = NSColor.labelColor.cgColor
+            button.selected = index == theme.rawValue
         }
         appIconView.image = themeIcon(theme)
         let scope = ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both

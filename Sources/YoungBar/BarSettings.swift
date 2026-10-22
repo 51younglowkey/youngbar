@@ -57,6 +57,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                                                            trackingMode: .selectOne, target: nil, action: nil)
     private let stripStyleControl = NSSegmentedControl(labels: ["纯色", "半透明", "毛玻璃"],
                                                        trackingMode: .selectOne, target: nil, action: nil)
+    private let scopeControl = NSSegmentedControl(labels: ThemeScope.allCases.map(\.title),
+                                                  trackingMode: .selectOne, target: nil, action: nil)
+    private let appIconView = NSImageView()
     private var colorButtons: [NSButton] = []
     private let preview = ThemePreviewView()
 
@@ -114,11 +117,12 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         sidebarTint.wantsLayer = true
         sidebar.addSubview(sidebarTint, positioned: .below, relativeTo: nil)
 
-        let icon = NSImageView(frame: NSRect(x: 64, y: 546, width: 72, height: 72))
-        let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
-        icon.image = iconURL.flatMap { NSImage(contentsOf: $0) } ?? NSApp.applicationIconImage
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        sidebar.addSubview(icon)
+        appIconView.frame = NSRect(x: 64, y: 546, width: 72, height: 72)
+        appIconView.imageScaling = .scaleProportionallyUpOrDown
+        appIconView.wantsLayer = true
+        appIconView.layer?.cornerRadius = 16
+        appIconView.layer?.masksToBounds = true
+        sidebar.addSubview(appIconView)
 
         let title = label("YoungBar", NSRect(x: 16, y: 512, width: 168, height: 28),
                           .systemFont(ofSize: 21, weight: .semibold))
@@ -315,34 +319,41 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         appearancePage.addSubview(sectionLabel("主题色", y: 430))
         for (index, theme) in ThemeColor.allCases.enumerated() {
             let button = NSButton(title: "", target: self, action: #selector(colorPicked(_:)))
-            button.frame = NSRect(x: 32 + CGFloat(index) * 62, y: 390, width: 46, height: 26)
+            button.frame = NSRect(x: 32 + CGFloat(index) * 54, y: 390, width: 44, height: 25)
             button.isBordered = false
             button.wantsLayer = true
-            button.layer?.backgroundColor = theme.accent.cgColor
+            button.layer?.backgroundColor = (theme.isTransparent ? NSColor.white.withAlphaComponent(0.18) : theme.accent).cgColor
             button.layer?.cornerRadius = 7
             button.tag = index
             button.toolTip = theme.title
             button.setAccessibilityLabel(theme.title)
             colorButtons.append(button)
             appearancePage.addSubview(button)
-            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 62, y: 370, width: 46, height: 16),
+            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 54, y: 370, width: 44, height: 16),
                              .systemFont(ofSize: 11))
             name.alignment = .center
             name.textColor = .secondaryLabelColor
             appearancePage.addSubview(name)
         }
 
-        appearancePage.addSubview(sectionLabel("收纳条", y: 326))
+        appearancePage.addSubview(sectionLabel("主题应用", y: 334))
+        scopeControl.target = self
+        scopeControl.action = #selector(scopeChanged)
+        scopeControl.frame = NSRect(x: 32, y: 300, width: 360, height: 28)
+        appearancePage.addSubview(scopeControl)
+        appearancePage.addSubview(hint("决定主题只影响设置界面、只影响收纳条，还是两者都变。", y: 282))
+
+        appearancePage.addSubview(sectionLabel("收纳条", y: 246))
         stripStyleControl.target = self
         stripStyleControl.action = #selector(stripStyleChanged)
-        stripStyleControl.frame = NSRect(x: 32, y: 292, width: 300, height: 28)
+        stripStyleControl.frame = NSRect(x: 32, y: 212, width: 300, height: 28)
         appearancePage.addSubview(stripStyleControl)
-        appearancePage.addSubview(hint("毛玻璃会透出桌面内容；纯色最稳，半透明介于两者之间。", y: 274))
+        appearancePage.addSubview(hint("毛玻璃会透出桌面内容；纯色最稳，半透明介于两者之间。", y: 194))
 
-        appearancePage.addSubview(sectionLabel("预览", y: 236))
-        preview.frame = NSRect(x: 32, y: 180, width: 360, height: 46)
+        appearancePage.addSubview(sectionLabel("预览", y: 158))
+        preview.frame = NSRect(x: 32, y: 110, width: 360, height: 46)
         appearancePage.addSubview(preview)
-        appearancePage.addSubview(hint("预览使用当前主题与收纳条样式。", y: 158))
+        appearancePage.addSubview(hint("预览使用当前主题、应用范围与收纳条样式。", y: 88))
     }
 
     private func addHeader(to page: NSView, title: String, subtitle: String) {
@@ -420,6 +431,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         onOption?("stripStyle", stripStyleControl.selectedSegment)
     }
 
+    @objc private func scopeChanged() {
+        onOption?("themeScope", scopeControl.selectedSegment)
+    }
+
     @objc private func colorPicked(_ sender: NSButton) {
         onOption?("themeColor", sender.tag)
     }
@@ -493,18 +508,27 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         appearanceModeControl.selectedSegment = options["appearanceMode"] ?? 0
         stripStyleControl.selectedSegment = options["stripStyle"] ?? 0
-        let theme = ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .forest
+        scopeControl.selectedSegment = options["themeScope"] ?? 0
+        let theme = ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .blue
         preview.color = theme
         preview.style = StripStyle(rawValue: options["stripStyle"] ?? 0) ?? .solid
         for (index, button) in colorButtons.enumerated() {
             button.layer?.borderWidth = index == theme.rawValue ? 2 : 0
             button.layer?.borderColor = NSColor.labelColor.cgColor
         }
-        for button in navButtons.values { button.highlightColor = theme.accent }
-        glass.tintColor = theme.accent.withAlphaComponent(0.10)
+        appIconView.image = themeIcon(theme)
+        let scope = ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both
+        let tintedInterface = scope != .stripOnly
+        for button in navButtons.values {
+            button.highlightColor = tintedInterface ? theme.accent : .controlAccentColor
+        }
+        glass.tintColor = tintedInterface ? theme.accent.withAlphaComponent(0.10) : .clear
         window.backgroundColor = .clear
-        sidebarTint.layer?.backgroundColor = theme.accent.withAlphaComponent(0.08).cgColor
+        sidebarTint.layer?.backgroundColor = (tintedInterface
+            ? theme.accent.withAlphaComponent(0.08)
+            : NSColor.clear).cgColor
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        preview.color = scope == .interfaceOnly ? (isDark ? .black : .white) : theme
         scrim.layer?.backgroundColor = (isDark
             ? NSColor.black.withAlphaComponent(0.46)
             : NSColor.white.withAlphaComponent(0.58)).cgColor

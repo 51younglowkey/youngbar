@@ -227,16 +227,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     private var themeColor: ThemeColor {
-        ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .forest
+        ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .blue
     }
 
     private var stripStyle: StripStyle {
         StripStyle(rawValue: options["stripStyle"] ?? 0) ?? .solid
     }
 
+    private var themeScope: ThemeScope {
+        ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both
+    }
+
     private func applyAppearance() {
         let mode = AppearanceMode(rawValue: options["appearanceMode"] ?? 0) ?? .system
         NSApp.appearance = mode.appearance
+        NSApp.applicationIconImage = themeIcon(themeColor)
     }
 
     /// Carbon global hotkey: Ctrl-Option-B toggles the strip without AX
@@ -1062,9 +1067,17 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let width = min(max(keys.isEmpty ? 150 : 100, itemContentWidth + gearWidth), screenWidth - 24)
         let height: CGFloat = 40
         shelfPanel.setContentSize(NSSize(width: width, height: height))
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let themed = themeScope != .interfaceOnly
+        let effectiveColor: ThemeColor? = themed ? themeColor : nil
+        let stripColor: NSColor = effectiveColor?.strip ?? (isDark ? .black : .white)
+        let lightStrip = effectiveColor?.isLightStrip ?? !isDark
+        let transparentStrip = effectiveColor?.isTransparent ?? false
+        let useGlass = transparentStrip || stripStyle == .vibrant
+        let iconColor: NSColor = lightStrip ? .black : .white
+
         let background: NSView
-        switch stripStyle {
-        case .vibrant:
+        if useGlass {
             let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
             effect.material = .hudWindow
             effect.blendingMode = .behindWindow
@@ -1073,10 +1086,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
             effect.layer?.cornerRadius = 8
             effect.layer?.masksToBounds = true
             background = effect
-        case .solid, .translucent:
+        } else {
             let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
             view.wantsLayer = true
-            view.layer?.backgroundColor = themeColor.strip
+            view.layer?.backgroundColor = stripColor
                 .withAlphaComponent(stripStyle == .solid ? 0.97 : 0.72).cgColor
             view.layer?.cornerRadius = 8
             view.layer?.masksToBounds = true
@@ -1085,7 +1098,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let itemArea = width - gearWidth
         if keys.isEmpty {
             let label = NSTextField(labelWithString: "没有收纳项目")
-            label.textColor = .white; label.alignment = .center
+            label.textColor = iconColor; label.alignment = .center
             label.frame = NSRect(x: 8, y: 9, width: itemArea - 16, height: 22)
             background.addSubview(label)
         } else {
@@ -1101,7 +1114,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 button.imagePosition = .imageOnly; button.imageScaling = .scaleProportionallyDown
                 button.identifier = .init(key); button.target = self; button.action = #selector(pressShelfItem(_:))
                 if let picture = pictures.pictures[key], !isVolatileKey(key) {
-                    button.image = picture.image
+                    button.image = lightStrip ? tintedImage(picture.image, color: .black) : picture.image
                     button.toolTip = "\(name(for: key)) · 状态采集于 \(picture.takenAt.formatted(date: .omitted, time: .standard))"
                 } else if isVolatileKey(key) {
                     button.image = fallbackImage(for: key)
@@ -1110,6 +1123,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     button.image = fallbackImage(for: key)
                     button.toolTip = "\(name(for: key)) · 开启原始状态显示后可显示菜单栏内容"
                 }
+                button.contentTintColor = iconColor
                 button.setAccessibilityLabel(name(for: key))
                 document.addSubview(button); x += widths[index]
             }
@@ -1118,7 +1132,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
         let divider = NSView(frame: NSRect(x: itemArea, y: 8, width: 1, height: 24))
         divider.wantsLayer = true
-        divider.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        divider.layer?.backgroundColor = iconColor.withAlphaComponent(0.18).cgColor
         background.addSubview(divider)
 
         let gear = BarControlButton(frame: NSRect(x: itemArea + 5, y: 6, width: 28, height: 28))
@@ -1127,7 +1141,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         gear.imagePosition = .imageOnly
         gear.imageScaling = .scaleProportionallyDown
         gear.isBordered = false
-        gear.contentTintColor = .white
+        gear.contentTintColor = iconColor
         gear.target = self
         gear.action = #selector(openSettingsFromShelf)
         gear.toolTip = "打开设置"
@@ -1296,7 +1310,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 options[key] = value
                 UserDefaults.standard.set(options, forKey: "barOptions")
-                if ["appearanceMode", "themeColor", "stripStyle"].contains(key) {
+                if ["appearanceMode", "themeColor", "stripStyle", "themeScope"].contains(key) {
                     applyAppearance()
                     shelfState = nil
                     if expanded { populateShelf() }

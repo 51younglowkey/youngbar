@@ -1069,17 +1069,18 @@ final class BarApp: NSObject, NSApplicationDelegate {
         shelfPanel.setContentSize(NSSize(width: width, height: height))
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let themed = themeScope != .interfaceOnly
-        let effectiveColor: ThemeColor? = themed ? themeColor : nil
-        let stripColor: NSColor = effectiveColor?.strip ?? (isDark ? .black : .white)
-        let lightStrip = effectiveColor?.isLightStrip ?? !isDark
-        let transparentStrip = effectiveColor?.isTransparent ?? false
-        let useGlass = transparentStrip || stripStyle == .vibrant
+        let themeForStrip: ThemeColor? = themed ? themeColor : nil
+        let systemStrip = themeForStrip == nil || themeForStrip == .clear
+        let useGlass = systemStrip || themeForStrip == .blue || stripStyle == .vibrant
+        let lightStrip = systemStrip ? !isDark : false
         let iconColor: NSColor = lightStrip ? .black : .white
+        let glassTint: NSColor = systemStrip ? .clear : (themeForStrip?.glassTint ?? .clear)
+        let stripColor: NSColor = themeForStrip?.strip ?? .clear
 
         let background: NSView
         if useGlass {
             let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-            effect.material = .hudWindow
+            effect.material = systemStrip ? (isDark ? .hudWindow : .menu) : .hudWindow
             effect.blendingMode = .behindWindow
             effect.state = .active
             effect.wantsLayer = true
@@ -1088,7 +1089,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let tint = NSView(frame: effect.bounds)
             tint.autoresizingMask = [.width, .height]
             tint.wantsLayer = true
-            tint.layer?.backgroundColor = (effectiveColor.map(\.glassTint) ?? themeColor.glassTint).cgColor
+            tint.layer?.backgroundColor = glassTint.cgColor
             effect.addSubview(tint)
             background = effect
         } else {

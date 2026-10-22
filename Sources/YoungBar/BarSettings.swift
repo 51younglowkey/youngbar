@@ -525,7 +525,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ? theme.accent.withAlphaComponent(0.08)
             : NSColor.clear).cgColor
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        preview.color = scope == .interfaceOnly ? (isDark ? .black : .white) : theme
+        preview.isDark = isDark
+        preview.color = scope == .interfaceOnly ? .clear : theme
         scrim.layer?.backgroundColor = (isDark
             ? NSColor.black.withAlphaComponent(0.46)
             : NSColor.white.withAlphaComponent(0.58)).cgColor

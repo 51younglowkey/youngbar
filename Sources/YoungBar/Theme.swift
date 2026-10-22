@@ -24,16 +24,14 @@ enum AppearanceMode: Int, CaseIterable {
 /// Accent + strip palette. The strip colour is deliberately deeper than the
 /// accent so menu-bar symbols stay legible; white uses dark symbols instead.
 enum ThemeColor: Int, CaseIterable {
-    case blue, pink, yellow, black, clear, white
+    case blue, pink, yellow, clear
 
     var title: String {
         switch self {
         case .blue: return "蓝"
         case .pink: return "粉"
         case .yellow: return "黄"
-        case .black: return "黑"
         case .clear: return "透明"
-        case .white: return "白"
         }
     }
 
@@ -42,9 +40,7 @@ enum ThemeColor: Int, CaseIterable {
         case .blue: return NSColor(calibratedRed: 0.20, green: 0.45, blue: 0.95, alpha: 1)
         case .pink: return NSColor(calibratedRed: 0.85, green: 0.48, blue: 0.60, alpha: 1)
         case .yellow: return NSColor(calibratedRed: 0.90, green: 0.72, blue: 0.36, alpha: 1)
-        case .black: return NSColor(calibratedWhite: 0.56, alpha: 1)
         case .clear: return NSColor(calibratedWhite: 0.55, alpha: 1)
-        case .white: return NSColor(calibratedWhite: 0.78, alpha: 1)
         }
     }
 
@@ -53,13 +49,11 @@ enum ThemeColor: Int, CaseIterable {
         case .blue: return .clear
         case .pink: return NSColor(calibratedRed: 0.29, green: 0.12, blue: 0.17, alpha: 1)
         case .yellow: return NSColor(calibratedRed: 0.33, green: 0.23, blue: 0.06, alpha: 1)
-        case .black: return NSColor(calibratedWhite: 0.04, alpha: 1)
         case .clear: return .clear
-        case .white: return NSColor(calibratedWhite: 0.94, alpha: 1)
         }
     }
 
-    var isLightStrip: Bool { self == .white }
+    var isLightStrip: Bool { false }
     var isTransparent: Bool { self == .clear || self == .blue }
 
     /// Tint applied when the strip is rendered as glass.
@@ -76,7 +70,7 @@ enum ThemeColor: Int, CaseIterable {
         case .blue: return "Theme-blue"
         case .pink: return "Theme-pink"
         case .yellow: return "Theme-yellow"
-        case .black, .clear, .white: return nil
+        case .clear: return nil
         }
     }
 }
@@ -132,6 +126,7 @@ func themeIcon(_ color: ThemeColor) -> NSImage? {
 final class ThemePreviewView: NSView {
     var color: ThemeColor = .blue { didSet { needsDisplay = true } }
     var style: StripStyle = .solid { didSet { needsDisplay = true } }
+    var isDark: Bool = true { didSet { needsDisplay = true } }
 
     override var isFlipped: Bool { true }
 
@@ -139,8 +134,9 @@ final class ThemePreviewView: NSView {
         let rect = bounds.insetBy(dx: 1, dy: 1)
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
         if color.isTransparent {
-            NSColor(white: 0.24, alpha: 0.55).setFill(); path.fill()
-            if color != .clear {
+            NSColor(white: isDark ? 0.24 : 0.86, alpha: isDark ? 0.55 : 0.72).setFill()
+            path.fill()
+            if color == .blue {
                 color.glassTint.setFill(); path.fill()
             }
             NSColor.white.withAlphaComponent(0.14).setStroke(); path.lineWidth = 1; path.stroke()
@@ -156,7 +152,8 @@ final class ThemePreviewView: NSView {
             }
         }
 
-        (color.isLightStrip ? NSColor.black : NSColor.white).withAlphaComponent(0.9).setFill()
+        let symbolColor: NSColor = (color == .clear && !isDark) || color.isLightStrip ? .black : .white
+        symbolColor.withAlphaComponent(0.9).setFill()
         for index in 0..<3 {
             let x = 14 + CGFloat(index) * 34
             NSBezierPath(ovalIn: NSRect(x: x, y: rect.midY - 7, width: 14, height: 14)).fill()
@@ -165,7 +162,7 @@ final class ThemePreviewView: NSView {
         NSColor.white.withAlphaComponent(0.18).setFill()
         NSRect(x: rect.maxX - 42, y: 9, width: 1, height: rect.height - 18).fill()
 
-        (color.isLightStrip ? NSColor.black : NSColor.white).withAlphaComponent(0.85).setStroke()
+        symbolColor.withAlphaComponent(0.85).setStroke()
         let gear = NSBezierPath(ovalIn: NSRect(x: rect.maxX - 30, y: rect.midY - 7, width: 14, height: 14))
         gear.lineWidth = 1.5
         gear.stroke()

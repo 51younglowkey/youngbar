@@ -32,6 +32,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let layoutPage = NSView()
     private let appearancePage = NSView()
     private let table = NSTableView()
+    private let layoutScroll = NSScrollView()
     private let pasteType = NSPasteboard.PasteboardType("dev.leorea.youngbar.layout")
     private var navButtons: [String: SidebarButton] = [:]
     private var currentPage = "general"
@@ -245,10 +246,23 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.addSubview(messageField)
     }
 
+    private func updateRowHeight() {
+        let count = max(1, entries.count)
+        let available = layoutScroll.contentSize.height
+        let spacing: CGFloat = 4
+        let proposed = (available - spacing * CGFloat(count - 1)) / CGFloat(count)
+        let height = floor(min(46, max(27, proposed)))
+        table.rowHeight = height
+        table.intercellSpacing = NSSize(width: 0, height: spacing)
+        let total = height * CGFloat(count) + spacing * CGFloat(count - 1)
+        layoutScroll.hasVerticalScroller = total > available + 1
+        table.sizeToFit()
+    }
+
     private func buildLayoutPage() {
         addHeader(to: layoutPage, title: "菜单栏布局", subtitle: "拖动行调整从左到右的顺序；勾选决定每一项的可见方式。")
 
-        table.rowHeight = 52
+        table.rowHeight = 44
         table.style = .plain
         table.headerView = nil
         table.backgroundColor = .clear
@@ -265,12 +279,12 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         table.registerForDraggedTypes([pasteType])
         table.setDraggingSourceOperationMask(.move, forLocal: true)
 
-        let scroll = NSScrollView(frame: NSRect(x: 24, y: 84, width: 612, height: 440))
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .noBorder
-        scroll.drawsBackground = false
-        scroll.documentView = table
-        layoutPage.addSubview(scroll)
+        layoutScroll.frame = NSRect(x: 24, y: 84, width: 612, height: 440)
+        layoutScroll.hasVerticalScroller = false
+        layoutScroll.borderType = .noBorder
+        layoutScroll.drawsBackground = false
+        layoutScroll.documentView = table
+        layoutPage.addSubview(layoutScroll)
 
         for (title, x) in [("名称", 48.0), ("图标", 350.0), ("隐藏", 428.0), ("始终隐藏", 512.0)] {
             let label = label(title, NSRect(x: x, y: 538, width: 90, height: 16), .systemFont(ofSize: 11, weight: .medium))
@@ -457,6 +471,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 launchAtLogin: Bool, options: [String: Int]) {
         let changed = self.entries.map { "\($0.key):\($0.mode)" } != entries.map { "\($0.key):\($0.mode)" }
         self.entries = entries
+        updateRowHeight()
         if changed { table.reloadData() }
 
         loginCheck.state = launchAtLogin ? .on : .off
@@ -527,8 +542,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let entry = entries[row]
         switch column?.identifier.rawValue {
         case "icon":
-            let view = NSView(frame: NSRect(x: 0, y: 0, width: 70, height: 52))
-            let image = NSImageView(frame: NSRect(x: 24, y: 14, width: 24, height: 24))
+            let rowHeight = tableView.rowHeight
+            let view = NSView(frame: NSRect(x: 0, y: 0, width: 70, height: rowHeight))
+            let image = NSImageView(frame: NSRect(x: 24, y: (rowHeight - 22) / 2, width: 22, height: 22))
             image.image = entry.image
             image.imageScaling = .scaleProportionallyDown
             view.addSubview(image)
@@ -537,20 +553,21 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             let isHide = column?.identifier.rawValue == "hide"
             let mode = isHide ? 1 : 2
             let button = NSButton(checkboxWithTitle: "", target: self, action: #selector(rowModeChanged(_:)))
-            button.frame = NSRect(x: isHide ? 34 : 44, y: 16, width: 20, height: 20)
+            button.frame = NSRect(x: isHide ? 34 : 44, y: (tableView.rowHeight - 18) / 2, width: 18, height: 18)
             button.identifier = .init("\(entry.key)|\(mode)")
             button.state = entry.mode == mode ? .on : .off
-            let view = NSView(frame: NSRect(x: 0, y: 0, width: column?.width ?? 70, height: 52))
+            let view = NSView(frame: NSRect(x: 0, y: 0, width: column?.width ?? 70, height: tableView.rowHeight))
             view.addSubview(button)
             return view
         default:
-            let view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 52))
+            let rowHeight = tableView.rowHeight
+            let view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: rowHeight))
             let handle = NSTextField(labelWithString: entry.pinned ? "🔒" : "≡")
-            handle.frame = NSRect(x: 14, y: 16, width: 18, height: 18)
+            handle.frame = NSRect(x: 14, y: (rowHeight - 18) / 2, width: 18, height: 18)
             handle.textColor = .tertiaryLabelColor
             view.addSubview(handle)
             let label = NSTextField(labelWithString: entry.name)
-            label.frame = NSRect(x: 38, y: 15, width: 254, height: 20)
+            label.frame = NSRect(x: 38, y: (rowHeight - 20) / 2, width: 254, height: 20)
             label.lineBreakMode = .byTruncatingTail
             if entry.pinned {
                 label.toolTip = "位置由 macOS 固定在菜单栏最右端，不能拖动；隐藏仍然可用"
@@ -599,8 +616,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
 final class LayoutRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 6, dy: 3)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+        let rect = bounds.insetBy(dx: 6, dy: 2)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
         NSColor.labelColor.withAlphaComponent(0.05).setFill()
         path.fill()
         NSColor.separatorColor.withAlphaComponent(0.35).setStroke()
@@ -613,8 +630,8 @@ final class LayoutRowView: NSTableRowView {
     }
 
     override func drawDraggingDestinationFeedback(in dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 6, dy: 3)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+        let rect = bounds.insetBy(dx: 6, dy: 2)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
         NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
         path.fill()
     }

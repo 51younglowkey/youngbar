@@ -1076,7 +1076,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let themed = themeScope != .interfaceOnly
         let themeForStrip: ThemeColor? = themed ? themeColor : nil
         let systemStrip = themeForStrip == nil || themeForStrip == .clear
-        let useGlass = systemStrip || themeForStrip == .blue || stripStyle == .vibrant
+        let useGlass = systemStrip || stripStyle == .vibrant
         let lightStrip = systemStrip ? !isDark : false
         let iconColor: NSColor = lightStrip ? .black : .white
         let glassTint: NSColor = systemStrip ? .clear : (themeForStrip?.glassTint ?? .clear)
@@ -1101,7 +1101,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
             view.wantsLayer = true
             view.layer?.backgroundColor = stripColor
-                .withAlphaComponent(stripStyle == .solid ? 0.97 : 0.72).cgColor
+                .withAlphaComponent(stripStyle == .solid ? 1.0 : 0.72).cgColor
             view.layer?.cornerRadius = 8
             view.layer?.masksToBounds = true
             background = view

@@ -46,7 +46,7 @@ enum ThemeColor: Int, CaseIterable {
 
     var strip: NSColor {
         switch self {
-        case .blue: return .clear
+        case .blue: return NSColor(calibratedRed: 0.16, green: 0.38, blue: 0.72, alpha: 1)
         case .pink: return NSColor(calibratedRed: 0.29, green: 0.12, blue: 0.17, alpha: 1)
         case .yellow: return NSColor(calibratedRed: 0.33, green: 0.23, blue: 0.06, alpha: 1)
         case .clear: return .clear
@@ -54,7 +54,7 @@ enum ThemeColor: Int, CaseIterable {
     }
 
     var isLightStrip: Bool { false }
-    var isTransparent: Bool { self == .clear || self == .blue }
+    var isTransparent: Bool { self == .clear }
 
     /// Tint applied when the strip is rendered as glass.
     var glassTint: NSColor {

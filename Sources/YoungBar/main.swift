@@ -73,6 +73,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // A previous synthetic drag can leave the global mouse association
+        // off; reset it before any UI is shown.
+        CGAssociateMouseAndMouseCursorPosition(1)
+        CGDisplayShowCursor(CGMainDisplayID())
         applyAppearance()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.title = "•••"
@@ -156,6 +160,16 @@ final class BarApp: NSObject, NSApplicationDelegate {
             }
             if ProcessInfo.processInfo.environment["YOUNGBAR_CONCEALTEST"] == "1" {
                 await runConcealTest()
+            }
+            if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSCLICKTEST"] == "1" {
+                await runSettingsClickTest()
+            }
+            if ProcessInfo.processInfo.environment["YOUNGBAR_HITTEST"] == "1" {
+                showWindow()
+                try? await Task.sleep(for: .milliseconds(500))
+                if let info = settings?.loginHitTest() {
+                    writeJSON(info, name: "hittest.json")
+                }
             }
             if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSSHOT"] == "1" {
                 showWindow()
@@ -1708,6 +1722,46 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     /// Opt-in (`YOUNGBAR_GEARTEST=1`): opens the strip and clicks its pinned
     /// gear with a real HID click, then checks that the settings window opened.
+    /// Opt-in (`YOUNGBAR_SETTINGSCLICKTEST=1`): real HID click on the settings
+    /// "refresh" button, then checks the button's own action counter.
+    private func postPlainClick(at point: CGPoint) {
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+            CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point,
+                    mouseButton: .left)?.post(tap: .cghidEventTap)
+            usleep(30_000)
+        }
+    }
+
+    private func runSettingsClickTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        showWindow()
+        try? await Task.sleep(for: .milliseconds(700))
+        guard let settings, let rect = settings.refreshButtonScreenRect(),
+              let screen = NSScreen.main else {
+            result["error"] = "settings button not available"
+            writeJSON(result, name: "settingsclick.json")
+            return
+        }
+        result["frame"] = NSStringFromRect(rect)
+        let before = settings.refreshClickCount
+        let point = CGPoint(x: rect.midX, y: screen.frame.maxY - rect.midY)
+        // A plain, untagged HID click behaves like a physical click; if a
+        // shield/tap is swallowing real input this one fails.
+        postPlainClick(at: point)
+        try? await Task.sleep(for: .milliseconds(700))
+        let plainAfter = settings.refreshClickCount
+        result["plainAfter"] = plainAfter
+        await ItemMover.shieldedClick(at: point)
+        try? await Task.sleep(for: .milliseconds(900))
+        let after = settings.refreshClickCount
+        result["before"] = before
+        result["after"] = after
+        result["passed"] = after > before
+        result["plainWorked"] = plainAfter > before
+        writeJSON(result, name: "settingsclick.json")
+    }
+
     private func runGearTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
         showShelf()

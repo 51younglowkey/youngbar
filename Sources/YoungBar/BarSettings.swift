@@ -49,6 +49,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let captureStatus = NSTextField(labelWithString: "")
     private let captureButton = NSButton(title: "授权…", target: nil, action: nil)
     private let messageField = NSTextField(labelWithString: "")
+    private let refreshButton = NSButton(title: "刷新图标列表", target: nil, action: nil)
+    private(set) var refreshClickCount = 0
     private let emptyLabel = NSTextField(labelWithString: "")
     private let appearanceModeControl = NSSegmentedControl(labels: ["跟随系统", "浅色", "深色"],
                                                            trackingMode: .selectOne, target: nil, action: nil)
@@ -68,6 +70,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.ignoresMouseEvents = false
         window.center()
         window.contentView = buildRoot()
         selectPage("general")
@@ -84,6 +88,11 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         glass.autoresizingMask = [.width, .height]
         glass.style = .regular
         glass.cornerRadius = 0
+        // The glass view can install interactive gestures; this window only
+        // needs it as a background material.
+        if glass.responds(to: NSSelectorFromString("setEffectIsInteractive:")) {
+            glass.setValue(false, forKey: "effectIsInteractive")
+        }
         root.addSubview(glass)
 
         scrim.frame = root.bounds
@@ -223,9 +232,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         captureButton.frame = NSRect(x: 306, y: 116, width: 90, height: 30)
         generalPage.addSubview(captureButton)
 
-        let refresh = NSButton(title: "刷新图标列表", target: self, action: #selector(refreshTapped))
-        refresh.frame = NSRect(x: 32, y: 76, width: 140, height: 30)
-        generalPage.addSubview(refresh)
+        refreshButton.target = self
+        refreshButton.action = #selector(refreshTapped)
+        refreshButton.frame = NSRect(x: 32, y: 76, width: 140, height: 30)
+        generalPage.addSubview(refreshButton)
 
         messageField.frame = NSRect(x: 32, y: 34, width: 596, height: 34)
         messageField.textColor = .secondaryLabelColor
@@ -392,11 +402,40 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
     @objc private func axTapped() { onPermission?("accessibility") }
     @objc private func captureTapped() { onPermission?("screen") }
-    @objc private func refreshTapped() { onRefresh?() }
+    @objc private func refreshTapped() {
+        refreshClickCount += 1
+        onRefresh?()
+    }
 
     // MARK: - State
 
     var isVisible: Bool { window.isVisible }
+
+    func refreshButtonScreenRect() -> NSRect? {
+        guard window.isVisible else { return nil }
+        return window.convertToScreen(refreshButton.convert(refreshButton.bounds, to: nil))
+    }
+
+    /// Diagnostic: what would receive a click on the login checkbox?
+    func loginHitTest() -> [String: Any] {
+        let rect = loginCheck.convert(loginCheck.bounds, to: nil)
+        let point = NSPoint(x: rect.midX, y: rect.midY)
+        let local = window.contentView?.convert(point, from: nil) ?? point
+        var view = window.contentView?.hitTest(local)
+        var chain: [String] = []
+        while let current = view {
+            chain.append(String(describing: type(of: current)))
+            view = current.superview
+        }
+        return [
+            "point": NSStringFromPoint(point),
+            "chain": chain,
+            "isKey": window.isKeyWindow,
+            "ignoresMouse": window.ignoresMouseEvents,
+            "isVisible": window.isVisible,
+            "contentFrame": NSStringFromRect(window.contentView?.frame ?? .zero),
+        ]
+    }
 
     func show() {
         window.makeKeyAndOrderFront(nil)

@@ -68,8 +68,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         window.isReleasedWhenClosed = false
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
         window.isMovableByWindowBackground = true
         window.ignoresMouseEvents = false
         window.center()
@@ -476,6 +476,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         for button in navButtons.values { button.highlightColor = theme.accent }
         glass.tintColor = theme.accent.withAlphaComponent(0.10)
+        window.backgroundColor = theme.strip.withAlphaComponent(0.92)
         sidebarTint.layer?.backgroundColor = theme.accent.withAlphaComponent(0.08).cgColor
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         scrim.layer?.backgroundColor = (isDark

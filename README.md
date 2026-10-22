@@ -4,7 +4,7 @@
 
 A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.
 
-> `youngbar/` is a self-contained subproject. It is intended to become its own clean repository; it does not depend on the rest of Leorea.
+> YoungBar is a standalone repository, split out of the Leorea workspace with its history.
 
 ![收纳条](docs/images/shelf-expanded.png)
 
@@ -16,13 +16,13 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 - **Click-through**: a synthetic HID click delivers the press to the owning app; menus and panels open natively.
 - **Reorder**: ⌘-drag in the real menu bar (verified with a swap-and-restore test) and drag rows in the layout table.
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
-- **Layout list**: one rounded card per item (name, icon, Hide, Always Hidden), draggable as a whole row, with system items included. Date and Control Center keep their macOS-fixed position but can be hidden.
-- **Appearance**: liquid-glass settings window with integrated traffic lights (no separate titlebar), system / light / dark, four palettes (blue glass, pink, yellow, neutral clear that follows the system light/dark) with mini-strip swatches, theme-matched sidebar icons for blue/pink/yellow, a three-way scope (interface + strip / interface only / strip only), and solid / translucent / vibrant strip materials.
+- **Menu Bar page**: every item in menu-bar order with a Shown / Hidden / Always Hidden menu; drag a row or right-click it to reorder. Date and Control Center keep their macOS-fixed position but can be hidden.
+- **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
+- **Appearance**: system / light / dark, four palettes (blue glass, pink, yellow, neutral clear that follows the system light/dark) with mini-strip swatches, theme-matched sidebar icons for blue/pink/yellow, a three-way scope (interface + strip / interface only / strip only), and solid / translucent / vibrant strip materials.
 - **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or your own 36×36 PNG.
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Crash-safe**: a normal quit reveals every concealed item first; if the previous session died, the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bounded cache**: at most 120 crops, 14 days, 8 MB; the menu can clear it at any time.
-- **Resizable settings**: the window scrolls when made shorter; content no longer clips at fixed height.
 - **Bilingual**: Chinese and English, switchable in General settings; theme names are localised (`怎怎瓦岗蓝` / Hachiware Blue, `羊霸霸粉` / Chiikawa Pink, `乌拉黄` / Usagi Yellow).
 - **Local only**: no telemetry, no network. Menu-bar crops are cached in `~/Library/Application Support/YoungBar/pictures.json` and can be cleared from the menu.
 

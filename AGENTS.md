@@ -1,13 +1,13 @@
 # AGENTS.md — YoungBar（羊霸霸）
 
-> 这是 `youngbar/` 子项目的操作须知。**它最终会被拆成独立仓库开源**，不要把 Leorea 的 Windows 外设内容带进来。
+> YoungBar 的操作须知。2026-10-23 起这是**独立仓库**（从 Leorea 的 `youngbar/` 拆出，保留了历史），不要把 Leorea 的 Windows 外设内容带进来。
 
 ## 1. 项目边界
 
 - 只做 macOS 27 的菜单栏收纳工具：隐藏 / 展开 / 排序 / 原始图标 / 快捷键 / 外观。
 - 代码在 `Sources/YoungBar/`，依赖在 `Vendor/`（Dimble 的 PelmetCore / PelmetEngine，GPLv3）。
-- 记录在 `docs/STATUS.md`（验证状态）与 `docs/IBAR-FEATURES.md`（iBar 对照表）。跨项目轮次记到仓库根部的 `docs/JOURNAL.md`。
-- 本目录可以整体复制成独立仓库；不要依赖 `../../app`、`../../projects`、`../../rea` 等外部路径。
+- 记录在 `docs/STATUS.md`（验证状态）与 `docs/IBAR-FEATURES.md`（iBar 对照表）。独立之前的轮次记在 Leorea 的 `docs/JOURNAL.md`。
+- 不要依赖仓库外的路径（例如原来的 `../../app`、`../../projects`）。
 
 ## 2. 构建与运行
 
@@ -35,7 +35,8 @@ macOS 27 的界面叫「设备控制与数据访问」，不是旧的「辅助�
 ```
 Sources/YoungBar/
   main.swift          AppDelegate、控制条、收纳条、菜单、测试钩子（~1600 行）
-  BarSettings.swift   设置窗口（侧栏 + 通用设置 / 菜单栏布局）
+  BarSettings.swift   设置窗口的 AppKit 外壳：NSWindow + NSSplitViewController，把 SettingsAction 转给 main.swift
+  SettingsView.swift  设置窗口内容（SwiftUI）：侧栏、通用 / 菜单栏 / 外观三页，Form .grouped
   StatusPictures.swift 菜单栏条带抓图、磁盘缓存
   Diagnostics.swift   运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）
 Vendor/
@@ -51,13 +52,15 @@ Vendor/
 
 - 每条结论必须有证据：`~/Library/Application Support/YoungBar/*.json`、截图、或命令输出。
 - 自检开关（环境变量）：`YOUNGBAR_SELFTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_ORDERTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_CACHETEST`、`YOUNGBAR_HOTKEYTEST`、`YOUNGBAR_PINNEDTEST`、`YOUNGBAR_ALWAYSHIDDENTEST`、`YOUNGBAR_GEARTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_ABOUTTEST`、`YOUNGBAR_CONCEALTEST`。
+- 设置窗口截图：`open -n --env YOUNGBAR_SETTINGS_PREVIEW=zh build/YoungBar.app`（或 `=en`）。只开设置窗口、**不碰菜单栏**，可以和正在运行的 YoungBar 并存；深浅两套截图写到 `~/Library/Application Support/YoungBar/preview-*.png`，然后自动退出。
 - 自检会动真实菜单栏：点击、隐藏、拖动。**结束后必须恢复原状态**；测试打开的面板/菜单要关闭。
 - 改状态数字时同步更新 `docs/STATUS.md`；结论变了追加「更正第 N 轮」，不改历史条目。
 - 提交前：`sh Scripts/build.sh` 通过；`git status` 只包含预期文件。
 
 ## 6. UI 与设计
 
-- AppKit，原生控件优先；统一 8pt 网格；正文 13、说明 11、标题 22。
+- **混合结构**：设置窗口内容用 SwiftUI（`Form` + `.formStyle(.grouped)`，对齐 System Settings 的间距、对齐和控件），菜单栏控件、收纳条、右键菜单和所有改菜单栏的逻辑保持 AppKit。
+- 设置页里不要再手写坐标；新选项就是 `Section` 里加一行：名称在左、控件在右、说明用第二个 `Text`。布尔值用开关，弹出菜单的值用标签色（`.tint(.primary)`）。
 - 深色 / 浅色都要可用；收纳条用材质而不是死黑。
 - 计划中的皮肤系统：颜色主题、透明样式、深浅模式；实现时把颜色收进一个 `Theme` 模型，不要散落硬编码。
 - **不要像素级复制 iBar Pro**，也不要复制它的图片、图标、文案。行为参考可以，视觉要有自己的语言（奶油白 / 墨绿 / 粉色来自 app 图标）。

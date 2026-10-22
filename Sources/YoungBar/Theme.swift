@@ -84,7 +84,7 @@ enum ThemeScope: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .both: return L10n.t("全部", "All")
+        case .both: return L10n.t("界面与收纳条", "Interface and strip")
         case .interfaceOnly: return L10n.t("仅界面", "Interface only")
         case .stripOnly: return L10n.t("仅收纳条", "Strip only")
         }
@@ -177,55 +177,6 @@ final class ThemePreviewView: NSView {
         symbolColor.withAlphaComponent(0.18).setFill()
         NSRect(x: rect.maxX - 42, y: 9, width: 1, height: rect.height - 18).fill()
         _ = drawSymbol("gearshape", x: rect.maxX - 31, height: 15)
-    }
-}
-
-
-/// A miniature strip used as a theme swatch: background + three symbols.
-final class ThemeSwatchButton: NSButton {
-    var theme: ThemeColor = .blue { didSet { needsDisplay = true } }
-    var selected: Bool = false { didSet { needsDisplay = true } }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 2, dy: 2)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7)
-        if theme.isTransparent {
-            NSColor(white: 0.26, alpha: 0.62).setFill()
-            path.fill()
-            if theme == .clear {
-                NSGraphicsContext.saveGraphicsState()
-                path.addClip()
-                let cell = rect.width / 4
-                for row in 0..<2 {
-                    for column in 0..<4 {
-                        let light = (row + column) % 2 == 0
-                        (light ? NSColor.white.withAlphaComponent(0.22) : NSColor.black.withAlphaComponent(0.18)).setFill()
-                        NSRect(x: rect.minX + CGFloat(column) * cell, y: rect.minY + CGFloat(row) * cell,
-                               width: cell, height: cell).fill()
-                    }
-                }
-                NSGraphicsContext.restoreGraphicsState()
-            } else {
-                let gradient = NSGradient(colors: [
-                    theme.glassTint.withAlphaComponent(0.85),
-                    theme.glassTint.withAlphaComponent(0.35),
-                ])
-                gradient?.draw(in: path, angle: -90)
-            }
-            NSColor.white.withAlphaComponent(0.16).setStroke()
-            path.lineWidth = 1
-            path.stroke()
-        } else {
-            theme.strip.setFill()
-            path.fill()
-        }
-
-        if selected {
-            NSColor.labelColor.setStroke()
-            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: -1), xRadius: 8, yRadius: 8)
-            ring.lineWidth = 2
-            ring.stroke()
-        }
     }
 }
 

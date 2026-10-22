@@ -76,8 +76,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var shelfState: String?
+    /// Set by `YOUNGBAR_SETTINGS_PREVIEW`: only the settings window runs.
+    private var previewOnly = false
+    private lazy var customIconImage: NSImage? = NSImage(contentsOf: customControlIconURL)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let preview = ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGS_PREVIEW"] {
+            // Must return before the session marker below: a preview runs
+            // beside the live instance and shares its defaults.
+            previewOnly = true
+            if preview == "en" { options["language"] = 1 } else if preview == "zh" { options["language"] = 0 }
+            L10n.current = Language(rawValue: options["language"] ?? 0) ?? .chinese
+            NSApp.setActivationPolicy(.accessory)
+            Task { await runSettingsPreview() }
+            return
+        }
         L10n.current = Language(rawValue: options["language"] ?? 0) ?? .chinese
         UserDefaults.standard.set(true, forKey: "sessionActive")
         writeJSON(["args": CommandLine.arguments, "rescue": rescueRequested,
@@ -119,7 +132,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if let directory = ProcessInfo.processInfo.environment["YOUNGBAR_SNAPSHOT_DIR"] {
                 showWindow()
                 try? await Task.sleep(for: .milliseconds(500))
-                settings?.writeSnapshots(to: directory)
+                await settings?.writeSnapshots(to: directory)
                 writeShelfSnapshot(to: directory)
             }
             if let directory = ProcessInfo.processInfo.environment["YOUNGBAR_SNAPSHOT_DIR"] {
@@ -198,6 +211,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if previewOnly { return .terminateNow }
         if rescueRequested {
             UserDefaults.standard.set(false, forKey: "sessionActive")
             return .terminateNow
@@ -215,6 +229,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        guard !previewOnly else { return }
         UserDefaults.standard.set(false, forKey: "sessionActive")
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
@@ -926,7 +941,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     private func appName(for bundle: String) -> String {
-        NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == bundle }?.localizedName ?? bundle
+        if let name = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle })?.localizedName {
+            return name
+        }
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        }
+        return bundle
     }
 
     private func showConfigurationMenu() {
@@ -936,7 +957,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         } else if !AssessmentMode.isAvailable {
             menu.addItem(withTitle: L10n.t("此系统上无法使用原生隐藏功能", "Native hiding is unavailable on this system"), action: nil, keyEquivalent: "")
         } else {
-            menu.addItem(withTitle: expanded ? L10n.t("收起图标栏", "Close strip") : L10n.t("打开图标栏", "Open strip"), action: #selector(toggleShelf), keyEquivalent: "")
+            menu.addItem(withTitle: expanded ? L10n.t("收起收纳条", "Close strip") : L10n.t("打开收纳条", "Open strip"), action: #selector(toggleShelf), keyEquivalent: "")
             let shortcut = NSMenuItem(title: L10n.t("快捷键：⌃⌥B", "Shortcut: ⌃⌥B"), action: nil, keyEquivalent: "")
             shortcut.isEnabled = false
             menu.addItem(shortcut)
@@ -1360,7 +1381,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let controller = BarSettings()
             controller.onMode = { [weak self] key, mode in self?.setMode(key: key, mode: mode) }
             controller.onMove = { [weak self] key, before in self?.moveItem(key: key, before: before) }
-            controller.onCapture = { [weak self] in self?.requestPictures() }
             controller.onPermission = { [weak self] kind in
                 guard let self else { return }
                 if kind == "accessibility" { self.requestAccessibility() } else { self.requestPictures() }
@@ -1375,15 +1395,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 options[key] = value
                 UserDefaults.standard.set(options, forKey: "barOptions")
                 if key == "language" {
+                    // The SwiftUI tree rebuilds in place; the window keeps
+                    // its position and page.
                     L10n.current = Language(rawValue: value) ?? .chinese
-                    statusItem.button?.toolTip = L10n.t(
+                    statusItem?.button?.toolTip = L10n.t(
                         "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                         "YoungBar: click to show concealed icons; right-click to choose apps")
-                    DispatchQueue.main.async {
-                        self.settings?.close()
-                        self.settings = nil
-                        self.showWindow()
-                    }
+                    renderWindow(force: true)
+                    settings?.languageChanged()
                     return
                 }
                 if key == "controlIcon" {
@@ -1412,9 +1431,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     private func renderWindow(force: Bool = false) {
-        let entries = orderedKeys().map { key in
-            BarEntry(key: key, name: name(for: key), image: fallbackImage(for: key),
-                     mode: modes[key] ?? 0, pinned: catalog[key].map { MenuBarPolicy.isPinnedSystemItem($0.id) || MenuBarPolicy.isPinnedAppleHost($0.id.bundleID) } ?? false)
+        let keys = previewOnly ? uniqueKeys(savedOrder) : orderedKeys()
+        let entries = keys.map { key in
+            let id = catalog[key]?.id ?? ItemID(rawValue: key)
+            return BarEntry(key: key, name: name(for: key), image: fallbackImage(for: key),
+                            mode: modes[key] ?? 0,
+                            pinned: MenuBarPolicy.isPinnedSystemItem(id) || MenuBarPolicy.isPinnedAppleHost(id.bundleID))
         }
         let message: String
         if !AXIsProcessTrusted() { message = L10n.t("需要辅助功能权限", "Accessibility permission required") }
@@ -1425,8 +1447,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             : L10n.t("已就绪 · 原始状态显示需要屏幕录制权限", "Ready · Screen Recording is required for original icons") }
         settings?.update(entries: entries, message: message, captureAllowed: pictures.isAllowed,
                          axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled,
-                         controlIcon: currentControlIcon(), controlIconIndex: options["controlIcon"] ?? 0,
-                         options: options)
+                         customIcon: customIconImage, options: options)
     }
 
     private var customControlIconURL: URL {
@@ -1437,7 +1458,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     private func currentControlIcon() -> NSImage? {
         let index = options["controlIcon"] ?? 0
-        let custom = index == ControlIcon.symbols.count ? NSImage(contentsOf: customControlIconURL) : nil
+        let custom = index == ControlIcon.symbols.count ? customIconImage : nil
         return ControlIcon.image(index, custom: custom)
     }
 
@@ -1451,6 +1472,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     private func removeCustomIcon() {
         try? FileManager.default.removeItem(at: customControlIconURL)
+        customIconImage = nil
         options["controlIcon"] = 0
         UserDefaults.standard.set(options, forKey: "barOptions")
         applyControlIcon()
@@ -1479,6 +1501,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             try FileManager.default.createDirectory(at: customControlIconURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
             try png.write(to: customControlIconURL, options: .atomic)
+            customIconImage = NSImage(data: png)
             options["controlIcon"] = ControlIcon.symbols.count
             UserDefaults.standard.set(options, forKey: "barOptions")
             applyControlIcon()
@@ -1997,6 +2020,24 @@ final class BarApp: NSObject, NSApplicationDelegate {
         result["passed"] = expanded && elapsed < 400 && revealed == 0 && visibleAfter == visibleBefore
         closeShelf()
         writeJSON(result, name: "shelfopen.json")
+    }
+
+    /// Dev-only (`YOUNGBAR_SETTINGS_PREVIEW=1`, `=zh` or `=en`): captures every
+    /// settings page in dark and light from saved state, then exits. It never
+    /// touches the menu bar, so it can run beside a live instance.
+    private func runSettingsPreview() async {
+        for (suffix, appearance) in [("dark", NSAppearance(named: .darkAqua)), ("light", NSAppearance(named: .aqua))] {
+            NSApp.appearance = appearance
+            showWindow()
+            for page in SettingsPage.allCases {
+                settings?.select(page)
+                try? await Task.sleep(for: .milliseconds(700))
+                if let window = settings?.windowForCapture {
+                    await captureWindow(window, to: "preview-\(L10n.current == .english ? "en" : "zh")-\(suffix)-\(page.rawValue).png")
+                }
+            }
+        }
+        exit(0)
     }
 
     @objc private func showAbout() {

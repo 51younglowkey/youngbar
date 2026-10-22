@@ -37,26 +37,27 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var navButtons: [String: SidebarButton] = [:]
     private var currentPage = "general"
 
-    private let loginCheck = NSButton(checkboxWithTitle: "开机自启动", target: nil, action: nil)
-    private let modeControl = NSSegmentedControl(labels: ["普通模式", "聚合模式"], trackingMode: .selectOne, target: nil, action: nil)
-    private let keepCheck = NSButton(checkboxWithTitle: "聚合模式下工具条始终显示", target: nil, action: nil)
-    private let hoverCheck = NSButton(checkboxWithTitle: "鼠标悬停 0.5 秒展开", target: nil, action: nil)
-    private let blankCheck = NSButton(checkboxWithTitle: "点击菜单栏空白处展开", target: nil, action: nil)
+    private let loginCheck = NSButton(checkboxWithTitle: L10n.t("开机自启动", "Launch at login"), target: nil, action: nil)
+    private let modeControl = NSSegmentedControl(labels: [L10n.t("普通模式", "Standard"), L10n.t("聚合模式", "Aggregate")], trackingMode: .selectOne, target: nil, action: nil)
+    private let keepCheck = NSButton(checkboxWithTitle: L10n.t("聚合模式下工具条始终显示", "Keep the strip visible in Aggregate mode"), target: nil, action: nil)
+    private let hoverCheck = NSButton(checkboxWithTitle: L10n.t("鼠标悬停 0.5 秒展开", "Open on hover (0.5 s)"), target: nil, action: nil)
+    private let blankCheck = NSButton(checkboxWithTitle: L10n.t("点击菜单栏空白处展开", "Open when clicking empty menu-bar space"), target: nil, action: nil)
     private let delaySlider = NSSlider(value: 20, minValue: 5, maxValue: 60, target: nil, action: nil)
-    private let delayValue = NSTextField(labelWithString: "20 秒")
+    private let delayValue = NSTextField(labelWithString: L10n.t("20 秒", "20 s"))
     private let spacingPopup = NSPopUpButton()
     private let axStatus = NSTextField(labelWithString: "")
-    private let axButton = NSButton(title: "授权…", target: nil, action: nil)
+    private let axButton = NSButton(title: L10n.t("授权…", "Authorize…"), target: nil, action: nil)
     private let captureStatus = NSTextField(labelWithString: "")
-    private let captureButton = NSButton(title: "授权…", target: nil, action: nil)
+    private let captureButton = NSButton(title: L10n.t("授权…", "Authorize…"), target: nil, action: nil)
     private let messageField = NSTextField(labelWithString: "")
-    private let refreshButton = NSButton(title: "刷新图标列表", target: nil, action: nil)
+    private let refreshButton = NSButton(title: L10n.t("刷新图标列表", "Refresh item list"), target: nil, action: nil)
     private(set) var refreshClickCount = 0
     private let emptyLabel = NSTextField(labelWithString: "")
-    private let appearanceModeControl = NSSegmentedControl(labels: ["跟随系统", "浅色", "深色"],
+    private let appearanceModeControl = NSSegmentedControl(labels: [L10n.t("跟随系统", "System"), L10n.t("浅色", "Light"), L10n.t("深色", "Dark")],
                                                            trackingMode: .selectOne, target: nil, action: nil)
-    private let stripStyleControl = NSSegmentedControl(labels: ["纯色", "半透明", "毛玻璃"],
+    private let stripStyleControl = NSSegmentedControl(labels: [L10n.t("纯色", "Solid"), L10n.t("半透明", "Translucent"), L10n.t("毛玻璃", "Glass")],
                                                        trackingMode: .selectOne, target: nil, action: nil)
+    private let languagePopup = NSPopUpButton()
     private let scopeControl = NSSegmentedControl(labels: ThemeScope.allCases.map(\.title),
                                                   trackingMode: .selectOne, target: nil, action: nil)
     private let appIconView = NSImageView()
@@ -134,9 +135,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         subtitle.textColor = .secondaryLabelColor
         sidebar.addSubview(subtitle)
 
-        for (index, item) in [("general", "通用设置", "gearshape"),
-                              ("layout", "菜单栏布局", "list.bullet.rectangle"),
-                              ("appearance", "外观", "paintpalette")].enumerated() {
+        for (index, item) in [("general", L10n.t("通用设置", "General"), "gearshape"),
+                              ("layout", L10n.t("菜单栏布局", "Layout"), "list.bullet.rectangle"),
+                              ("appearance", L10n.t("外观", "Appearance"), "paintpalette")].enumerated() {
             let button = SidebarButton(title: item.1, target: self, action: #selector(navigate(_:)))
             button.identifier = .init(item.0)
             button.frame = NSRect(x: 20, y: 420 - CGFloat(index) * 40, width: 168, height: 36)
@@ -151,7 +152,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             navButtons[item.0] = button
         }
 
-        let footer = label("v0.3.0 · GPLv3\n基于 Dimble / Pelmet", NSRect(x: 16, y: 24, width: 168, height: 40),
+        let footer = label(L10n.t("v0.3.0 · GPLv3\n基于 Dimble / Pelmet", "v0.3.0 · GPLv3\nBuilt on Dimble / Pelmet"), NSRect(x: 16, y: 24, width: 168, height: 40),
                            .systemFont(ofSize: 10))
         footer.textColor = .tertiaryLabelColor
         footer.maximumNumberOfLines = 2
@@ -175,22 +176,33 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildGeneralPage() {
-        addHeader(to: generalPage, title: "通用设置", subtitle: "控制 YoungBar 如何显示、展开与自动收起。")
+        addHeader(to: generalPage, title: L10n.t("通用设置", "General"), subtitle: L10n.t("控制 YoungBar 如何显示、展开与自动收起。", "Control how YoungBar appears, expands and hides."))
 
-        generalPage.addSubview(sectionLabel("启动与显示", y: 520))
+        generalPage.addSubview(sectionLabel(L10n.t("启动与显示", "Startup & Display"), y: 520))
+
+        let languageLabel = label(L10n.t("语言", "Language"),
+                                  NSRect(x: 412, y: 521, width: 68, height: 16),
+                                  .systemFont(ofSize: 11, weight: .medium))
+        languageLabel.textColor = .secondaryLabelColor
+        generalPage.addSubview(languageLabel)
+        languagePopup.addItems(withTitles: ["中文", "English"])
+        languagePopup.target = self
+        languagePopup.action = #selector(languageChanged)
+        languagePopup.frame = NSRect(x: 484, y: 512, width: 112, height: 28)
+        generalPage.addSubview(languagePopup)
 
         loginCheck.target = self
         loginCheck.action = #selector(loginChanged)
         loginCheck.frame = NSRect(x: 32, y: 492, width: 300, height: 24)
         generalPage.addSubview(loginCheck)
-        generalPage.addSubview(hint("登录后自动启动 YoungBar。", y: 476))
+        generalPage.addSubview(hint(L10n.t("登录后自动启动 YoungBar。", "Launch YoungBar automatically when you log in."), y: 476))
 
-        generalPage.addSubview(label("显示模式", NSRect(x: 32, y: 446, width: 200, height: 18), .systemFont(ofSize: 12, weight: .medium)))
+        generalPage.addSubview(label(L10n.t("显示模式", "Display mode"), NSRect(x: 32, y: 446, width: 200, height: 18), .systemFont(ofSize: 12, weight: .medium)))
         modeControl.target = self
         modeControl.action = #selector(modeChanged)
         modeControl.frame = NSRect(x: 32, y: 414, width: 250, height: 28)
         generalPage.addSubview(modeControl)
-        generalPage.addSubview(hint("聚合模式把收纳项放进一条工具条；普通模式直接展开原生菜单栏。", y: 400))
+        generalPage.addSubview(hint(L10n.t("聚合模式把收纳项放进一条工具条；普通模式直接展开原生菜单栏。", "Aggregate mode puts concealed items into one strip; Standard mode expands the native menu bar."), y: 400))
 
         var y: CGFloat = 374
         for (check, key) in [(keepCheck, "keepShelfOpen"), (hoverCheck, "hoverExpand"), (blankCheck, "blankClick")] {
@@ -202,7 +214,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             y -= 26
         }
 
-        generalPage.addSubview(label("再次自动隐藏", NSRect(x: 32, y: 296, width: 110, height: 18), .systemFont(ofSize: 12, weight: .medium)))
+        generalPage.addSubview(label(L10n.t("再次自动隐藏", "Auto-hide after"), NSRect(x: 32, y: 296, width: 110, height: 18), .systemFont(ofSize: 12, weight: .medium)))
         delaySlider.target = self
         delaySlider.action = #selector(delayChanged)
         delaySlider.isContinuous = true
@@ -210,17 +222,19 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.addSubview(delaySlider)
         delayValue.frame = NSRect(x: 436, y: 297, width: 80, height: 18)
         generalPage.addSubview(delayValue)
-        generalPage.addSubview(hint("点击收纳项后，它在菜单栏上保持原生的时长（5–60 秒，对齐 iBar 的滑杆）。", y: 278))
+        generalPage.addSubview(hint(L10n.t("点击收纳项后，它在菜单栏上保持原生的时长（5–60 秒，对齐 iBar 的滑杆）。", "How long a clicked item stays native on the bar (5–60 s, matching iBar)."), y: 278))
 
-        generalPage.addSubview(label("菜单栏图标间隙", NSRect(x: 32, y: 248, width: 130, height: 18), .systemFont(ofSize: 12, weight: .medium)))
-        spacingPopup.addItems(withTitles: ["默认间隙", "较小间隙", "小间隙", "无间隙"])
+        generalPage.addSubview(label(L10n.t("菜单栏图标间隙", "Menu-bar icon spacing"),
+                                     NSRect(x: 32, y: 248, width: 190, height: 18),
+                                     .systemFont(ofSize: 12, weight: .medium)))
+        spacingPopup.addItems(withTitles: [L10n.t("默认间隙", "Default"), L10n.t("较小间隙", "Smaller"), L10n.t("小间隙", "Small"), L10n.t("无间隙", "None")])
         spacingPopup.target = self
         spacingPopup.action = #selector(spacingChanged)
-        spacingPopup.frame = NSRect(x: 166, y: 242, width: 200, height: 28)
+        spacingPopup.frame = NSRect(x: 226, y: 242, width: 190, height: 28)
         generalPage.addSubview(spacingPopup)
-        generalPage.addSubview(hint("写入系统全局偏好，重启电脑后生效；随时可以改回默认。", y: 222))
+        generalPage.addSubview(hint(L10n.t("写入系统全局偏好，重启电脑后生效；随时可以改回默认。", "Writes a global preference; takes effect after a reboot. You can restore the default anytime."), y: 222))
 
-        generalPage.addSubview(sectionLabel("权限", y: 186))
+        generalPage.addSubview(sectionLabel(L10n.t("权限", "Permissions"), y: 186))
 
         axStatus.frame = NSRect(x: 32, y: 159, width: 260, height: 18)
         axStatus.font = .systemFont(ofSize: 12)
@@ -264,7 +278,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildLayoutPage() {
-        addHeader(to: layoutPage, title: "菜单栏布局", subtitle: "拖动行调整从左到右的顺序；勾选决定每一项的可见方式。")
+        addHeader(to: layoutPage, title: L10n.t("菜单栏布局", "Layout"), subtitle: L10n.t("拖动行调整从左到右的顺序；勾选决定每一项的可见方式。", "Drag rows to set the left-to-right order; tick how each item should appear."))
 
         table.rowHeight = 44
         table.style = .plain
@@ -290,13 +304,13 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         layoutScroll.documentView = table
         layoutPage.addSubview(layoutScroll)
 
-        for (title, x) in [("名称", 48.0), ("图标", 350.0), ("隐藏", 428.0), ("始终隐藏", 512.0)] {
+        for (title, x) in [(L10n.t("名称", "Name"), 48.0), (L10n.t("图标", "Icon"), 350.0), (L10n.t("隐藏", "Hidden"), 428.0), (L10n.t("始终隐藏", "Always Hidden"), 512.0)] {
             let label = label(title, NSRect(x: x, y: 538, width: 90, height: 16), .systemFont(ofSize: 11, weight: .medium))
             label.textColor = .secondaryLabelColor
             layoutPage.addSubview(label)
         }
 
-        layoutPage.addSubview(hint("拖住任意一行可以调整顺序；始终隐藏项不在普通收纳栏显示，按住 ⌥ 点击 ••• 可访问。", y: 56))
+        layoutPage.addSubview(hint(L10n.t("拖住任意一行可以调整顺序；始终隐藏项不在普通收纳栏显示，按住 ⌥ 点击 ••• 可访问。", "Drag any row to reorder. Always Hidden items only appear in the strip while holding ⌥."), y: 56))
 
         emptyLabel.frame = NSRect(x: 44, y: 290, width: 572, height: 40)
         emptyLabel.alignment = .center
@@ -307,19 +321,19 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildAppearancePage() {
-        addHeader(to: appearancePage, title: "外观", subtitle: "颜色、深浅模式与收纳条材质。")
+        addHeader(to: appearancePage, title: L10n.t("外观", "Appearance"), subtitle: L10n.t("颜色、深浅模式与收纳条材质。", "Colours, light/dark mode and strip material."))
 
-        appearancePage.addSubview(sectionLabel("外观模式", y: 520))
+        appearancePage.addSubview(sectionLabel(L10n.t("外观模式", "Appearance mode"), y: 520))
         appearanceModeControl.target = self
         appearanceModeControl.action = #selector(appearanceModeChanged)
         appearanceModeControl.frame = NSRect(x: 32, y: 486, width: 300, height: 28)
         appearancePage.addSubview(appearanceModeControl)
-        appearancePage.addSubview(hint("跟随系统会随 macOS 的浅色/深色切换。", y: 468))
+        appearancePage.addSubview(hint(L10n.t("跟随系统会随 macOS 的浅色/深色切换。", "System follows macOS light/dark mode."), y: 468))
 
-        appearancePage.addSubview(sectionLabel("主题色", y: 430))
+        appearancePage.addSubview(sectionLabel(L10n.t("主题色", "Palette"), y: 430))
         for (index, theme) in ThemeColor.allCases.enumerated() {
             let button = ThemeSwatchButton(title: "", target: self, action: #selector(colorPicked(_:)))
-            button.frame = NSRect(x: 32 + CGFloat(index) * 54, y: 388, width: 46, height: 28)
+            button.frame = NSRect(x: 32 + CGFloat(index) * 90, y: 388, width: 46, height: 28)
             button.isBordered = false
             button.theme = theme
             button.tag = index
@@ -327,31 +341,31 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             button.setAccessibilityLabel(theme.title)
             colorButtons.append(button)
             appearancePage.addSubview(button)
-            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 54, y: 370, width: 44, height: 16),
-                             .systemFont(ofSize: 11))
+            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 90, y: 368, width: 100, height: 16),
+                             .systemFont(ofSize: 10.5))
             name.alignment = .center
             name.textColor = .secondaryLabelColor
             appearancePage.addSubview(name)
         }
 
-        appearancePage.addSubview(sectionLabel("主题应用", y: 334))
+        appearancePage.addSubview(sectionLabel(L10n.t("主题应用", "Theme scope"), y: 334))
         scopeControl.target = self
         scopeControl.action = #selector(scopeChanged)
         scopeControl.frame = NSRect(x: 32, y: 300, width: 360, height: 28)
         appearancePage.addSubview(scopeControl)
-        appearancePage.addSubview(hint("决定主题只影响设置界面、只影响收纳条，还是两者都变。", y: 282))
+        appearancePage.addSubview(hint(L10n.t("决定主题只影响设置界面、只影响收纳条，还是两者都变。", "Choose whether the theme affects the settings window, the strip, or both."), y: 282))
 
-        appearancePage.addSubview(sectionLabel("收纳条", y: 246))
+        appearancePage.addSubview(sectionLabel(L10n.t("收纳条", "Strip"), y: 246))
         stripStyleControl.target = self
         stripStyleControl.action = #selector(stripStyleChanged)
         stripStyleControl.frame = NSRect(x: 32, y: 212, width: 300, height: 28)
         appearancePage.addSubview(stripStyleControl)
-        appearancePage.addSubview(hint("毛玻璃会透出桌面内容；纯色最稳，半透明介于两者之间。", y: 194))
+        appearancePage.addSubview(hint(L10n.t("毛玻璃会透出桌面内容；纯色最稳，半透明介于两者之间。", "Glass shows the desktop through the strip; Solid is the most stable; Translucent sits in between."), y: 194))
 
-        appearancePage.addSubview(sectionLabel("预览", y: 158))
+        appearancePage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 158))
         preview.frame = NSRect(x: 32, y: 110, width: 360, height: 46)
         appearancePage.addSubview(preview)
-        appearancePage.addSubview(hint("预览使用当前主题、应用范围与收纳条样式。", y: 88))
+        appearancePage.addSubview(hint(L10n.t("预览使用当前主题、应用范围与收纳条样式。", "Preview uses the current palette, scope and strip style."), y: 88))
     }
 
     private func addHeader(to page: NSView, title: String, subtitle: String) {
@@ -417,7 +431,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
     @objc private func delayChanged() {
         let seconds = Int(delaySlider.doubleValue.rounded())
-        delayValue.stringValue = "\(seconds) 秒"
+        delayValue.stringValue = L10n.t("\(seconds) 秒", "\(seconds) s")
         onOption?("revealSeconds", seconds)
     }
 
@@ -427,6 +441,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
     @objc private func stripStyleChanged() {
         onOption?("stripStyle", stripStyleControl.selectedSegment)
+    }
+
+    @objc private func languageChanged() {
+        onOption?("language", languagePopup.indexOfSelectedItem)
     }
 
     @objc private func scopeChanged() {
@@ -447,6 +465,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     // MARK: - State
 
     var isVisible: Bool { window.isVisible }
+
+    func close() { window.close() }
     var windowForCapture: NSWindow { window }
 
     func refreshButtonScreenRect() -> NSRect? {
@@ -494,16 +514,17 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         modeControl.selectedSegment = options["nativeExpand"] ?? 0
         let seconds = options["revealSeconds"] ?? 20
         delaySlider.doubleValue = Double(seconds)
-        delayValue.stringValue = "\(seconds) 秒"
+        delayValue.stringValue = L10n.t("\(seconds) 秒", "\(seconds) s")
         spacingPopup.selectItem(at: options["iconSpacing"] ?? 0)
 
-        axStatus.stringValue = axTrusted ? "辅助功能：已授权" : "辅助功能：未授权"
+        axStatus.stringValue = axTrusted ? L10n.t("辅助功能：已授权", "Accessibility: granted") : L10n.t("辅助功能：未授权", "Accessibility: not granted")
         axStatus.textColor = axTrusted ? .secondaryLabelColor : .systemOrange
-        axButton.title = axTrusted ? "设置…" : "授权…"
-        captureStatus.stringValue = captureAllowed ? "屏幕录制：已授权" : "屏幕录制：未授权（原始图标不可用）"
-        captureButton.title = captureAllowed ? "设置…" : "授权…"
+        axButton.title = axTrusted ? L10n.t("设置…", "Settings…") : L10n.t("授权…", "Authorize…")
+        captureStatus.stringValue = captureAllowed ? L10n.t("屏幕录制：已授权", "Screen Recording: granted") : L10n.t("屏幕录制：未授权（原始图标不可用）", "Screen Recording: not granted (original icons unavailable)")
+        captureButton.title = captureAllowed ? L10n.t("设置…", "Settings…") : L10n.t("授权…", "Authorize…")
         messageField.stringValue = message
 
+        languagePopup.selectItem(at: options["language"] ?? 0)
         appearanceModeControl.selectedSegment = options["appearanceMode"] ?? 0
         stripStyleControl.selectedSegment = options["stripStyle"] ?? 0
         scopeControl.selectedSegment = options["themeScope"] ?? 0
@@ -531,7 +552,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ? NSColor.black.withAlphaComponent(0.46)
             : NSColor.white.withAlphaComponent(0.58)).cgColor
         emptyLabel.isHidden = !entries.isEmpty
-        emptyLabel.stringValue = axTrusted ? "正在读取菜单栏图标…" : "需要辅助功能权限后才能读取菜单栏项目。" 
+        emptyLabel.stringValue = axTrusted ? L10n.t("正在读取菜单栏图标…", "Reading menu-bar items…") : L10n.t("需要辅助功能权限后才能读取菜单栏项目。", "Accessibility permission is required to read menu-bar items.") 
     }
 
     /// Renders the settings window to PNG without Screen Recording permission.
@@ -592,7 +613,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             label.frame = NSRect(x: 38, y: (rowHeight - 20) / 2, width: 254, height: 20)
             label.lineBreakMode = .byTruncatingTail
             if entry.pinned {
-                label.toolTip = "位置由 macOS 固定在菜单栏最右端，不能拖动；隐藏仍然可用"
+                label.toolTip = L10n.t("位置由 macOS 固定在菜单栏最右端，不能拖动；隐藏仍然可用", "macOS fixes this item's position; it cannot be dragged, but it can be hidden.")
             }
             view.addSubview(label)
             return view

@@ -72,6 +72,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private var shelfState: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        L10n.current = Language(rawValue: options["language"] ?? 0) ?? .chinese
         NSApp.setActivationPolicy(.accessory)
         // A previous synthetic drag can leave the global mouse association
         // off; reset it before any UI is shown.
@@ -80,7 +81,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
         applyAppearance()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.title = "•••"
-        statusItem.button?.toolTip = "YoungBar: click to show concealed icons; right-click to choose apps"
+        statusItem.button?.toolTip = L10n.t(
+            "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
+            "YoungBar: click to show concealed icons; right-click to choose apps")
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -851,15 +854,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let id = catalog[key]?.id ?? ItemID(rawValue: key)
         if let system = MenuBarPolicy.systemItem(for: id) {
             switch system {
-            case .battery: return "电池"
-            case .bluetooth: return "蓝牙"
-            case .clock: return "日期与时间"
-            case .displays: return "显示器"
-            case .keyboard: return "输入法"
-            case .volume: return "声音"
+            case .battery: return L10n.t("电池", "Battery")
+            case .bluetooth: return L10n.t("蓝牙", "Bluetooth")
+            case .clock: return L10n.t("日期与时间", "Date & Time")
+            case .displays: return L10n.t("显示器", "Displays")
+            case .keyboard: return L10n.t("输入法", "Input")
+            case .volume: return L10n.t("声音", "Sound")
             case .wifi: return "Wi-Fi"
-            case .screenMirroring: return "屏幕镜像"
-            case .primaryBentoBox: return "控制中心"
+            case .screenMirroring: return L10n.t("屏幕镜像", "Screen Mirroring")
+            case .primaryBentoBox: return L10n.t("控制中心", "Control Center")
             }
         }
         if let bundle = id.bundleID { return knownBundles[bundle] ?? appName(for: bundle) }
@@ -883,16 +886,16 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private func showConfigurationMenu() {
         let menu = NSMenu(title: "YoungBar")
         if !AXIsProcessTrusted() {
-            menu.addItem(withTitle: "开启辅助功能权限…", action: #selector(requestAccessibility), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("开启辅助功能权限…", "Open Accessibility…"), action: #selector(requestAccessibility), keyEquivalent: "")
         } else if !AssessmentMode.isAvailable {
-            menu.addItem(withTitle: "此系统上无法使用原生隐藏功能", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("此系统上无法使用原生隐藏功能", "Native hiding is unavailable on this system"), action: nil, keyEquivalent: "")
         } else {
-            menu.addItem(withTitle: expanded ? "收起图标栏" : "打开图标栏", action: #selector(toggleShelf), keyEquivalent: "")
-            let shortcut = NSMenuItem(title: "快捷键：⌃⌥B", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: expanded ? L10n.t("收起图标栏", "Close strip") : L10n.t("打开图标栏", "Open strip"), action: #selector(toggleShelf), keyEquivalent: "")
+            let shortcut = NSMenuItem(title: L10n.t("快捷键：⌃⌥B", "Shortcut: ⌃⌥B"), action: nil, keyEquivalent: "")
             shortcut.isEnabled = false
             menu.addItem(shortcut)
             menu.addItem(.separator())
-            menu.addItem(withTitle: "选择要隐藏的应用：", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("选择要隐藏的应用：", "Choose apps to conceal:"), action: nil, keyEquivalent: "")
             for bundle in knownBundles.keys.sorted(by: { (knownBundles[$0] ?? $0).localizedCompare(knownBundles[$1] ?? $1) == .orderedAscending }) {
                 let item = NSMenuItem(title: knownBundles[bundle] ?? bundle, action: #selector(toggleBundle(_:)), keyEquivalent: "")
                 item.target = self
@@ -901,24 +904,24 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 menu.addItem(item)
             }
             if knownBundles.isEmpty {
-                menu.addItem(withTitle: "正在读取菜单栏图标…", action: nil, keyEquivalent: "")
+                menu.addItem(withTitle: L10n.t("正在读取菜单栏图标…", "Reading menu-bar items…"), action: nil, keyEquivalent: "")
             }
-            let leftClick = NSMenuItem(title: "左键点击显示菜单", action: #selector(toggleLeftClickMenu), keyEquivalent: "")
+            let leftClick = NSMenuItem(title: L10n.t("左键点击显示菜单", "Show menu on left click"), action: #selector(toggleLeftClickMenu), keyEquivalent: "")
             leftClick.state = options["leftClickMenu"] == 1 ? .on : .off
             menu.addItem(leftClick)
             menu.addItem(.separator())
-            menu.addItem(withTitle: "全部隐藏（应用图标）", action: #selector(hideAllApps), keyEquivalent: "")
-            menu.addItem(withTitle: "全部显示", action: #selector(showAllApps), keyEquivalent: "")
-            menu.addItem(withTitle: "恢复我的收纳配置", action: #selector(restoreAppModes), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("全部隐藏（应用图标）", "Hide all (app icons)"), action: #selector(hideAllApps), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("全部显示", "Show all"), action: #selector(showAllApps), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("恢复我的收纳配置", "Restore my layout"), action: #selector(restoreAppModes), keyEquivalent: "")
             menu.addItem(.separator())
-            menu.addItem(withTitle: "刷新图标列表", action: #selector(refreshClicked), keyEquivalent: "")
-            menu.addItem(withTitle: "刷新原始图标（会短暂显示）", action: #selector(refreshPicturesNow), keyEquivalent: "")
-            menu.addItem(withTitle: "清除图标缓存", action: #selector(clearPictureCache), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("刷新图标列表", "Refresh item list"), action: #selector(refreshClicked), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("刷新原始图标（会短暂显示）", "Refresh original icons (briefly reveals)"), action: #selector(refreshPicturesNow), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("清除图标缓存", "Clear icon cache"), action: #selector(clearPictureCache), keyEquivalent: "")
         }
         menu.addItem(.separator())
-        menu.addItem(withTitle: "打开设置窗口", action: #selector(showWindow), keyEquivalent: "")
-        menu.addItem(withTitle: "关于 YoungBar", action: #selector(showAbout), keyEquivalent: "")
-        menu.addItem(withTitle: "退出 YoungBar", action: #selector(quit), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("打开设置窗口", "Open Settings"), action: #selector(showWindow), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("关于 YoungBar", "About YoungBar"), action: #selector(showAbout), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("退出 YoungBar", "Quit YoungBar"), action: #selector(quit), keyEquivalent: "")
         for item in menu.items where item.action != nil && item.target == nil { item.target = self }
         if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
             NSMenu.popUpContextMenu(menu, with: event, for: button)
@@ -1103,7 +1106,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         let itemArea = width - gearWidth
         if keys.isEmpty {
-            let label = NSTextField(labelWithString: "没有收纳项目")
+            let label = NSTextField(labelWithString: L10n.t("没有收纳项目", "No concealed items"))
             label.textColor = iconColor; label.alignment = .center
             label.frame = NSRect(x: 8, y: 9, width: itemArea - 16, height: 22)
             background.addSubview(label)
@@ -1121,13 +1124,19 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 button.identifier = .init(key); button.target = self; button.action = #selector(pressShelfItem(_:))
                 if let picture = pictures.pictures[key], !isVolatileKey(key) {
                     button.image = lightStrip ? tintedImage(picture.image, color: .black) : picture.image
-                    button.toolTip = "\(name(for: key)) · 状态采集于 \(picture.takenAt.formatted(date: .omitted, time: .standard))"
+                    button.toolTip = L10n.t(
+                        "\(name(for: key)) · 状态采集于 \(picture.takenAt.formatted(date: .omitted, time: .standard))",
+                        "\(name(for: key)) · captured at \(picture.takenAt.formatted(date: .omitted, time: .standard))")
                 } else if isVolatileKey(key) {
                     button.image = fallbackImage(for: key)
-                    button.toolTip = "\(name(for: key)) · 动态项目不缓存旧值；点开后显示实时状态"
+                    button.toolTip = L10n.t(
+                        "\(name(for: key)) · 动态项目不缓存旧值；点开后显示实时状态",
+                        "\(name(for: key)) · dynamic item is not cached; open it for live state")
                 } else {
                     button.image = fallbackImage(for: key)
-                    button.toolTip = "\(name(for: key)) · 开启原始状态显示后可显示菜单栏内容"
+                    button.toolTip = L10n.t(
+                        "\(name(for: key)) · 开启原始状态显示后可显示菜单栏内容",
+                        "\(name(for: key)) · enable original status to show menu-bar content")
                 }
                 button.contentTintColor = iconColor
                 button.setAccessibilityLabel(name(for: key))
@@ -1143,15 +1152,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
         let gear = BarControlButton(frame: NSRect(x: itemArea + 5, y: 6, width: 28, height: 28))
         gear.title = ""
-        gear.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "设置")
+        gear.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: L10n.t("设置", "Settings"))
         gear.imagePosition = .imageOnly
         gear.imageScaling = .scaleProportionallyDown
         gear.isBordered = false
         gear.contentTintColor = iconColor
         gear.target = self
         gear.action = #selector(openSettingsFromShelf)
-        gear.toolTip = "打开设置"
-        gear.setAccessibilityLabel("设置")
+        gear.toolTip = L10n.t("打开设置", "Open Settings")
+        gear.setAccessibilityLabel(L10n.t("设置", "Settings"))
         background.addSubview(gear)
         gearButton = gear
         shelfPanel.contentView = background
@@ -1254,7 +1263,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 // quit while concealed). Put it back instead of leaving it shown.
                 shownUntil[item.id] = nil
                 await engine.conceal(items: [item.id])
-                feedback = "没有读取到该项目的位置（已恢复收纳）"
+                feedback = L10n.t("没有读取到该项目的位置（已恢复收纳）", "Could not read the item position (concealed again)")
                 renderWindow(force: true)
                 return
             }
@@ -1316,6 +1325,18 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 options[key] = value
                 UserDefaults.standard.set(options, forKey: "barOptions")
+                if key == "language" {
+                    L10n.current = Language(rawValue: value) ?? .chinese
+                    statusItem.button?.toolTip = L10n.t(
+                        "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
+                        "YoungBar: click to show concealed icons; right-click to choose apps")
+                    DispatchQueue.main.async {
+                        self.settings?.close()
+                        self.settings = nil
+                        self.showWindow()
+                    }
+                    return
+                }
                 if ["appearanceMode", "themeColor", "stripStyle", "themeScope"].contains(key) {
                     applyAppearance()
                     shelfState = nil
@@ -1342,10 +1363,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
                      mode: modes[key] ?? 0, pinned: catalog[key].map { MenuBarPolicy.isPinnedSystemItem($0.id) || MenuBarPolicy.isPinnedAppleHost($0.id.bundleID) } ?? false)
         }
         let message: String
-        if !AXIsProcessTrusted() { message = "需要辅助功能权限" }
+        if !AXIsProcessTrusted() { message = L10n.t("需要辅助功能权限", "Accessibility permission required") }
         else if !feedback.isEmpty { message = feedback }
-        else if let error = pictures.error { message = "原始状态采集失败：\(error)" }
-        else { message = pictures.isAllowed ? "已就绪 · 展开时刷新原始菜单栏状态" : "已就绪 · 原始状态显示需要屏幕录制权限" }
+        else if let error = pictures.error { message = L10n.t("原始状态采集失败：\(error)", "Screen capture failed: \(error)") }
+        else { message = pictures.isAllowed
+            ? L10n.t("已就绪 · 展开时刷新原始菜单栏状态", "Ready · original menu-bar state refreshes on open")
+            : L10n.t("已就绪 · 原始状态显示需要屏幕录制权限", "Ready · Screen Recording is required for original icons") }
         settings?.update(entries: entries, message: message, captureAllowed: pictures.isAllowed,
                          axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled, options: options)
     }
@@ -1358,13 +1381,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
         do {
             if enabled {
                 try SMAppService.mainApp.register()
-                feedback = "已加入登录项，下次登录时自动启动"
+                feedback = L10n.t("已加入登录项，下次登录时自动启动", "Added to login items; launches at next login")
             } else {
                 try SMAppService.mainApp.unregister()
-                feedback = "已从登录项移除"
+                feedback = L10n.t("已从登录项移除", "Removed from login items")
             }
         } catch {
-            feedback = "开机自启动设置失败：\(error.localizedDescription)"
+            feedback = L10n.t("开机自启动设置失败：\(error.localizedDescription)", "Launch-at-login failed: \(error.localizedDescription)")
         }
         renderWindow(force: true)
     }
@@ -1374,10 +1397,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private func setSpacing(_ level: Int) {
         guard level != (options["iconSpacing"] ?? 0) else { return }
         let alert = NSAlert()
-        alert.messageText = "修改菜单栏图标间隙？"
-        alert.informativeText = "这会写入系统全局菜单栏间距偏好，重启电脑后生效。可以随时改回默认。"
-        alert.addButton(withTitle: "写入")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.t("修改菜单栏图标间隙？", "Change menu-bar icon spacing?")
+        alert.informativeText = L10n.t("这会写入系统全局菜单栏间距偏好，重启电脑后生效。可以随时改回默认。", "This writes a global menu-bar spacing preference and takes effect after a reboot. You can restore the default anytime.")
+        alert.addButton(withTitle: L10n.t("写入", "Write"))
+        alert.addButton(withTitle: L10n.t("取消", "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else {
             renderWindow(force: true)
             return
@@ -1393,9 +1416,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
             }
             options["iconSpacing"] = level
             UserDefaults.standard.set(options, forKey: "barOptions")
-            feedback = "菜单栏间距已修改，重启电脑后生效"
+            feedback = L10n.t("菜单栏间距已修改，重启电脑后生效", "Spacing updated; takes effect after a reboot")
         } catch {
-            feedback = "菜单栏间距写入失败：\(error.localizedDescription)"
+            feedback = L10n.t("菜单栏间距写入失败：\(error.localizedDescription)", "Spacing write failed: \(error.localizedDescription)")
         }
         renderWindow(force: true)
     }
@@ -1454,7 +1477,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let targetKey = before.isEmpty ? savedOrder.dropLast().last : before
             guard let targetKey, let target = catalog[targetKey],
                   !(before.isEmpty && MenuBarPolicy.isPinnedSystemItem(target.id)) else {
-                savedOrder = originalOrder; feedback = "日期和控制中心的位置由 macOS 固定"; return
+                savedOrder = originalOrder; feedback = L10n.t("日期和控制中心的位置由 macOS 固定", "Date and Control Center are pinned by macOS"); return
             }
             let ids: Set<ItemID> = [item.id, target.id]
             let temporary = ids.filter { (modes[$0.sectionKey.rawValue] ?? 0) > 0 && shownUntil[$0] == nil }
@@ -1473,11 +1496,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 if landed {
                     UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
                     await engine.setModel(currentModel())
-                    feedback = "顺序已应用到菜单栏"
+                    feedback = L10n.t("顺序已应用到菜单栏", "Order applied to the menu bar")
                 } else {
-                    savedOrder = originalOrder; feedback = "macOS 没有接受这次排序，已保留原顺序"
+                    savedOrder = originalOrder; feedback = L10n.t("macOS 没有接受这次排序，已保留原顺序", "macOS did not accept the order; kept the previous one")
                 }
-            } else { savedOrder = originalOrder; feedback = "项目当前没有可移动的位置" }
+            } else { savedOrder = originalOrder; feedback = L10n.t("项目当前没有可移动的位置", "This item has no movable position right now") }
             await engine.conceal(items: Set(temporary))
             positionControlBesideMenuIcons(in: await engine.freshSnapshot())
         }
@@ -1486,7 +1509,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     @objc private func toggleLeftClickMenu() {
         options["leftClickMenu"] = options["leftClickMenu"] == 1 ? 0 : 1
         UserDefaults.standard.set(options, forKey: "barOptions")
-        feedback = options["leftClickMenu"] == 1 ? "左键点击改为显示菜单" : "左键点击改为展开收纳"
+        feedback = options["leftClickMenu"] == 1 ? L10n.t("左键点击改为显示菜单", "Left click now shows the menu") : L10n.t("左键点击改为展开收纳", "Left click now opens the strip")
         renderWindow(force: true)
     }
 
@@ -1499,7 +1522,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             busy = true
             await bulkHideAll()
             busy = false
-            feedback = "已隐藏全部应用图标"
+            feedback = L10n.t("已隐藏全部应用图标", "Hid all app icons")
             renderWindow(force: true)
         }
     }
@@ -1510,7 +1533,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             busy = true
             await engine.reveal(Set(Section.allCases))
             busy = false
-            feedback = "已显示全部菜单栏项目"
+            feedback = L10n.t("已显示全部菜单栏项目", "Showed all menu-bar items")
             renderWindow(force: true)
         }
     }
@@ -1522,7 +1545,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             await engine.conceal()
             await engine.setModel(currentModel())
             busy = false
-            feedback = "已恢复你的收纳配置"
+            feedback = L10n.t("已恢复你的收纳配置", "Restored your layout")
             renderWindow(force: true)
         }
     }
@@ -1624,7 +1647,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         pictures.clearCache()
         shelfState = nil
         if expanded { populateShelf() }
-        feedback = "图标缓存已清除，收纳条暂时使用应用图标"
+        feedback = L10n.t("图标缓存已清除，收纳条暂时使用应用图标", "Icon cache cleared; the strip will use app icons for now")
         renderWindow(force: true)
     }
 
@@ -1667,7 +1690,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         Task {
             await refreshShelfPictures()
-            feedback = pictures.error == nil ? "原始图标已刷新并缓存" : "原始图标刷新失败"
+            feedback = pictures.error == nil ? L10n.t("原始图标已刷新并缓存", "Original icons refreshed and cached") : L10n.t("原始图标刷新失败", "Failed to refresh original icons")
             renderWindow(force: true)
         }
     }

@@ -6,9 +6,9 @@ enum AppearanceMode: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return L10n.t("跟随系统", "System")
+        case .light: return L10n.t("浅色", "Light")
+        case .dark: return L10n.t("深色", "Dark")
         }
     }
 
@@ -28,10 +28,10 @@ enum ThemeColor: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .blue: return "蓝"
-        case .pink: return "粉"
-        case .yellow: return "黄"
-        case .clear: return "透明"
+        case .blue: return L10n.t("怎怎瓦岗蓝", "Hachiware Blue")
+        case .pink: return L10n.t("羊霸霸粉", "Chiikawa Pink")
+        case .yellow: return L10n.t("乌拉黄", "Usagi Yellow")
+        case .clear: return L10n.t("透明", "Clear")
         }
     }
 
@@ -81,9 +81,9 @@ enum ThemeScope: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .both: return "界面 + 收纳条"
-        case .interfaceOnly: return "仅界面"
-        case .stripOnly: return "仅收纳条"
+        case .both: return L10n.t("界面 + 收纳条", "Both")
+        case .interfaceOnly: return L10n.t("仅界面", "Interface only")
+        case .stripOnly: return L10n.t("仅收纳条", "Strip only")
         }
     }
 }
@@ -93,9 +93,9 @@ enum StripStyle: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .solid: return "纯色"
-        case .translucent: return "半透明"
-        case .vibrant: return "毛玻璃"
+        case .solid: return L10n.t("纯色", "Solid")
+        case .translucent: return L10n.t("半透明", "Translucent")
+        case .vibrant: return L10n.t("毛玻璃", "Glass")
         }
     }
 }

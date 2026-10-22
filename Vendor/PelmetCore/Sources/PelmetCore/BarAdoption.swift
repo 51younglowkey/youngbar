@@ -1,0 +1,441 @@
+// BarAdoption.swift
+// Pure bar→model reconciliation for a user's native ⌘-drag: menubar-positional
+// sections keyed off Pelmet's chevron (the visible/hidden boundary), zone-CHANGE
+// detection against the last pass, and within-section order fold-in.
+// Extracted from AppState so the confidence rules and order reconciliation are
+// unit-testable; the app shim replays `log` into PelmetLog and persists `model`.
+
+import CoreGraphics
+import Foundation
+
+public enum BarAdoption {
+    public struct Result: Sendable {
+        public let model: SectionModel
+        /// Zone tracking to carry into the next pass (confident measurements
+        /// only — a guessed zone must never become a baseline).
+        public let zones: [String: Section]
+        /// Where the chevron measured this pass — the next pass compares.
+        public let chevronX: CGFloat?
+        /// Where each measured item sat this pass — an item that moved
+        /// since the last pass was dragged, whatever the chevron did.
+        public let positions: [String: CGFloat]
+        /// Zone readings that disagreed with the baseline this pass and wait
+        /// for the next pass to agree before they adopt.
+        public let pendingZones: [String: Section]
+        public let changed: Bool
+        public let log: [String]
+    }
+
+    /// Reconcile the observed bar against the model. `items` is every
+    /// observed item with its frame's minX (nil when concealed/unmeasured),
+    /// in snapshot order. Without a measurable chevron (the user can hide
+    /// Pelmet's status item entirely) the clusters themselves are the only
+    /// boundary: an item measured at/right of the visible cluster's left edge
+    /// reads visible, one at/left of the concealable clusters' right edge
+    /// reads into the hidden side, and the gap between them is ambiguous —
+    /// the model's word stands. Cluster edges are computed from the (stale,
+    /// mid-drag) model, so the dragged item itself poisons every OTHER item's
+    /// reading — chevron-less zone adoption therefore applies ONLY to
+    /// `draggedID` (the item the band monitor saw ⌘-dragged, whose
+    /// self-excluded pools are clean); everyone else still gets confident
+    /// readings folded into the zone baseline. The within-section order
+    /// fold-in needs only live frames and always runs.
+    ///
+    /// Anything sitting LEFT of the chevron (smaller AX x) is adopted into
+    /// Hidden; right of it back to Visible. Always-Hidden has no physical
+    /// marker of its own; its live cluster IS the boundary — an item dropped
+    /// among/left of always-hidden members (only visible during a full
+    /// reveal) adopts in, one dropped among the hidden cluster adopts out.
+    /// Reflows shift every frame but never an item's relative position — only
+    /// a real user drag does. That makes zone-CHANGE the safe adoption
+    /// trigger: a settings-assigned item still sitting in its old zone is
+    /// never "corrected" back.
+    /// `order` with its on-bar members re-sorted into `bar`'s order, in the
+    /// slots they already hold. Members the bar has no frame for stay put.
+    /// Pelmet's Siri leaves the layout while Hidden is concealed, so it is
+    /// neither live nor concealed: appended after the framed icons, every
+    /// drop into Hidden drew it last and Apply dragged it to the far right
+    /// (2026-09-25).
+    public static func refill(_ order: [ItemID], inBarOrder bar: [ItemID]) -> [ItemID] {
+        let members = Set(order)
+        let onBar = bar.filter(members.contains)
+        let framed = Set(onBar)
+        var result = order
+        let slots = order.indices.filter { framed.contains(order[$0]) }
+        for (slot, id) in zip(slots, onBar) { result[slot] = id }
+        return result
+    }
+
+    /// The bar a ⌘-drag dropped on, read the way `reconcile` reads it.
+    /// `items` is the walk, one copy of each item (the main display's when
+    /// it has one); `copies` is every display's copy, by full id
+    /// (`barCopies`). On the main display (`display` nil) an item keeps
+    /// only a primary-band frame: another display's bar sits in the band
+    /// too, and a left display's copy pinned Sconce to the front of Visible
+    /// (2026-09-02). On another display every item reads its copy on that
+    /// display's bar, Pelmet's chevron included, nil where it has none
+    /// there. Matched against the main copies, Vorssaint dropped on the
+    /// LG's bar (x=4920) found nothing under the drop for 8 rounds, then
+    /// the pass measured the built-in's chevron, and Discard drew it back
+    /// in Visible (live test, 2026-10-13 19:29:50).
+    public static func dropBar(
+        items: [(id: ItemID, frame: CGRect?)],
+        copies: [ItemID: [CGRect]],
+        display: CGRect?,
+        primaryMaxX: CGFloat
+    ) -> [(id: ItemID, frame: CGRect?)] {
+        guard let display else {
+            return items.map { item in
+                (item.id, item.frame.flatMap { MenuBarGeometry.isInPrimaryBand($0, primaryMaxX: primaryMaxX) ? $0 : nil })
+            }
+        }
+        return items.map { item in
+            (item.id, copies[item.id].flatMap { MenuBarGeometry.copy(onDisplay: display, among: $0) })
+        }
+    }
+
+    /// The icon a drop at `x` (global, the drop bar's own space) landed as
+    /// on `bar` (`dropBar`): a frame under it, 8pt of slack either side,
+    /// nearest by its centre. The grabbed app's icon wins over a neighbour
+    /// under the same x: Pelmet's own icon next to the drop took the credit
+    /// for One Thing's drag (2026-09-25). `grabbedOnly`: with the grabbed
+    /// app known, only its icon counts, as the drop's landing check wants
+    /// (MenuBarAgent's drop animation runs up to 1.6s). `soleGrabbedSlack`:
+    /// the grabbed app's only icon on `bar` counts this far off too, for a
+    /// landed drop read where no position baseline backs it up (another
+    /// display's bar): a drop snaps into a slot, and Snib landed 15pt right
+    /// of the pointer on the LG (live test, 2026-10-13 21:54:43). Never for
+    /// the landing check: a short drag's icon still sits that close before
+    /// it moves.
+    public static func droppedItem(
+        at x: CGFloat,
+        on bar: [(id: ItemID, frame: CGRect?)],
+        grabbed: String?,
+        grabbedOnly: Bool = false,
+        soleGrabbedSlack: CGFloat? = nil
+    ) -> ItemID? {
+        let hit = bar.compactMap { item -> (id: ItemID, distance: CGFloat)? in
+            guard let frame = item.frame, frame.minX - 8 <= x, x <= frame.maxX + 8 else { return nil }
+            let isGrabbed = grabbed.map { item.id.bundleID == $0 } ?? false
+            if grabbedOnly, grabbed != nil, !isGrabbed { return nil }
+            return (item.id, abs(frame.midX - x) - (isGrabbed ? 10_000 : 0))
+        }
+        .min { $0.distance < $1.distance }?.id
+        guard hit == nil, let slack = soleGrabbedSlack, let grabbed else { return hit }
+        let own = bar.filter { $0.id.bundleID == grabbed && $0.frame != nil }
+        guard own.count == 1, let frame = own[0].frame, frame.minX - slack <= x, x <= frame.maxX + slack else { return nil }
+        return own[0].id
+    }
+
+    /// The bar's left-to-right order in canonical keys, leftmost copy of
+    /// each key, as `OrderEdits.land` takes it.
+    public static func barOrder(_ bar: [(id: ItemID, frame: CGRect?)]) -> [ItemID] {
+        var minX: [ItemID: CGFloat] = [:]
+        for item in bar {
+            guard let x = item.frame?.minX else { continue }
+            let key = item.id.sectionKey
+            minX[key] = min(minX[key] ?? .greatestFiniteMagnitude, x)
+        }
+        return minX.sorted { $0.value < $1.value }.map(\.key)
+    }
+
+    public static func reconcile(
+        items: [(id: ItemID, minX: CGFloat?)],
+        model startModel: SectionModel,
+        previousZones: [String: Section],
+        previousChevronX: CGFloat? = nil,
+        previousPositions: [String: CGFloat] = [:],
+        pendingZones: [String: Section] = [:],
+        userDragged: Bool = false,
+        pelmetBundleID: String,
+        draggedID: ItemID? = nil
+    ) -> Result? {
+        let chevron = items.first(where: {
+            MenuBarPolicy.isChevronID($0.id, pelmetBundleID: pelmetBundleID)
+        })
+        let chevronX = chevron?.minX
+
+        var log: [String] = []
+        var zones = previousZones
+        var pending = pendingZones
+        var model = startModel
+        var changed = false
+        let isFirstPass = previousZones.isEmpty
+        // The boundary itself moved since the last pass, and not by a user
+        // drag of the chevron: Pelmet's own extras right of the chevron
+        // collapse on conceal and the agent re-slots the chevron past a
+        // third-party item that registered between them (Figma, 2026-09-08:
+        // chevron 1427 → 1497 across a conceal, Figma steady at 1465, and
+        // the zone-change rule flipped it to Hidden). A zone change measured
+        // against a boundary that moved says nothing about the item — such
+        // a pass re-baselines only; the ⌘-dragged item still adopts.
+        let chevronMoved: Bool = {
+            guard let chevronX, let previousChevronX, draggedID != chevron?.id else { return false }
+            return abs(chevronX - previousChevronX) > 4
+        }()
+        // The user dragged the boundary itself. Every item now on the other
+        // side of it crossed it, by the user's hand, in one gesture: adopt
+        // in this pass. The two-pass confirmation below never lands for
+        // them — the bar conceals first, the still-hidden icons leave the
+        // walk, and the next revealed pass reads the chevron as moved and
+        // voids the pending reading (four chevron drags, 2026-09-20, each
+        // ending in "confirming on the next pass" and nothing after).
+        // Only a real ⌘-drag names the chevron as `draggedID`; synthetic
+        // walks never do (the band monitor ignores them).
+        let chevronDragged = draggedID != nil && draggedID == chevron?.id
+        // The inputs, before any rule runs: both #13 logs ended on
+        // `adopt: pass` with nothing after it. One line here turns the next
+        // trap into a five-minute read.
+        log.append("adopt: order=\(model.order.mapValues { $0.map(\.rawValue) }) live=\(items.compactMap { $0.minX != nil ? $0.id.sectionKey.rawValue : nil })")
+        log.append("adopt: chevronX=\(chevronX.map { "\($0)" } ?? "none") firstPass=\(isFirstPass) trackedZones=\(previousZones.count)\(chevronMoved ? " boundaryMoved(from \(previousChevronX!)) — only moved items adopt" : "")")
+        var positions: [String: CGFloat] = [:]
+        for item in items { if let x = item.minX { positions[item.id.rawValue] = x } }
+        // In the pass that follows a real ⌘-drag, an item that itself
+        // travelled since the last pass is the dragged one even when the
+        // drop x missed it — the moved boundary says nothing about it
+        // (ChatGPT 1535 → 1417 across a conceal on a bar whose chevron
+        // shifts every cycle, 2026-09-08). Only then: Pelmet's own placement
+        // drags move items too, and counting those adopted every editor
+        // drop into Always Hidden on an interleaved bar (0.2.17 regression).
+        func itemMoved(_ id: ItemID, _ x: CGFloat) -> Bool {
+            guard userDragged, let before = previousPositions[id.rawValue] else { return false }
+            return abs(x - before) > 20
+        }
+        // Cluster edges from the PRE-adoption model: the always-hidden and
+        // hidden members' live frames (only present during a full reveal).
+        // Self-excluded per item below so an item never bounds itself. The
+        // dragged item is excluded from both pools outright: its model
+        // section is stale by definition (that is what the drag changes), so
+        // its new x would otherwise stretch its OLD cluster over the
+        // neighbors it landed among and adopt them out (the always-hidden
+        // separator read "inside hidden" when Sconce dropped left of it,
+        // 2026-09-05).
+        let clusterX: [(id: ItemID, x: CGFloat, section: Section)] = items.compactMap {
+            guard let x = $0.minX, $0.id != draggedID else { return nil }
+            let section = model.section(of: $0.id)
+            guard section != .visible else { return nil }
+            return ($0.id, x, section)
+        }
+        // The visible cluster's measured members — its left edge is the
+        // implicit boundary when the chevron is hidden. Self-excluded per
+        // item below so a dragged item never bounds itself.
+        let visibleX: [(id: ItemID, x: CGFloat)] = items.compactMap {
+            guard let x = $0.minX, $0.id != draggedID, model.section(of: $0.id) == .visible else { return nil }
+            return ($0.id, x)
+        }
+        for item in items {
+            guard MenuBarPolicy.isZoneAdoptable(item.id, pelmetBundleID: pelmetBundleID),
+                  let x = item.minX
+            else { continue }
+            let current = model.section(of: item.id)
+            let zone: Section
+            var confident = true
+            // true = concealable side, false = visible side, nil = no
+            // measurable boundary on either side of this x.
+            let concealableSide: Bool?
+            if let chevronX {
+                concealableSide = x < chevronX
+            } else {
+                // No chevron: adopt only INSIDE a measured cluster — the gap
+                // between the clusters has no boundary to judge against.
+                let visMin = visibleX.filter { $0.id != item.id }.map(\.x).min()
+                let hiddenMax = clusterX.filter { $0.id != item.id }.map(\.x).max()
+                if let visMin, x >= visMin {
+                    concealableSide = false
+                } else if let hiddenMax, x <= hiddenMax {
+                    concealableSide = true
+                } else {
+                    concealableSide = nil
+                }
+            }
+            if concealableSide == nil {
+                // Unbounded — the model's word stands, and the guess must
+                // not become a baseline.
+                zone = current
+                confident = false
+            } else if concealableSide == false {
+                zone = .visible
+            } else {
+                let ahMax = clusterX
+                    .filter { $0.section == .alwaysHidden && $0.id != item.id }
+                    .map(\.x).max()
+                let hMin = clusterX
+                    .filter { $0.section == .hidden && $0.id != item.id }
+                    .map(\.x).min()
+                if let ahMax, x < ahMax {
+                    zone = .alwaysHidden
+                } else if let hMin, x > hMin {
+                    zone = .hidden
+                } else {
+                    // Between the clusters, or a cluster is concealed and
+                    // unmeasurable — ambiguous, so the model's word stands
+                    // (an always-hidden item stays; anything else is hidden).
+                    zone = current == .alwaysHidden ? .alwaysHidden : .hidden
+                    confident = false
+                }
+            }
+            let previousZone = zones[item.id.rawValue]
+            // A guessed zone must never become a baseline: a new app lands
+            // far left, reads "hidden" while concealed (ambiguous) and
+            // "alwaysHidden" on the next full reveal — that flap would adopt
+            // as if the user dragged it. Only measured zones persist.
+            // Chevron-less baselines additionally require agreement with the
+            // model: a drag reflows the bar and fires order-change passes
+            // BEFORE the drag-end pass — folding the moved item's new side
+            // into the baseline there would eat the adoption (previousZone
+            // would already equal the drag-end reading).
+            let boundaryOnly = chevronMoved && !itemMoved(item.id, x)
+            // A zone change without a user drag needs two agreeing passes.
+            // A pass that lands while a full reveal collapses reads the
+            // always-hidden cluster's edge from whichever members are still
+            // present — three hidden items adopted into Always Hidden in one
+            // pass and flapped back over the next two (2026-09-09). The
+            // baseline stays put until the next pass reads the same zone.
+            let awaitingConfirmation = confident && !isFirstPass && !boundaryOnly && !chevronDragged
+                && item.id != draggedID && previousZone != nil && previousZone != zone && zone != current
+            if awaitingConfirmation, pending[item.id.rawValue] != zone {
+                pending[item.id.rawValue] = zone
+                log.append("adopt: \(item.id.rawValue) reads \(zone) — confirming on the next pass")
+                continue
+            }
+            if !awaitingConfirmation { pending.removeValue(forKey: item.id.rawValue) }
+            if confident, chevronX != nil || zone == current {
+                zones[item.id.rawValue] = zone
+            } else if boundaryOnly {
+                // Measured against a boundary that moved, and not even
+                // confidently: the old baseline is void too, or the next
+                // steady pass would adopt the same phantom change.
+                zones.removeValue(forKey: item.id.rawValue)
+            }
+            // Chevron-less readings are baseline-only except for the dragged
+            // item — see the doc comment (stale-model poisoning).
+            guard chevronX != nil || item.id == draggedID else { continue }
+            if item.id == draggedID {
+                // The ⌘-drag gesture itself is the evidence — a fresh boot may
+                // hold no baseline for the dragged item yet (observed live:
+                // the only revealed pass ran 90ms AFTER the drop, and the
+                // agreement rule above rightly refused to baseline the moved
+                // position), so a confident reading adopts without one.
+                // With a chevron too: a cluster's edge member (self-excluded,
+                // it reads "between the clusters") NEVER earns a baseline, so
+                // the zone-change rule alone could never move the leftmost
+                // hidden item into Always Hidden (Sconce, 2026-09-05).
+                guard confident else { continue }
+            } else if chevronDragged {
+                // A reading on the far side of a boundary the user just
+                // moved is the change itself; no baseline needed. Which
+                // concealable section may be a guess (no cluster to
+                // measure) — the side is not.
+                guard concealableSide != nil else { continue }
+            } else {
+                // First sighting establishes a baseline; only a zone CHANGE
+                // adopts — and only against a boundary that stood still.
+                guard !isFirstPass, !boundaryOnly, let previousZone, previousZone != zone else { continue }
+            }
+            guard zone != current else { continue }
+            if zone == .visible {
+                model.assignments.removeValue(forKey: item.id.sectionKey)
+            } else {
+                model.assignments[item.id.sectionKey] = zone
+            }
+            log.append("adopt: \(item.id.rawValue) → \(zone)")
+            // The accepted zone IS the new baseline (the chevron-less store
+            // above skipped it because it disagreed with the pre-drag model).
+            zones[item.id.rawValue] = zone
+            pending.removeValue(forKey: item.id.rawValue)
+            changed = true
+        }
+        // Within-section order: the editor treats the explicit stored order as
+        // authoritative, so a manual ⌘-drag would otherwise show at its OLD
+        // slot forever. Fold the bar's left-to-right reality back in: entries
+        // with live frames reorder to match X, frame-nil (concealed) entries
+        // hold their slots, entries whose section changed drop out, and
+        // newly-adopted members slot in by X. Safe here because adopt only
+        // runs on a settled bar — reflows shift frames but preserve X order.
+        // Keyed canonically (leftmost frame wins for multi-item bundles) —
+        // order arrays hold canonical section keys.
+        // Pelmet's own items (extras, stand-ins) re-enter layout at the
+        // agent's slot on every reveal — their bar X is never the user's
+        // intent unless the user ⌘-dragged that very item. They hold their
+        // model slot like frame-nil entries (a stand-in walked next to its
+        // app's own icon on every Settings open, 2026-09-09).
+        let liveX: [ItemID: CGFloat] = items.reduce(into: [:]) {
+            guard let x = $1.minX else { return }
+            // Helper-hosted own items carry the helper's bundle in the live
+            // id; the section key folds them to the main bundle.
+            if $1.id.sectionKey.bundleID == pelmetBundleID, $1.id != draggedID { return }
+            let key = $1.id.sectionKey
+            $0[key] = min($0[key] ?? .greatestFiniteMagnitude, x)
+        }
+        // Where every icon sits, own items included: they hold their slots,
+        // but they are still neighbours on the bar.
+        let barX: [ItemID: CGFloat] = items.reduce(into: [:]) {
+            guard let x = $1.minX else { return }
+            let key = $1.id.sectionKey
+            $0[key] = min($0[key] ?? .greatestFiniteMagnitude, x)
+        }
+        for (section, order) in model.order {
+            var newOrder = order.filter { model.section(of: $0) == section }
+            let liveSlots = newOrder.indices.filter { liveX[newOrder[$0]] != nil }
+            let sortedLive = liveSlots.map { newOrder[$0] }
+                .sorted { liveX[$0, default: .infinity] < liveX[$1, default: .infinity] }
+            for (offset, slot) in liveSlots.enumerated() { newOrder[slot] = sortedLive[offset] }
+            // The icon the user ⌘-dragged goes where they dropped it among
+            // all its neighbours. Re-sorted among the others only, a drag
+            // past one of Pelmet's own items changed no order, nothing was
+            // adopted, and the editor stopped matching the bar (live test,
+            // 2026-10-13). It goes after its nearest left neighbour on the
+            // bar, else before its nearest right one: own items hold their
+            // slots, so the order is not sorted by X. With no framed
+            // neighbour it keeps its slot.
+            if let dragged = draggedID?.sectionKey, let from = newOrder.firstIndex(of: dragged), let x = barX[dragged] {
+                var rest = newOrder
+                rest.remove(at: from)
+                let framed = rest.indices.compactMap { index in barX[rest[index]].map { (index: index, x: $0) } }
+                let left = framed.filter { $0.x < x }.max { $0.x < $1.x }
+                let right = framed.filter { $0.x > x }.min { $0.x < $1.x }
+                if let to = left.map({ $0.index + 1 }) ?? right?.index {
+                    rest.insert(dragged, at: to)
+                    newOrder = rest
+                }
+            }
+            var known = Set(newOrder)
+            // A member with no order entry yet slots in by X. Pelmet's own
+            // items are absent from `liveX` by design (above), yet an extra
+            // toggled on gets a spec and no order entry — its first bar X is
+            // the only slot there is. Looking it up in `liveX` force-unwrapped
+            // nil: a trap on the first adopt pass of every launch (#13).
+            // Own items hold their slots but still sit where they sit, so a
+            // newcomer slots in against them too: One Thing, adopted right of
+            // Media, found no member left of it and went first (2026-09-25).
+            var slotX = barX
+            let missing: [(key: ItemID, x: CGFloat)] = items.compactMap {
+                guard let minX = $0.minX, !known.contains($0.id.sectionKey),
+                      model.section(of: $0.id) == section,
+                      MenuBarPolicy.isZoneAdoptable($0.id, pelmetBundleID: pelmetBundleID)
+                else { return nil }
+                return ($0.id.sectionKey, liveX[$0.id.sectionKey] ?? minX)
+            }
+            for (key, x) in missing.sorted(by: { $0.x < $1.x }) {
+                guard known.insert(key).inserted else { continue }
+                slotX[key] = x
+                let insertAfter = newOrder.lastIndex { slotX[$0].map { $0 < x } == true }
+                newOrder.insert(key, at: insertAfter.map { $0 + 1 } ?? 0)
+            }
+            if section == .visible {
+                // Control Center and the clock end the bar, so they end the
+                // drawing too. An own item holding a slot after them drew
+                // Camera right of the clock, and a drop next to it aimed
+                // Apply past the clock (2026-09-25).
+                let pinnedEnd = newOrder.filter(MenuBarPolicy.isPinnedSystemItem)
+                newOrder = newOrder.filter { !MenuBarPolicy.isPinnedSystemItem($0) } + pinnedEnd
+            }
+            if newOrder != order {
+                model.order[section] = newOrder
+                log.append("adopt: \(section) order reconciled from bar")
+                changed = true
+            }
+        }
+        return Result(model: model, zones: zones, chevronX: chevronX, positions: positions, pendingZones: pending, changed: changed, log: log)
+    }
+}

@@ -1,0 +1,132 @@
+import AppKit
+import ScreenCaptureKit
+import PelmetEngine
+
+@MainActor
+final class StatusPictures {
+    struct Picture {
+        let image: NSImage
+        let takenAt: Date
+    }
+
+    private struct Stored: Codable {
+        let png: Data
+        let takenAt: Date
+    }
+
+    private(set) var pictures: [String: Picture] = [:]
+    private(set) var error: String?
+    var cacheFileExists: Bool { FileManager.default.fileExists(atPath: Self.cacheURL.path) }
+    var isAllowed: Bool { CGPreflightScreenCaptureAccess() }
+
+    private static var cacheURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("YoungBar", isDirectory: true)
+            .appendingPathComponent("pictures.json")
+    }
+
+    init() { load() }
+
+    // Only the menu-bar band is acquired. The crops are cached on disk so a
+    // click can open the strip instantly instead of revealing every item to
+    // take fresh pixels (that reveal is what made the bar flash).
+    func capture(_ items: [ObservedItem]) async {
+        guard isAllowed, let screen = NSScreen.main,
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let display = content.displays.first(where: { $0.displayID == number.uint32Value }) else { return }
+            let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+            let cursorPIDs = Set(windows.compactMap { window -> Int32? in
+                guard let owner = window[kCGWindowOwnerName as String] as? String,
+                      owner.hasSuffix("Software Cursor"),
+                      let pid = window[kCGWindowOwnerPID as String] as? Int32 else { return nil }
+                return pid
+            })
+            let own = content.applications.filter {
+                $0.processID == ProcessInfo.processInfo.processIdentifier || cursorPIDs.contains($0.processID)
+            }
+            let filter = SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])
+            let frames = items.compactMap(\.frame)
+            guard let minX = frames.map(\.minX).min(), let maxX = frames.map(\.maxX).max(),
+                  let maxY = frames.map(\.maxY).max(), maxX > minX else { return }
+            let bounds = CGDisplayBounds(display.displayID)
+            let band = CGRect(x: max(bounds.minX, minX), y: bounds.minY,
+                              width: min(bounds.maxX, maxX) - max(bounds.minX, minX),
+                              height: min(60, maxY - bounds.minY + 2))
+            guard band.width > 0, band.height > 0 else { return }
+            let scale = screen.backingScaleFactor
+            let config = SCStreamConfiguration()
+            config.sourceRect = band.offsetBy(dx: -bounds.minX, dy: -bounds.minY)
+            config.width = Int(band.width * scale); config.height = Int(band.height * scale)
+            config.showsCursor = false
+            config.captureResolution = .best
+            let shot = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            let sx = CGFloat(shot.width) / band.width, sy = CGFloat(shot.height) / band.height
+            for item in items {
+                guard let frame = item.frame else { continue }
+                let rect = CGRect(x: (frame.minX - band.minX) * sx, y: (frame.minY - band.minY) * sy,
+                                  width: frame.width * sx, height: frame.height * sy).integral
+                guard let crop = shot.cropping(to: rect) else { continue }
+                pictures[item.id.sectionKey.rawValue] = Picture(
+                    image: NSImage(cgImage: Self.onBlack(crop), size: frame.size), takenAt: Date())
+            }
+            error = nil
+            persist()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    /// Removes the on-disk crops and the in-memory copies. The next capture
+    /// rebuilds them; until then the strip falls back to app icons.
+    func clearCache() {
+        pictures.removeAll()
+        try? FileManager.default.removeItem(at: Self.cacheURL)
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: Self.cacheURL),
+              let stored = try? JSONDecoder().decode([String: Stored].self, from: data) else { return }
+        for (key, value) in stored {
+            if let image = NSImage(data: value.png) {
+                pictures[key] = Picture(image: image, takenAt: value.takenAt)
+            }
+        }
+    }
+
+    private func persist() {
+        var stored: [String: Stored] = [:]
+        for (key, picture) in pictures {
+            guard let png = Self.png(picture.image) else { continue }
+            stored[key] = Stored(png: png, takenAt: picture.takenAt)
+        }
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        do {
+            try FileManager.default.createDirectory(at: Self.cacheURL.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try data.write(to: Self.cacheURL, options: .atomic)
+        } catch {
+            NSLog("YoungBar picture cache write failed: \(error)")
+        }
+    }
+
+    private static func png(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private static func onBlack(_ image: CGImage) -> CGImage {
+        guard let context = CGContext(data: nil, width: image.width, height: image.height,
+                                      bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let bytes = context.data else { return image }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let pixels = bytes.bindMemory(to: UInt8.self, capacity: image.width * image.height * 4)
+        for i in stride(from: 0, to: image.width * image.height * 4, by: 4) {
+            if pixels[i] < 35 && pixels[i + 1] < 35 && pixels[i + 2] < 35 {
+                pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0
+            }
+        }
+        return context.makeImage() ?? image
+    }
+}

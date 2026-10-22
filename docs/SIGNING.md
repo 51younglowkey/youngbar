@@ -31,8 +31,12 @@ security find-identity -v -p codesigning | grep "YoungBar Local Signing"
 
 ```sh
 cd youngbar
-YOUNGBAR_SIGN_IDENTITY="YoungBar Local Signing" sh Scripts/build.sh
+sh Scripts/build.sh
 ```
+
+`Scripts/sign.sh` now auto-detects `YoungBar Local Signing` in the login
+keychain; `YOUNGBAR_SIGN_IDENTITY` overrides it. Without either, it falls back
+to ad-hoc.
 
 Check the designated requirement:
 
@@ -69,6 +73,11 @@ the same certificate should keep those grants.
   Developer ID will be stable.
 - Do not distribute the certificate's private key. The public certificate is
   embedded in the signature automatically.
+- Back up the identity from Keychain Access (export as `.p12`) and keep it
+  offline. If the private key is lost, TCC treats the next build as a new app.
+- On another Mac the self-signed certificate is not trusted. Gatekeeper still
+  warns, and self-signed TCC matching should be tested there before relying on
+  it for public releases. Developer ID is the only Apple-supported version.
 
 ## 5. GitHub-only workflow
 

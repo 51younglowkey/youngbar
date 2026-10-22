@@ -6,6 +6,9 @@ cd "$(dirname "$0")/.."
 
 app="${1:-build/YoungBar.app}"
 identity="${YOUNGBAR_SIGN_IDENTITY:-}"
+if [ -z "$identity" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q "YoungBar Local Signing"; then
+    identity="YoungBar Local Signing"
+fi
 
 if [ -n "$identity" ]; then
     echo "signing with identity: $identity"

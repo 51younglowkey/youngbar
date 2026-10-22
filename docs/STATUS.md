@@ -44,7 +44,7 @@
 | 一页布局 | ✅ 行高按项目数自动压缩，12 项一屏放下 | `docs/images/settings-layout.png` | `docs/images/settings-layout.png` |
 | 布局顺序校准 | ✅ 新项按真实 x 插入；可见项每次刷新校准并持久化 | `itemOrder` 以有道翻译开头；`docs/images/settings-layout.png` |
 | 外观主题 | ✅ 深/浅/跟随系统 + 4 主题（蓝/粉/黄/透明）+ 3 种收纳条 |
-| 主题图标 | ✅ 蓝猫 / 粉羊 / 黄兔随主题切换（侧栏、关于） | `appearance-{blue,pink,yellow}.png` |
+| 主题图标 | ✅ 蓝猫 / 粉羊 / 黄兔 / 透明三小只随主题切换（侧栏、关于） | `appearance-{blue,pink,yellow}.png` |
 | 主题应用范围 | ✅ 界面 + 收纳条 / 仅界面 / 仅收纳条 | `appearance-white.png`、`shelf-white.png` |
 | 透明主题 | ✅ 跟随系统：深色玻璃白图标 / 浅色玻璃黑图标，界面中性 | `appearance-clear.png` | `docs/images/appearance-{dark,light}.png`、`shelf-sakura.png` |
 | 关于窗口 | ✅ 菜单打开，显示版本 0.3.0 (3) | `abouttest.json`；`docs/images/about.png` |

@@ -70,7 +70,7 @@ enum ThemeColor: Int, CaseIterable {
         case .blue: return "Theme-blue"
         case .pink: return "Theme-pink"
         case .yellow: return "Theme-yellow"
-        case .clear: return nil
+        case .clear: return "Theme-clear"
         }
     }
 }

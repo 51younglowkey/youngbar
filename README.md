@@ -16,7 +16,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
 - **Layout list**: one rounded card per item (name, icon, Hide, Always Hidden), draggable as a whole row, with system items included. Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Appearance**: liquid-glass settings window with integrated traffic lights (no separate titlebar), system / light / dark, four palettes (blue glass, pink, yellow, neutral clear that follows the system light/dark) with mini-strip swatches, theme-matched sidebar icons for blue/pink/yellow, a three-way scope (interface + strip / interface only / strip only), and solid / translucent / vibrant strip materials.
-- **Custom menu-bar button**: ellipsis, heart, star, sparkles, pawprint, grid, or your own 36×36 PNG.
+- **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or your own 36×36 PNG.
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Bilingual**: Chinese and English, switchable in General settings; theme names are localised (`怎怎瓦岗蓝` / Hachiware Blue, `羊霸霸粉` / Chiikawa Pink, `乌拉黄` / Usagi Yellow).
 - **Local only**: no telemetry, no network. Menu-bar crops are cached in `~/Library/Application Support/YoungBar/pictures.json` and can be cleared from the menu.

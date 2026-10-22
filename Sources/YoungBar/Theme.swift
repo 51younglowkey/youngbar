@@ -222,7 +222,7 @@ final class ThemeSwatchButton: NSButton {
 
 enum ControlIcon {
     static let symbols = ["ellipsis", "heart.fill", "star.fill", "sparkles",
-                          "pawprint.fill", "circle.grid.2x2.fill"]
+                          "circle.grid.2x2.fill"]
 
     static func title(_ index: Int) -> String {
         switch index {
@@ -230,8 +230,7 @@ enum ControlIcon {
         case 1: return L10n.t("爱心", "Heart")
         case 2: return L10n.t("星形", "Star")
         case 3: return L10n.t("闪光", "Sparkles")
-        case 4: return L10n.t("爪印", "Pawprint")
-        case 5: return L10n.t("网格", "Grid")
+        case 4: return L10n.t("网格", "Grid")
         default: return L10n.t("自定义", "Custom")
         }
     }

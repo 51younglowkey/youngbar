@@ -19,6 +19,10 @@ final class StatusPictures {
     var cacheFileExists: Bool { FileManager.default.fileExists(atPath: Self.cacheURL.path) }
     var isAllowed: Bool { CGPreflightScreenCaptureAccess() }
 
+    private static let maxEntries = 120
+    private static let maxAge: TimeInterval = 14 * 24 * 60 * 60
+    private static let maxBytes = 8 * 1024 * 1024
+
     private static var cacheURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("YoungBar", isDirectory: true)
@@ -86,20 +90,37 @@ final class StatusPictures {
     private func load() {
         guard let data = try? Data(contentsOf: Self.cacheURL),
               let stored = try? JSONDecoder().decode([String: Stored].self, from: data) else { return }
-        for (key, value) in stored {
+        let cutoff = Date().addingTimeInterval(-Self.maxAge)
+        let fresh = stored
+            .filter { $0.value.takenAt >= cutoff }
+            .sorted { $0.value.takenAt > $1.value.takenAt }
+            .prefix(Self.maxEntries)
+        for (key, value) in fresh {
             if let image = NSImage(data: value.png) {
                 pictures[key] = Picture(image: image, takenAt: value.takenAt)
             }
         }
+        if pictures.count != stored.count { persist() }
     }
 
     private func persist() {
+        let ordered = pictures.sorted { $0.value.takenAt > $1.value.takenAt }
+            .prefix(Self.maxEntries)
         var stored: [String: Stored] = [:]
-        for (key, picture) in pictures {
+        for (key, picture) in ordered {
             guard let png = Self.png(picture.image) else { continue }
             stored[key] = Stored(png: png, takenAt: picture.takenAt)
         }
-        guard let data = try? JSONEncoder().encode(stored) else { return }
+        guard var data = try? JSONEncoder().encode(stored) else { return }
+        // Keep the newest crops until the encoded cache fits the byte budget.
+        var keys = stored.keys.sorted {
+            (stored[$0]?.takenAt ?? .distantPast) > (stored[$1]?.takenAt ?? .distantPast)
+        }
+        while data.count > Self.maxBytes, !keys.isEmpty {
+            stored.removeValue(forKey: keys.removeFirst())
+            guard let trimmed = try? JSONEncoder().encode(stored) else { break }
+            data = trimmed
+        }
         do {
             try FileManager.default.createDirectory(at: Self.cacheURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)

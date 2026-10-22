@@ -63,6 +63,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private var revealSeconds: TimeInterval { TimeInterval(options["revealSeconds"] ?? 20) }
     private var expanded = false
     private var started = false
+    private var previousSessionCrashed = UserDefaults.standard.bool(forKey: "sessionActive")
+    private var rescueRequested = CommandLine.arguments.contains("--reveal-all")
     private var timer: Timer?
     private var controlPanel: NSPanel?
     private var controlButton: BarControlButton?
@@ -74,6 +76,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         L10n.current = Language(rawValue: options["language"] ?? 0) ?? .chinese
+        UserDefaults.standard.set(true, forKey: "sessionActive")
+        writeJSON(["args": CommandLine.arguments, "rescue": rescueRequested,
+                   "crashed": previousSessionCrashed], name: "launch.json")
         NSApp.setActivationPolicy(.accessory)
         // A previous synthetic drag can leave the global mouse association
         // off; reset it before any UI is shown.
@@ -189,7 +194,25 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if rescueRequested {
+            UserDefaults.standard.set(false, forKey: "sessionActive")
+            return .terminateNow
+        }
+        guard started, AXIsProcessTrusted() else {
+            UserDefaults.standard.set(false, forKey: "sessionActive")
+            return .terminateNow
+        }
+        Task { @MainActor in
+            await revealEverything()
+            UserDefaults.standard.set(false, forKey: "sessionActive")
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        UserDefaults.standard.set(false, forKey: "sessionActive")
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
         timer?.invalidate()
@@ -276,6 +299,25 @@ final class BarApp: NSObject, NSApplicationDelegate {
         if !started {
             await engine.start()
             await engine.setSteadyExtras(false)
+            if previousSessionCrashed || rescueRequested {
+                await revealEverything()
+                let wasCrashed = previousSessionCrashed
+                previousSessionCrashed = false
+                UserDefaults.standard.set(false, forKey: "sessionActive")
+                let recovered = await engine.freshSnapshot()
+                writeJSON(["at": ISO8601DateFormatter().string(from: Date()),
+                           "crashed": wasCrashed,
+                           "rescue": rescueRequested,
+                           "concealedAfterReveal": recovered.concealed.count],
+                          name: "recovery.json")
+                if rescueRequested {
+                    started = true
+                    NSApp.terminate(nil)
+                    return
+                }
+                feedback = L10n.t("上次未正常退出，已先恢复所有菜单栏图标",
+                                  "Previous session ended unexpectedly; restored all menu-bar icons first")
+            }
             await engine.setModel(currentModel())
             started = true
         }
@@ -1324,6 +1366,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             controller.onLogin = { [weak self] enabled in self?.setLaunchAtLogin(enabled) }
             controller.onSpacing = { [weak self] level in self?.setSpacing(level) }
             controller.onCustomIcon = { [weak self] in self?.chooseControlIcon() }
+            controller.onRemoveCustomIcon = { [weak self] in self?.removeCustomIcon() }
             controller.onOption = { [weak self] key, value in
                 guard let self else { return }
                 options[key] = value
@@ -1401,6 +1444,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let tint: NSColor? = index == ControlIcon.symbols.count ? nil : .labelColor
         controlButton?.image = image
         controlButton?.contentTintColor = tint
+    }
+
+    private func removeCustomIcon() {
+        try? FileManager.default.removeItem(at: customControlIconURL)
+        options["controlIcon"] = 0
+        UserDefaults.standard.set(options, forKey: "barOptions")
+        applyControlIcon()
+        renderWindow(force: true)
     }
 
     private func chooseControlIcon() {
@@ -1669,6 +1720,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private func setHidden(bundle: String) {
         let key = "bundle:\(bundle)"
         setMode(key: key, mode: (modes[key] ?? 0) > 0 ? 0 : 1)
+    }
+
+    /// Show every item, ignoring the saved hide rules. Used by the crash
+    /// guard and on clean termination so the menu bar is never left hidden.
+    private func revealEverything() async {
+        var model = SectionModel(newItemsDestination: .visible)
+        model.order = currentModel().order
+        await engine.setModel(model)
+        await engine.conceal()
     }
 
     private func currentModel() -> SectionModel {
@@ -2051,6 +2111,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     @objc private func refreshClicked() {
         Task { await refresh(); renderWindow(force: true) }
+    }
+
+    @objc private func revealAllAndQuit() {
+        Task { @MainActor in
+            await revealEverything()
+            UserDefaults.standard.set(false, forKey: "sessionActive")
+            NSApp.terminate(nil)
+        }
     }
 
     @objc private func quit() {

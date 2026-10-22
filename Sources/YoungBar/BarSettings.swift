@@ -23,6 +23,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     var onPermission: ((String) -> Void)?
     var onSpacing: ((Int) -> Void)?
     var onCustomIcon: (() -> Void)?
+    var onRemoveCustomIcon: (() -> Void)?
 
     private let window: NSWindow
     private let glass = NSGlassEffectView()
@@ -67,10 +68,11 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var iconButtons: [NSButton] = []
     private let iconPreview = NSImageView()
     private let customIconButton = NSButton(title: "", target: nil, action: nil)
+    private let removeCustomButton = NSButton(title: "", target: nil, action: nil)
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 660),
-                          styleMask: [.titled, .closable, .miniaturizable],
+                          styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         super.init()
         window.title = "YoungBar"
@@ -82,6 +84,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
         window.ignoresMouseEvents = false
+        window.minSize = NSSize(width: 860, height: 560)
         window.center()
         window.contentView = buildRoot()
         selectPage("general")
@@ -111,6 +114,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         root.addSubview(scrim)
 
         sidebar.frame = NSRect(x: 0, y: 0, width: 200, height: 692)
+        sidebar.autoresizingMask = [.height]
         sidebar.material = .sidebar
         sidebar.blendingMode = .withinWindow
         sidebar.state = .active
@@ -123,6 +127,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         sidebar.addSubview(sidebarTint, positioned: .below, relativeTo: nil)
 
         appIconView.frame = NSRect(x: 64, y: 546, width: 72, height: 72)
+        appIconView.autoresizingMask = [.minYMargin]
         appIconView.imageScaling = .scaleProportionallyUpOrDown
         appIconView.wantsLayer = true
         appIconView.layer?.cornerRadius = 16
@@ -132,11 +137,13 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let title = label("YoungBar", NSRect(x: 16, y: 512, width: 168, height: 28),
                           .systemFont(ofSize: 21, weight: .semibold))
         title.alignment = .center
+        title.autoresizingMask = [.minYMargin]
         sidebar.addSubview(title)
         let subtitle = label("YoungBar 0.3.0", NSRect(x: 16, y: 492, width: 168, height: 16),
                              .systemFont(ofSize: 11))
         subtitle.alignment = .center
         subtitle.textColor = .secondaryLabelColor
+        subtitle.autoresizingMask = [.minYMargin]
         sidebar.addSubview(subtitle)
 
         for (index, item) in [("layout", L10n.t("布局", "Layout"), "list.bullet.rectangle"),
@@ -148,14 +155,23 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             button.symbolName = item.2
             button.frame = NSRect(x: 0, y: 420 - CGFloat(index) * 40, width: 200, height: 36)
             button.isBordered = false
+            button.autoresizingMask = [.minYMargin]
             sidebar.addSubview(button)
             navButtons[item.0] = button
         }
 
-        let content = NSView(frame: NSRect(x: 200, y: 0, width: 660, height: 692))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 660, height: 692))
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.clear.cgColor
-        root.addSubview(content)
+
+        let scroll = NSScrollView(frame: NSRect(x: 200, y: 0, width: 660, height: 692))
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.verticalScrollElasticity = .allowed
+        scroll.documentView = content
+        scroll.autoresizingMask = [.width, .height]
+        root.addSubview(scroll)
 
         generalPage.frame = content.bounds
         layoutPage.frame = content.bounds
@@ -418,6 +434,12 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         reset.frame = NSRect(x: 190, y: 122, width: 100, height: 30)
         appearancePage.addSubview(reset)
 
+        removeCustomButton.title = L10n.t("移除自定义", "Remove custom")
+        removeCustomButton.target = self
+        removeCustomButton.action = #selector(removeCustomTapped)
+        removeCustomButton.frame = NSRect(x: 298, y: 122, width: 120, height: 30)
+        appearancePage.addSubview(removeCustomButton)
+
         appearancePage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 96))
         preview.frame = NSRect(x: 32, y: 48, width: 320, height: 40)
         appearancePage.addSubview(preview)
@@ -433,6 +455,10 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
     @objc private func resetIcon() {
         onOption?("controlIcon", 0)
+    }
+
+    @objc private func removeCustomTapped() {
+        onRemoveCustomIcon?()
     }
 
     private func addHeader(to page: NSView, title: String, subtitle: String) {
@@ -611,6 +637,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         customIconButton.layer?.borderWidth = controlIconIndex == ControlIcon.symbols.count ? 2 : 0
         customIconButton.layer?.borderColor = theme.accent.cgColor
+        removeCustomButton.isEnabled = controlIconIndex == ControlIcon.symbols.count
         let scope = ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both
         let tintedInterface = scope != .stripOnly
         for button in navButtons.values {

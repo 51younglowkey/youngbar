@@ -38,7 +38,7 @@ sh Scripts/build.sh
 open build/YoungBar.app
 ```
 
-`Scripts/build.sh` builds a release executable, assembles `build/YoungBar.app`, installs the icon and signs ad-hoc. The `--disable-sandbox` flag lets SwiftPM build inside a host sandbox; the package has no build plugins.
+`Scripts/build.sh` builds a release executable, assembles `build/YoungBar.app`, installs the icon and signs ad-hoc (or with `YOUNGBAR_SIGN_IDENTITY`). See [docs/SIGNING.md](docs/SIGNING.md) for a stable local certificate and [docs/INSTALL.md](docs/INSTALL.md) for the GitHub download flow. The `--disable-sandbox` flag lets SwiftPM build inside a host sandbox; the package has no build plugins.
 
 ## Permissions
 

@@ -84,7 +84,7 @@ enum ThemeScope: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .both: return L10n.t("界面 + 收纳条", "Both")
+        case .both: return L10n.t("全部", "All")
         case .interfaceOnly: return L10n.t("仅界面", "Interface only")
         case .stripOnly: return L10n.t("仅收纳条", "Strip only")
         }

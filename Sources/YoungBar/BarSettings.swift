@@ -179,11 +179,14 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         contentScroll.contentInsets = NSEdgeInsetsZero
         contentScroll.scrollerInsets = NSEdgeInsets(top: 32, left: 0, bottom: 0, right: 0)
         contentScroll.hasVerticalScroller = true
+        contentScroll.hasHorizontalScroller = false
+        contentScroll.horizontalScrollElasticity = .none
         contentScroll.autohidesScrollers = true
         contentScroll.verticalScrollElasticity = .allowed
         contentScroll.documentView = content
         contentScroll.autoresizingMask = [.width, .height]
         root.addSubview(contentScroll)
+        contentScroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
 
         headerBar.frame = NSRect(x: 200, y: 692 - 64, width: 660, height: 64)
         headerBar.autoresizingMask = [.width, .minYMargin]
@@ -530,6 +533,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         guard let document = contentScroll.documentView else { return }
         let top = max(0, document.frame.height - contentScroll.contentView.bounds.height)
         contentScroll.contentView.scroll(to: NSPoint(x: 0, y: top))
+        contentScroll.contentView.bounds.origin.x = 0
         contentScroll.reflectScrolledClipView(contentScroll.contentView)
     }
 

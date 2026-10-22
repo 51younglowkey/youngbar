@@ -212,25 +212,25 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func buildGeneralPage() {
 
         // Startup
-        generalPage.addSubview(card(y: 566, height: 40))
+        generalPage.addSubview(card(y: 542, height: 40))
         loginCheck.target = self
         loginCheck.action = #selector(loginChanged)
-        loginCheck.frame = NSRect(x: 44, y: 572, width: 300, height: 24)
+        loginCheck.frame = NSRect(x: 44, y: 548, width: 300, height: 24)
         generalPage.addSubview(loginCheck)
 
         let languageLabel = label(L10n.t("语言", "Language"),
-                                  NSRect(x: 372, y: 575, width: 62, height: 16),
+                                  NSRect(x: 372, y: 551, width: 62, height: 16),
                                   .systemFont(ofSize: 11, weight: .medium))
         languageLabel.textColor = .secondaryLabelColor
         generalPage.addSubview(languageLabel)
         languagePopup.addItems(withTitles: ["中文", "English"])
         languagePopup.target = self
         languagePopup.action = #selector(languageChanged)
-        languagePopup.frame = NSRect(x: 438, y: 566, width: 158, height: 28)
+        languagePopup.frame = NSRect(x: 438, y: 542, width: 158, height: 28)
         generalPage.addSubview(languagePopup)
 
         // Display & behaviour
-        generalPage.addSubview(sectionLabel(L10n.t("显示与行为", "Display & Behaviour"), y: 520))
+        generalPage.addSubview(sectionLabel(L10n.t("显示与行为", "Display & Behaviour"), y: 510))
         generalPage.addSubview(card(y: 304, height: 196))
         modeControl.target = self
         modeControl.action = #selector(modeChanged)

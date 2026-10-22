@@ -174,7 +174,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSSHOT"] == "1" {
                 showWindow()
                 try? await Task.sleep(for: .milliseconds(700))
-                await captureScreen(to: "settings-full.png")
+                if let window = settings?.windowForCapture {
+                    await captureWindow(window, to: "settings-window.png")
+                }
             }
             if let raw = ProcessInfo.processInfo.environment["YOUNGBAR_CLOSEWINDOW_PID"], let pid = pid_t(raw) {
                 await runWindowCleanup(pid: pid)
@@ -696,6 +698,26 @@ final class BarApp: NSObject, NSApplicationDelegate {
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
         return ((role as? String) ?? "", pid == 0 ? nil : pid)
+    }
+
+    private func captureWindow(_ window: NSWindow, to name: String) async {
+        guard CGPreflightScreenCaptureAccess() else { return }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let target = content.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else { return }
+            let filter = SCContentFilter(desktopIndependentWindow: target)
+            let scale = window.backingScaleFactor
+            let config = SCStreamConfiguration()
+            config.width = Int(window.frame.width * scale)
+            config.height = Int(window.frame.height * scale)
+            config.showsCursor = false
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            let rep = NSBitmapImageRep(cgImage: image)
+            guard let data = rep.representation(using: .png, properties: [:]) else { return }
+            try data.write(to: Diagnostics.url.deletingLastPathComponent().appendingPathComponent(name), options: .atomic)
+        } catch {
+            NSLog("YoungBar window capture failed: \(error)")
+        }
     }
 
     private func captureScreen(to name: String) async {

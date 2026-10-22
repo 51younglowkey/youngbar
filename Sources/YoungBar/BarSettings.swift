@@ -68,8 +68,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         window.isReleasedWhenClosed = false
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.titlebarAppearsTransparent = false
-        window.titleVisibility = .visible
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
         window.ignoresMouseEvents = false
         window.center()
@@ -80,7 +81,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     // MARK: - Construction
 
     private func buildRoot() -> NSView {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 660))
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 692))
         root.wantsLayer = true
         root.layer?.backgroundColor = NSColor.clear.cgColor
 
@@ -100,7 +101,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         scrim.wantsLayer = true
         root.addSubview(scrim)
 
-        sidebar.frame = NSRect(x: 0, y: 0, width: 200, height: 660)
+        sidebar.frame = NSRect(x: 0, y: 0, width: 200, height: 692)
         sidebar.material = .sidebar
         sidebar.blendingMode = .withinWindow
         sidebar.state = .active
@@ -151,7 +152,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         footer.maximumNumberOfLines = 2
         sidebar.addSubview(footer)
 
-        let content = NSView(frame: NSRect(x: 200, y: 0, width: 660, height: 660))
+        let content = NSView(frame: NSRect(x: 200, y: 0, width: 660, height: 692))
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.clear.cgColor
         root.addSubview(content)
@@ -410,6 +411,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     // MARK: - State
 
     var isVisible: Bool { window.isVisible }
+    var windowForCapture: NSWindow { window }
 
     func refreshButtonScreenRect() -> NSRect? {
         guard window.isVisible else { return nil }
@@ -476,7 +478,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         for button in navButtons.values { button.highlightColor = theme.accent }
         glass.tintColor = theme.accent.withAlphaComponent(0.10)
-        window.backgroundColor = theme.strip.withAlphaComponent(0.92)
+        window.backgroundColor = .clear
         sidebarTint.layer?.backgroundColor = theme.accent.withAlphaComponent(0.08).cgColor
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         scrim.layer?.backgroundColor = (isDark

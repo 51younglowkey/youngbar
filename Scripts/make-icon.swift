@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 YoungBar contributors
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Builds the YoungBar app icon from Resources/AppIcon-source.jpg.
 // The source art keeps its hand-drawn frame; it is placed on the picture's own
 // pink background inside a standard macOS rounded-square mask.

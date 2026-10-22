@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 YoungBar contributors
+// SPDX-License-Identifier: GPL-3.0-only
+
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
@@ -2001,6 +2004,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         Menu bar organizer for macOS 27.
         UI reconstruction inspired by iBar Pro 1.4.6.
         Built on Dimble's PelmetCore / PelmetEngine (GPLv3).
+        Licensed under GPL-3.0-only; see LICENSE and THIRD_PARTY_NOTICES.
         """, attributes: [
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: NSColor.secondaryLabelColor,

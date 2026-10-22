@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 YoungBar contributors
+// SPDX-License-Identifier: GPL-3.0-only
+
 import AppKit
 
 /// User-selectable appearance, persisted in `barOptions`.

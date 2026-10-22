@@ -153,20 +153,22 @@ final class ThemePreviewView: NSView {
         }
 
         let symbolColor: NSColor = (color == .clear && !isDark) || color.isLightStrip ? .black : .white
-        symbolColor.withAlphaComponent(0.9).setFill()
-        for index in 0..<3 {
-            let x = 14 + CGFloat(index) * 34
-            NSBezierPath(ovalIn: NSRect(x: x, y: rect.midY - 7, width: 14, height: 14)).fill()
+
+        func drawSymbol(_ name: String, x: CGFloat, size: CGFloat = 15) {
+            guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return }
+            let scaled = image.withSymbolConfiguration(.init(pointSize: size, weight: .regular)) ?? image
+            let tinted = tintedImage(scaled, color: symbolColor)
+            tinted.draw(in: NSRect(x: x, y: rect.midY - size / 2, width: size, height: size),
+                        from: .zero, operation: .sourceOver, fraction: 0.95)
         }
 
-        NSColor.white.withAlphaComponent(0.18).setFill()
-        NSRect(x: rect.maxX - 42, y: 9, width: 1, height: rect.height - 18).fill()
+        drawSymbol("wifi", x: 14)
+        drawSymbol("battery.75percent", x: 34)
+        drawSymbol("clock", x: 54)
 
-        symbolColor.withAlphaComponent(0.85).setStroke()
-        let gear = NSBezierPath(ovalIn: NSRect(x: rect.maxX - 30, y: rect.midY - 7, width: 14, height: 14))
-        gear.lineWidth = 1.5
-        gear.stroke()
-        NSBezierPath(ovalIn: NSRect(x: rect.maxX - 25, y: rect.midY - 2, width: 4, height: 4)).fill()
+        symbolColor.withAlphaComponent(0.18).setFill()
+        NSRect(x: rect.maxX - 42, y: 9, width: 1, height: rect.height - 18).fill()
+        drawSymbol("gearshape", x: rect.maxX - 31, size: 16)
     }
 }
 

@@ -213,12 +213,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         // Display & behaviour
         generalPage.addSubview(sectionLabel(L10n.t("显示与行为", "Display & Behaviour"), y: 456))
         generalPage.addSubview(card(y: 268, height: 168))
-        generalPage.addSubview(label(L10n.t("显示模式", "Display mode"),
-                                     NSRect(x: 32, y: 424, width: 160, height: 18),
-                                     .systemFont(ofSize: 12, weight: .medium)))
         modeControl.target = self
         modeControl.action = #selector(modeChanged)
-        modeControl.frame = NSRect(x: 32, y: 394, width: 250, height: 28)
+        modeControl.frame = NSRect(x: 32, y: 402, width: 250, height: 28)
         modeControl.toolTip = L10n.t("聚合模式把收纳项收进一条工具条。",
                                      "Aggregate mode collects concealed items into one strip.")
         generalPage.addSubview(modeControl)
@@ -266,6 +263,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.addSubview(card(y: 80, height: 74))
         axStatus.frame = NSRect(x: 32, y: 124, width: 360, height: 18)
         axStatus.font = .systemFont(ofSize: 12)
+        axStatus.toolTip = L10n.t("权限属于 YoungBar 这个 app，不是终端或 DSH；首次使用需要在系统设置中打开。",
+                                  "This permission belongs to the YoungBar app, not the terminal or DSH; enable it in System Settings on first use.")
         generalPage.addSubview(axStatus)
         axButton.target = self
         axButton.action = #selector(axTapped)
@@ -274,6 +273,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         captureStatus.frame = NSRect(x: 32, y: 88, width: 360, height: 18)
         captureStatus.font = .systemFont(ofSize: 12)
+        captureStatus.toolTip = L10n.t("权限属于 YoungBar 这个 app；授权后可能需要重启 app 才能抓取原始图标。",
+                                       "This permission belongs to the YoungBar app; restart it after granting to capture original icons.")
         generalPage.addSubview(captureStatus)
         captureButton.target = self
         captureButton.action = #selector(captureTapped)
@@ -368,7 +369,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         appearancePage.addSubview(card(y: 498, height: 36))
         appearanceModeControl.target = self
         appearanceModeControl.action = #selector(appearanceModeChanged)
-        appearanceModeControl.frame = NSRect(x: 32, y: 508, width: 300, height: 28)
+        appearanceModeControl.frame = NSRect(x: 32, y: 504, width: 300, height: 28)
         appearancePage.addSubview(appearanceModeControl)
 
         appearancePage.addSubview(sectionLabel(L10n.t("主题色", "Palette"), y: 464))
@@ -400,7 +401,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         appearancePage.addSubview(card(y: 248, height: 38))
         stripStyleControl.target = self
         stripStyleControl.action = #selector(stripStyleChanged)
-        stripStyleControl.frame = NSRect(x: 32, y: 260, width: 300, height: 28)
+        stripStyleControl.frame = NSRect(x: 32, y: 256, width: 300, height: 28)
         appearancePage.addSubview(stripStyleControl)
 
         appearancePage.addSubview(sectionLabel(L10n.t("菜单栏按钮", "Menu-bar button"), y: 212))

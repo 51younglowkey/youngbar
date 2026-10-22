@@ -189,13 +189,11 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildGeneralPage() {
-        addHeader(to: generalPage, title: L10n.t("设置", "Settings"),
-                  subtitle: L10n.t("控制 YoungBar 如何显示、展开与自动收起。",
-                                   "Control how YoungBar appears, expands and hides."))
+        addHeader(to: generalPage, title: L10n.t("设置", "Settings"))
 
         // Startup
         generalPage.addSubview(sectionLabel(L10n.t("启动", "Startup"), y: 532))
-        generalPage.addSubview(sectionLine(y: 522))
+        generalPage.addSubview(card(y: 486, height: 36))
         loginCheck.target = self
         loginCheck.action = #selector(loginChanged)
         loginCheck.frame = NSRect(x: 32, y: 492, width: 300, height: 24)
@@ -214,7 +212,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         // Display & behaviour
         generalPage.addSubview(sectionLabel(L10n.t("显示与行为", "Display & Behaviour"), y: 456))
-        generalPage.addSubview(sectionLine(y: 446))
+        generalPage.addSubview(card(y: 268, height: 168))
         generalPage.addSubview(label(L10n.t("显示模式", "Display mode"),
                                      NSRect(x: 32, y: 424, width: 160, height: 18),
                                      .systemFont(ofSize: 12, weight: .medium)))
@@ -250,7 +248,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         // Menu bar
         generalPage.addSubview(sectionLabel(L10n.t("菜单栏", "Menu Bar"), y: 240))
-        generalPage.addSubview(sectionLine(y: 230))
+        generalPage.addSubview(card(y: 186, height: 44))
         generalPage.addSubview(label(L10n.t("菜单栏图标间隙", "Menu-bar icon spacing"),
                                      NSRect(x: 32, y: 206, width: 190, height: 18),
                                      .systemFont(ofSize: 12, weight: .medium)))
@@ -264,37 +262,37 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.addSubview(spacingPopup)
 
         // Permissions
-        generalPage.addSubview(sectionLabel(L10n.t("权限", "Permissions"), y: 170))
-        generalPage.addSubview(sectionLine(y: 160))
-        axStatus.frame = NSRect(x: 32, y: 132, width: 360, height: 18)
+        generalPage.addSubview(sectionLabel(L10n.t("权限", "Permissions"), y: 164))
+        generalPage.addSubview(card(y: 80, height: 74))
+        axStatus.frame = NSRect(x: 32, y: 124, width: 360, height: 18)
         axStatus.font = .systemFont(ofSize: 12)
         generalPage.addSubview(axStatus)
         axButton.target = self
         axButton.action = #selector(axTapped)
-        axButton.frame = NSRect(x: 306, y: 126, width: 90, height: 30)
+        axButton.frame = NSRect(x: 306, y: 118, width: 90, height: 30)
         generalPage.addSubview(axButton)
 
-        captureStatus.frame = NSRect(x: 32, y: 96, width: 360, height: 18)
+        captureStatus.frame = NSRect(x: 32, y: 88, width: 360, height: 18)
         captureStatus.font = .systemFont(ofSize: 12)
         generalPage.addSubview(captureStatus)
         captureButton.target = self
         captureButton.action = #selector(captureTapped)
-        captureButton.frame = NSRect(x: 306, y: 90, width: 90, height: 30)
+        captureButton.frame = NSRect(x: 306, y: 82, width: 90, height: 30)
         generalPage.addSubview(captureButton)
 
         refreshButton.target = self
         refreshButton.action = #selector(refreshTapped)
-        refreshButton.frame = NSRect(x: 32, y: 48, width: 140, height: 30)
+        refreshButton.frame = NSRect(x: 32, y: 44, width: 140, height: 30)
         generalPage.addSubview(refreshButton)
 
-        messageField.frame = NSRect(x: 32, y: 22, width: 596, height: 20)
+        messageField.frame = NSRect(x: 32, y: 18, width: 596, height: 20)
         messageField.textColor = .secondaryLabelColor
         messageField.font = .systemFont(ofSize: 10.5)
         generalPage.addSubview(messageField)
 
         let version = label(L10n.t("YoungBar 0.1.0 · GPLv3 · 基于 Dimble / Pelmet",
                                    "YoungBar 0.1.0 · GPLv3 · Built on Dimble / Pelmet"),
-                            NSRect(x: 32, y: 4, width: 596, height: 14),
+                            NSRect(x: 32, y: 2, width: 596, height: 14),
                             .systemFont(ofSize: 10))
         version.alignment = .center
         version.textColor = .tertiaryLabelColor
@@ -364,17 +362,17 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func buildAppearancePage() {
-        addHeader(to: appearancePage, title: L10n.t("外观", "Appearance"),
-                  subtitle: L10n.t("颜色、深浅模式、收纳条与菜单栏按钮。",
-                                   "Colours, light/dark mode, strip and menu-bar button."))
+        addHeader(to: appearancePage, title: L10n.t("外观", "Appearance"))
 
         appearancePage.addSubview(sectionLabel(L10n.t("外观模式", "Appearance mode"), y: 540))
+        appearancePage.addSubview(card(y: 498, height: 36))
         appearanceModeControl.target = self
         appearanceModeControl.action = #selector(appearanceModeChanged)
         appearanceModeControl.frame = NSRect(x: 32, y: 508, width: 300, height: 28)
         appearancePage.addSubview(appearanceModeControl)
 
         appearancePage.addSubview(sectionLabel(L10n.t("主题色", "Palette"), y: 464))
+        appearancePage.addSubview(card(y: 392, height: 66))
         for (index, theme) in ThemeColor.allCases.enumerated() {
             let button = ThemeSwatchButton(title: "", target: self, action: #selector(colorPicked(_:)))
             button.frame = NSRect(x: 32 + CGFloat(index) * 90, y: 424, width: 46, height: 28)
@@ -391,19 +389,22 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             appearancePage.addSubview(name)
         }
 
-        appearancePage.addSubview(sectionLabel(L10n.t("主题应用", "Theme scope"), y: 372))
+        appearancePage.addSubview(sectionLabel(L10n.t("主题应用", "Theme scope"), y: 368))
+        appearancePage.addSubview(card(y: 322, height: 36))
         scopeControl.target = self
         scopeControl.action = #selector(scopeChanged)
-        scopeControl.frame = NSRect(x: 32, y: 340, width: 360, height: 28)
+        scopeControl.frame = NSRect(x: 32, y: 326, width: 360, height: 28)
         appearancePage.addSubview(scopeControl)
 
         appearancePage.addSubview(sectionLabel(L10n.t("收纳条", "Strip"), y: 292))
+        appearancePage.addSubview(card(y: 248, height: 38))
         stripStyleControl.target = self
         stripStyleControl.action = #selector(stripStyleChanged)
         stripStyleControl.frame = NSRect(x: 32, y: 260, width: 300, height: 28)
         appearancePage.addSubview(stripStyleControl)
 
         appearancePage.addSubview(sectionLabel(L10n.t("菜单栏按钮", "Menu-bar button"), y: 212))
+        appearancePage.addSubview(card(y: 116, height: 90))
         for (index, symbol) in ControlIcon.symbols.enumerated() {
             let button = NSButton(title: "", target: self, action: #selector(iconPicked(_:)))
             button.frame = NSRect(x: 32 + CGFloat(index) * 54, y: 166, width: 40, height: 40)
@@ -437,8 +438,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         removeCustomButton.frame = NSRect(x: 298, y: 122, width: 120, height: 30)
         appearancePage.addSubview(removeCustomButton)
 
-        appearancePage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 96))
-        preview.frame = NSRect(x: 32, y: 48, width: 320, height: 40)
+        appearancePage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 92))
+        appearancePage.addSubview(card(y: 34, height: 50))
+        preview.frame = NSRect(x: 32, y: 44, width: 320, height: 40)
         appearancePage.addSubview(preview)
     }
 
@@ -458,13 +460,23 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         onRemoveCustomIcon?()
     }
 
-    private func addHeader(to page: NSView, title: String, subtitle: String) {
+    private func addHeader(to page: NSView, title: String, subtitle: String = "") {
         page.addSubview(label(title, NSRect(x: 32, y: 596, width: 400, height: 32),
                               .systemFont(ofSize: 24, weight: .semibold)))
-        page.addSubview(hint(subtitle, y: 576))
+        if !subtitle.isEmpty { page.addSubview(hint(subtitle, y: 576)) }
         let line = NSBox(frame: NSRect(x: 32, y: 566, width: 596, height: 1))
         line.boxType = .separator
         page.addSubview(line)
+    }
+
+    private func card(y: CGFloat, height: CGFloat, x: CGFloat = 24, width: CGFloat = 612) -> NSView {
+        let view = NSView(frame: NSRect(x: x, y: y, width: width, height: height))
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 10
+        view.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.045).cgColor
+        view.layer?.borderWidth = 1
+        view.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+        return view
     }
 
     private func sectionLabel(_ text: String, y: CGFloat) -> NSTextField {

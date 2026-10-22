@@ -38,6 +38,7 @@
 | 隐藏 → 展开 → 收起 | ✅ 真机通过 | `selftest.json`：`appeared: true`、`goneAgain: true` |
 | 定时自动收起 | ✅ 20 秒到期后自动收起 | `selftest.json`：`expirySeconds: 20`、`autoHidden: true` |
 | 收纳条 | ✅ 黑色圆角条 | `docs/images/shelf.png` |
+| 外观主题 | ✅ 深/浅/跟随系统 + 4 主题色 + 3 种收纳条 | `docs/images/appearance-{dark,light}.png`、`shelf-sakura.png` |
 | 关于窗口 | ✅ 菜单打开，显示版本 0.3.0 (3) | `abouttest.json`；`docs/images/about.png` |
 | 全局快捷键 | ✅ ⌃⌥B 展开 / 收起，无需鼠标 | `hotkeytest.json`：`opened:true`、`closed:true`、`passed:true` |
 | 收纳条齿轮 | ✅ 真实点击打开设置并收起收纳条 | `geartest.json`：`settingsOpened:true`、`shelfClosed:true`、`passed:true` |
@@ -70,6 +71,10 @@
 ![菜单栏布局](images/settings-layout.png)
 
 ![收纳条（原始菜单栏内容）](images/shelf.png)
+
+![外观（深色）](images/appearance-dark.png)
+
+![外观（浅色）](images/appearance-light.png)
 
 ![关于窗口](images/about.png)
 

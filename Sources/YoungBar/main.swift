@@ -73,6 +73,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        applyAppearance()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.title = "•••"
         statusItem.button?.toolTip = "YoungBar: click to show concealed icons; right-click to choose apps"
@@ -202,6 +203,19 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    private var themeColor: ThemeColor {
+        ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .forest
+    }
+
+    private var stripStyle: StripStyle {
+        StripStyle(rawValue: options["stripStyle"] ?? 0) ?? .solid
+    }
+
+    private func applyAppearance() {
+        let mode = AppearanceMode(rawValue: options["appearanceMode"] ?? 0) ?? .system
+        NSApp.appearance = mode.appearance
     }
 
     /// Carbon global hotkey: Ctrl-Option-B toggles the strip without AX
@@ -957,11 +971,26 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let width = min(max(keys.isEmpty ? 150 : 100, itemContentWidth + gearWidth), screenWidth - 24)
         let height: CGFloat = 40
         shelfPanel.setContentSize(NSSize(width: width, height: height))
-        let background = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        background.wantsLayer = true
-        background.layer?.backgroundColor = NSColor.black.cgColor
-        background.layer?.cornerRadius = 8
-        background.layer?.masksToBounds = true
+        let background: NSView
+        switch stripStyle {
+        case .vibrant:
+            let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.wantsLayer = true
+            effect.layer?.cornerRadius = 8
+            effect.layer?.masksToBounds = true
+            background = effect
+        case .solid, .translucent:
+            let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+            view.wantsLayer = true
+            view.layer?.backgroundColor = themeColor.strip
+                .withAlphaComponent(stripStyle == .solid ? 0.97 : 0.72).cgColor
+            view.layer?.cornerRadius = 8
+            view.layer?.masksToBounds = true
+            background = view
+        }
         let itemArea = width - gearWidth
         if keys.isEmpty {
             let label = NSTextField(labelWithString: "没有收纳项目")
@@ -1176,6 +1205,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 options[key] = value
                 UserDefaults.standard.set(options, forKey: "barOptions")
+                if ["appearanceMode", "themeColor", "stripStyle"].contains(key) {
+                    applyAppearance()
+                    shelfState = nil
+                    if expanded { populateShelf() }
+                    renderWindow(force: true)
+                    return
+                }
                 if key == "keepShelfOpen" {
                     if value == 1 { showShelf(); Task { await refreshShelfPictures() } }
                     else { closeShelf() }

@@ -69,7 +69,7 @@ final class StatusPictures {
                                   width: frame.width * sx, height: frame.height * sy).integral
                 guard let crop = shot.cropping(to: rect) else { continue }
                 pictures[item.id.sectionKey.rawValue] = Picture(
-                    image: NSImage(cgImage: Self.onBlack(crop), size: frame.size), takenAt: Date())
+                    image: NSImage(cgImage: Self.transparentBackground(crop), size: frame.size), takenAt: Date())
             }
             error = nil
             persist()
@@ -114,18 +114,36 @@ final class StatusPictures {
         return rep.representation(using: .png, properties: [:])
     }
 
-    private static func onBlack(_ image: CGImage) -> CGImage {
+    /// Menu-bar crops arrive with the bar's own background baked in. Turn
+    /// that background into alpha so the strip's colour/material shows through.
+    /// Corners estimate the background luminance; dark bars keep their light
+    /// glyphs, light bars are inverted to light glyphs for our dark strip.
+    private static func transparentBackground(_ image: CGImage) -> CGImage {
         guard let context = CGContext(data: nil, width: image.width, height: image.height,
                                       bitsPerComponent: 8, bytesPerRow: image.width * 4,
                                       space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
               let bytes = context.data else { return image }
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        let pixels = bytes.bindMemory(to: UInt8.self, capacity: image.width * image.height * 4)
-        for i in stride(from: 0, to: image.width * image.height * 4, by: 4) {
-            if pixels[i] < 35 && pixels[i + 1] < 35 && pixels[i + 2] < 35 {
-                pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0
+        let width = image.width, height = image.height
+        let pixels = bytes.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        func luminance(_ offset: Int) -> Int {
+            (299 * Int(pixels[offset]) + 587 * Int(pixels[offset + 1]) + 114 * Int(pixels[offset + 2])) / 1000
+        }
+        let corners = [0, (width - 1) * 4, (height - 1) * width * 4, ((height - 1) * width + width - 1) * 4]
+        let background = corners.map(luminance).reduce(0, +) / max(1, corners.count)
+        let range = max(1, background < 128 ? 255 - background : background)
+        for offset in stride(from: 0, to: width * height * 4, by: 4) {
+            let lum = luminance(offset)
+            let alpha = min(255, max(0, abs(lum - background) * 255 / range))
+            var red = Int(pixels[offset]), green = Int(pixels[offset + 1]), blue = Int(pixels[offset + 2])
+            if background >= 128 {
+                red = 255 - red; green = 255 - green; blue = 255 - blue
             }
+            pixels[offset] = UInt8(red * alpha / 255)
+            pixels[offset + 1] = UInt8(green * alpha / 255)
+            pixels[offset + 2] = UInt8(blue * alpha / 255)
+            pixels[offset + 3] = UInt8(alpha)
         }
         return context.makeImage() ?? image
     }

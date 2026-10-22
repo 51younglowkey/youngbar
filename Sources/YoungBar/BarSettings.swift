@@ -26,6 +26,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let window: NSWindow
     private let generalPage = NSView()
     private let layoutPage = NSView()
+    private let appearancePage = NSView()
     private let table = NSTableView()
     private let pasteType = NSPasteboard.PasteboardType("dev.leorea.youngbar.layout")
     private var navButtons: [String: SidebarButton] = [:]
@@ -45,6 +46,12 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let captureButton = NSButton(title: "授权…", target: nil, action: nil)
     private let messageField = NSTextField(labelWithString: "")
     private let emptyLabel = NSTextField(labelWithString: "")
+    private let appearanceModeControl = NSSegmentedControl(labels: ["跟随系统", "浅色", "深色"],
+                                                           trackingMode: .selectOne, target: nil, action: nil)
+    private let stripStyleControl = NSSegmentedControl(labels: ["纯色", "半透明", "毛玻璃"],
+                                                       trackingMode: .selectOne, target: nil, action: nil)
+    private var colorButtons: [NSButton] = []
+    private let preview = ThemePreviewView()
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 660),
@@ -87,7 +94,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         subtitle.textColor = .secondaryLabelColor
         sidebar.addSubview(subtitle)
 
-        for (index, item) in [("general", "通用设置", "gearshape"), ("layout", "菜单栏布局", "list.bullet.rectangle")].enumerated() {
+        for (index, item) in [("general", "通用设置", "gearshape"),
+                              ("layout", "菜单栏布局", "list.bullet.rectangle"),
+                              ("appearance", "外观", "paintpalette")].enumerated() {
             let button = SidebarButton(title: item.1, target: self, action: #selector(navigate(_:)))
             button.identifier = .init(item.0)
             button.frame = NSRect(x: 20, y: 420 - CGFloat(index) * 40, width: 168, height: 36)
@@ -115,10 +124,13 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         generalPage.frame = content.bounds
         layoutPage.frame = content.bounds
+        appearancePage.frame = content.bounds
         content.addSubview(generalPage)
         content.addSubview(layoutPage)
+        content.addSubview(appearancePage)
         buildGeneralPage()
         buildLayoutPage()
+        buildAppearancePage()
         return root
     }
 
@@ -231,6 +243,49 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         layoutPage.addSubview(emptyLabel)
     }
 
+    private func buildAppearancePage() {
+        addHeader(to: appearancePage, title: "外观", subtitle: "颜色、深浅模式与收纳条材质。")
+
+        appearancePage.addSubview(sectionLabel("外观模式", y: 520))
+        appearanceModeControl.target = self
+        appearanceModeControl.action = #selector(appearanceModeChanged)
+        appearanceModeControl.frame = NSRect(x: 32, y: 486, width: 300, height: 28)
+        appearancePage.addSubview(appearanceModeControl)
+        appearancePage.addSubview(hint("跟随系统会随 macOS 的浅色/深色切换。", y: 468))
+
+        appearancePage.addSubview(sectionLabel("主题色", y: 430))
+        for (index, theme) in ThemeColor.allCases.enumerated() {
+            let button = NSButton(title: "", target: self, action: #selector(colorPicked(_:)))
+            button.frame = NSRect(x: 32 + CGFloat(index) * 62, y: 390, width: 46, height: 26)
+            button.isBordered = false
+            button.wantsLayer = true
+            button.layer?.backgroundColor = theme.accent.cgColor
+            button.layer?.cornerRadius = 7
+            button.tag = index
+            button.toolTip = theme.title
+            button.setAccessibilityLabel(theme.title)
+            colorButtons.append(button)
+            appearancePage.addSubview(button)
+            let name = label(theme.title, NSRect(x: 32 + CGFloat(index) * 62, y: 370, width: 46, height: 16),
+                             .systemFont(ofSize: 11))
+            name.alignment = .center
+            name.textColor = .secondaryLabelColor
+            appearancePage.addSubview(name)
+        }
+
+        appearancePage.addSubview(sectionLabel("收纳条", y: 326))
+        stripStyleControl.target = self
+        stripStyleControl.action = #selector(stripStyleChanged)
+        stripStyleControl.frame = NSRect(x: 32, y: 292, width: 300, height: 28)
+        appearancePage.addSubview(stripStyleControl)
+        appearancePage.addSubview(hint("毛玻璃会透出桌面内容；纯色最稳，半透明介于两者之间。", y: 274))
+
+        appearancePage.addSubview(sectionLabel("预览", y: 236))
+        preview.frame = NSRect(x: 32, y: 180, width: 360, height: 46)
+        appearancePage.addSubview(preview)
+        appearancePage.addSubview(hint("预览使用当前主题与收纳条样式。", y: 158))
+    }
+
     private func addHeader(to page: NSView, title: String, subtitle: String) {
         page.addSubview(label(title, NSRect(x: 32, y: 596, width: 400, height: 32),
                               .systemFont(ofSize: 24, weight: .semibold)))
@@ -270,6 +325,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         currentPage = id
         generalPage.isHidden = id != "general"
         layoutPage.isHidden = id != "layout"
+        appearancePage.isHidden = id != "appearance"
         for (key, button) in navButtons { button.selected = key == id }
         if id == "layout" { table.reloadData() }
     }
@@ -295,6 +351,18 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let seconds = Int(delaySlider.doubleValue.rounded())
         delayValue.stringValue = "\(seconds) 秒"
         onOption?("revealSeconds", seconds)
+    }
+
+    @objc private func appearanceModeChanged() {
+        onOption?("appearanceMode", appearanceModeControl.selectedSegment)
+    }
+
+    @objc private func stripStyleChanged() {
+        onOption?("stripStyle", stripStyleControl.selectedSegment)
+    }
+
+    @objc private func colorPicked(_ sender: NSButton) {
+        onOption?("themeColor", sender.tag)
     }
 
     @objc private func axTapped() { onPermission?("accessibility") }
@@ -332,6 +400,17 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         captureStatus.stringValue = captureAllowed ? "屏幕录制：已授权" : "屏幕录制：未授权（原始图标不可用）"
         captureButton.title = captureAllowed ? "设置…" : "授权…"
         messageField.stringValue = message
+
+        appearanceModeControl.selectedSegment = options["appearanceMode"] ?? 0
+        stripStyleControl.selectedSegment = options["stripStyle"] ?? 0
+        let theme = ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .forest
+        preview.color = theme
+        preview.style = StripStyle(rawValue: options["stripStyle"] ?? 0) ?? .solid
+        for (index, button) in colorButtons.enumerated() {
+            button.layer?.borderWidth = index == theme.rawValue ? 2 : 0
+            button.layer?.borderColor = NSColor.labelColor.cgColor
+        }
+        for button in navButtons.values { button.highlightColor = theme.accent }
         emptyLabel.isHidden = !entries.isEmpty
         emptyLabel.stringValue = axTrusted ? "正在读取菜单栏图标…" : "需要辅助功能权限后才能读取菜单栏项目。" 
     }
@@ -341,7 +420,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     func writeSnapshots(to directory: String) {
         let base = URL(fileURLWithPath: directory, isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        for page in ["general", "layout"] {
+        for page in ["general", "layout", "appearance"] {
             selectPage(page)
             window.contentView?.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
@@ -437,10 +516,13 @@ final class SidebarButton: NSButton {
     var selected = false {
         didSet { needsDisplay = true }
     }
+    var highlightColor: NSColor = .controlAccentColor {
+        didSet { needsDisplay = true }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         if selected {
-            NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
+            highlightColor.withAlphaComponent(0.18).setFill()
             NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: 2), xRadius: 8, yRadius: 8).fill()
         }
         super.draw(dirtyRect)

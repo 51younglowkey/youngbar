@@ -15,6 +15,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 - **Reorder**: ⌘-drag in the real menu bar (verified with a swap-and-restore test) and drag rows in the layout table.
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
 - **Layout table**: Name / Icon / Hide / Always Hidden, with system items included. Date and Control Center keep their macOS-fixed position but can be hidden.
+- **Appearance**: system / light / dark, four accent themes (forest, sakura, amber, graphite), and solid / translucent / vibrant strip materials.
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Local only**: no telemetry, no network. Menu-bar crops are cached in `~/Library/Application Support/YoungBar/pictures.json` and can be cleared from the menu.
 
@@ -49,7 +50,7 @@ Ad-hoc builds are re-signed on every build. If macOS stops recognizing the app, 
 
 The current verification matrix — including what is implemented, what is verified live, and what is blocked — lives in [docs/STATUS.md](docs/STATUS.md). The iBar Pro 1.4.6 feature comparison and evidence are in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
 
-Known gaps: multi-display, live (non-cached) mode, configurable hotkey, custom themes.
+Known gaps: multi-display, live (non-cached) mode, configurable hotkey, drag-reordering inside the strip.
 
 ## Roadmap
 

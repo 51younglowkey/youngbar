@@ -1,3 +1,5 @@
+**声明：本项目非官方授权，角色素材版权归原权利人所有。**
+
 # YoungBar · 羊霸霸
 
 A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.

@@ -3,6 +3,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 import ScreenCaptureKit
 import ServiceManagement
+import UniformTypeIdentifiers
 import PelmetCore
 import PelmetEngine
 
@@ -104,7 +105,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 await refreshShelfPictures()
             }
             if ProcessInfo.processInfo.environment["YOUNGBAR_TOPSHOT"] == "1" {
-                try? await Task.sleep(for: .milliseconds(600))
+                try? await Task.sleep(for: .milliseconds(1800))
                 await captureScreen(to: "top-full.png")
             }
             if let directory = ProcessInfo.processInfo.environment["YOUNGBAR_SNAPSHOT_DIR"] {
@@ -972,9 +973,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
         panel.ignoresMouseEvents = false
         let control = BarControlButton(frame: NSRect(origin: .zero, size: size))
         control.title = ""
-        control.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "YoungBar")
+        control.image = currentControlIcon()
         control.imagePosition = .imageOnly
         control.imageScaling = .scaleProportionallyDown
+        control.contentTintColor = (options["controlIcon"] ?? 0) == ControlIcon.symbols.count ? nil : .labelColor
         control.isBordered = false
         control.contentTintColor = .labelColor
         control.setAccessibilityLabel("YoungBar")
@@ -1321,6 +1323,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             }
             controller.onLogin = { [weak self] enabled in self?.setLaunchAtLogin(enabled) }
             controller.onSpacing = { [weak self] level in self?.setSpacing(level) }
+            controller.onCustomIcon = { [weak self] in self?.chooseControlIcon() }
             controller.onOption = { [weak self] key, value in
                 guard let self else { return }
                 options[key] = value
@@ -1335,6 +1338,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
                         self.settings = nil
                         self.showWindow()
                     }
+                    return
+                }
+                if key == "controlIcon" {
+                    applyControlIcon()
+                    renderWindow(force: true)
                     return
                 }
                 if ["appearanceMode", "themeColor", "stripStyle", "themeScope"].contains(key) {
@@ -1370,7 +1378,60 @@ final class BarApp: NSObject, NSApplicationDelegate {
             ? L10n.t("已就绪 · 展开时刷新原始菜单栏状态", "Ready · original menu-bar state refreshes on open")
             : L10n.t("已就绪 · 原始状态显示需要屏幕录制权限", "Ready · Screen Recording is required for original icons") }
         settings?.update(entries: entries, message: message, captureAllowed: pictures.isAllowed,
-                         axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled, options: options)
+                         axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled,
+                         controlIcon: currentControlIcon(), controlIconIndex: options["controlIcon"] ?? 0,
+                         options: options)
+    }
+
+    private var customControlIconURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("YoungBar", isDirectory: true)
+            .appendingPathComponent("control-icon.png")
+    }
+
+    private func currentControlIcon() -> NSImage? {
+        let index = options["controlIcon"] ?? 0
+        let custom = index == ControlIcon.symbols.count ? NSImage(contentsOf: customControlIconURL) : nil
+        return ControlIcon.image(index, custom: custom)
+    }
+
+    private func applyControlIcon() {
+        let index = options["controlIcon"] ?? 0
+        let image = currentControlIcon()
+        let tint: NSColor? = index == ControlIcon.symbols.count ? nil : .labelColor
+        controlButton?.image = image
+        controlButton?.contentTintColor = tint
+    }
+
+    private func chooseControlIcon() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .tiff]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = L10n.t("选择一张图片作为菜单栏图标", "Choose an image for the menu-bar button")
+        guard panel.runModal() == .OK, let url = panel.url,
+              let source = NSImage(contentsOf: url) else { return }
+        let target = NSImage(size: NSSize(width: 36, height: 36))
+        target.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(x: 0, y: 0, width: 36, height: 36).fill()
+        source.draw(in: NSRect(x: 0, y: 0, width: 36, height: 36),
+                    from: .zero, operation: .sourceOver, fraction: 1)
+        target.unlockFocus()
+        guard let tiff = target.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+        do {
+            try FileManager.default.createDirectory(at: customControlIconURL.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try png.write(to: customControlIconURL, options: .atomic)
+            options["controlIcon"] = ControlIcon.symbols.count
+            UserDefaults.standard.set(options, forKey: "barOptions")
+            applyControlIcon()
+            renderWindow(force: true)
+        } catch {
+            NSLog("YoungBar custom icon save failed: \(error)")
+        }
     }
 
     private var launchAtLoginEnabled: Bool {

@@ -196,8 +196,11 @@ final class ThemeSwatchButton: NSButton {
                 }
                 NSGraphicsContext.restoreGraphicsState()
             } else {
-                theme.glassTint.setFill()
-                path.fill()
+                let gradient = NSGradient(colors: [
+                    theme.glassTint.withAlphaComponent(0.85),
+                    theme.glassTint.withAlphaComponent(0.35),
+                ])
+                gradient?.draw(in: path, angle: -90)
             }
             NSColor.white.withAlphaComponent(0.16).setStroke()
             path.lineWidth = 1
@@ -207,17 +210,42 @@ final class ThemeSwatchButton: NSButton {
             path.fill()
         }
 
-        (theme.isLightStrip ? NSColor.black : NSColor.white).withAlphaComponent(0.9).setFill()
-        for index in 0..<3 {
-            let dot = NSRect(x: rect.minX + 8 + CGFloat(index) * 12, y: rect.midY - 3, width: 6, height: 6)
-            NSBezierPath(ovalIn: dot).fill()
-        }
-
         if selected {
             NSColor.labelColor.setStroke()
             let ring = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: -1), xRadius: 8, yRadius: 8)
             ring.lineWidth = 2
             ring.stroke()
         }
+    }
+}
+
+
+enum ControlIcon {
+    static let symbols = ["ellipsis", "heart.fill", "star.fill", "sparkles",
+                          "pawprint.fill", "circle.grid.2x2.fill"]
+
+    static func title(_ index: Int) -> String {
+        switch index {
+        case 0: return L10n.t("省略号", "Ellipsis")
+        case 1: return L10n.t("爱心", "Heart")
+        case 2: return L10n.t("星形", "Star")
+        case 3: return L10n.t("闪光", "Sparkles")
+        case 4: return L10n.t("爪印", "Pawprint")
+        case 5: return L10n.t("网格", "Grid")
+        default: return L10n.t("自定义", "Custom")
+        }
+    }
+
+    static func image(_ index: Int, custom: NSImage?) -> NSImage? {
+        if index == symbols.count {
+            if let custom { return custom }
+            return NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)
+        }
+        guard symbols.indices.contains(index),
+              let image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: title(index)) else {
+            return NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)
+        }
+        image.isTemplate = true
+        return image
     }
 }

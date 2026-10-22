@@ -38,6 +38,8 @@
 | 隐藏 → 展开 → 收起 | ✅ 真机通过 | `selftest.json`：`appeared: true`、`goneAgain: true` |
 | 定时自动收起 | ✅ 20 秒到期后自动收起 | `selftest.json`：`expirySeconds: 20`、`autoHidden: true` |
 | 收纳条 | ✅ 黑色圆角条 | `docs/images/shelf.png` |
+| 图标体系 | ✅ 全 SF Symbols；锁定/拖动改为符号，没有 emoji | `docs/images/settings-layout.png` |
+| 菜单栏按钮 | ✅ 6 个预设 + 自定义 PNG，菜单栏实时切换 | `button.png`、`menu-button-heart.png`、`menu-button-custom.png` |
 | 统一窗口 | ✅ `fullSizeContentView`，无独立标题栏；红黄绿浮在玻璃上 | `docs/images/settings-unified.png` |
 | 设置窗口玻璃 | ✅ `NSGlassEffectView` + 主题染色 + 深浅 scrim | `docs/images/settings-glass-{dark,light}.png` |
 | 卡片式布局 | ✅ 每条独立圆角行，整行可拖，无表头/边框 |

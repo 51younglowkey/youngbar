@@ -22,6 +22,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     var onLogin: ((Bool) -> Void)?
     var onPermission: ((String) -> Void)?
     var onSpacing: ((Int) -> Void)?
+    var onCustomIcon: (() -> Void)?
 
     private let window: NSWindow
     private let glass = NSGlassEffectView()
@@ -31,6 +32,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let generalPage = NSView()
     private let layoutPage = NSView()
     private let appearancePage = NSView()
+    private let buttonPage = NSView()
     private let table = NSTableView()
     private let layoutScroll = NSScrollView()
     private let pasteType = NSPasteboard.PasteboardType("dev.leorea.youngbar.layout")
@@ -63,6 +65,9 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let appIconView = NSImageView()
     private var colorButtons: [ThemeSwatchButton] = []
     private let preview = ThemePreviewView()
+    private var iconButtons: [NSButton] = []
+    private let iconPreview = NSImageView()
+    private let customIconButton = NSButton(title: "", target: nil, action: nil)
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 660),
@@ -137,7 +142,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 
         for (index, item) in [("general", L10n.t("通用设置", "General"), "gearshape"),
                               ("layout", L10n.t("菜单栏布局", "Layout"), "list.bullet.rectangle"),
-                              ("appearance", L10n.t("外观", "Appearance"), "paintpalette")].enumerated() {
+                              ("appearance", L10n.t("外观", "Appearance"), "paintpalette"),
+                              ("button", L10n.t("按钮", "Button"), "cursorarrow")].enumerated() {
             let button = SidebarButton(title: item.1, target: self, action: #selector(navigate(_:)))
             button.identifier = .init(item.0)
             button.frame = NSRect(x: 20, y: 420 - CGFloat(index) * 40, width: 168, height: 36)
@@ -166,12 +172,15 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.frame = content.bounds
         layoutPage.frame = content.bounds
         appearancePage.frame = content.bounds
+        buttonPage.frame = content.bounds
         content.addSubview(generalPage)
         content.addSubview(layoutPage)
         content.addSubview(appearancePage)
+        content.addSubview(buttonPage)
         buildGeneralPage()
         buildLayoutPage()
         buildAppearancePage()
+        buildButtonPage()
         return root
     }
 
@@ -368,6 +377,67 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         appearancePage.addSubview(hint(L10n.t("预览使用当前主题、应用范围与收纳条样式。", "Preview uses the current palette, scope and strip style."), y: 88))
     }
 
+    private func buildButtonPage() {
+        addHeader(to: buttonPage,
+                  title: L10n.t("菜单栏按钮", "Menu-bar button"),
+                  subtitle: L10n.t("选择菜单栏上那个按钮的图标，也可以用你自己的图片。",
+                                   "Choose the glyph shown on the menu bar, or use your own image."))
+
+        buttonPage.addSubview(sectionLabel(L10n.t("图标", "Icon"), y: 520))
+        for (index, symbol) in ControlIcon.symbols.enumerated() {
+            let button = NSButton(title: "", target: self, action: #selector(iconPicked(_:)))
+            button.frame = NSRect(x: 32 + CGFloat(index) * 58, y: 466, width: 44, height: 44)
+            button.isBordered = false
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 9
+            button.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: ControlIcon.title(index))
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .labelColor
+            button.tag = index
+            button.toolTip = ControlIcon.title(index)
+            button.setAccessibilityLabel(ControlIcon.title(index))
+            iconButtons.append(button)
+            buttonPage.addSubview(button)
+        }
+
+        customIconButton.title = L10n.t("自定义图片…", "Custom image…")
+        customIconButton.target = self
+        customIconButton.action = #selector(customIconTapped)
+        customIconButton.frame = NSRect(x: 32, y: 404, width: 160, height: 30)
+        buttonPage.addSubview(customIconButton)
+
+        let reset = NSButton(title: L10n.t("恢复默认", "Reset"),
+                             target: self, action: #selector(resetIcon))
+        reset.frame = NSRect(x: 204, y: 404, width: 100, height: 30)
+        buttonPage.addSubview(reset)
+
+        buttonPage.addSubview(sectionLabel(L10n.t("预览", "Preview"), y: 360))
+        let strip = NSView(frame: NSRect(x: 32, y: 300, width: 320, height: 44))
+        strip.wantsLayer = true
+        strip.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.82).cgColor
+        strip.layer?.cornerRadius = 8
+        iconPreview.frame = NSRect(x: 148, y: 10, width: 24, height: 24)
+        iconPreview.imageScaling = .scaleProportionallyDown
+        strip.addSubview(iconPreview)
+        buttonPage.addSubview(strip)
+        buttonPage.addSubview(hint(L10n.t("自定义图片建议使用 36×36 的 PNG；图标会显示在菜单栏上。",
+                                          "A 36×36 PNG works best; the glyph appears on the menu bar."),
+                                   y: 268))
+    }
+
+    @objc private func iconPicked(_ sender: NSButton) {
+        onOption?("controlIcon", sender.tag)
+    }
+
+    @objc private func customIconTapped() {
+        onCustomIcon?()
+    }
+
+    @objc private func resetIcon() {
+        onOption?("controlIcon", 0)
+    }
+
     private func addHeader(to page: NSView, title: String, subtitle: String) {
         page.addSubview(label(title, NSRect(x: 32, y: 596, width: 400, height: 32),
                               .systemFont(ofSize: 24, weight: .semibold)))
@@ -408,6 +478,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         generalPage.isHidden = id != "general"
         layoutPage.isHidden = id != "layout"
         appearancePage.isHidden = id != "appearance"
+        buttonPage.isHidden = id != "button"
         for (key, button) in navButtons { button.selected = key == id }
         if id == "layout" { table.reloadData() }
     }
@@ -501,7 +572,8 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func update(entries: [BarEntry], message: String, captureAllowed: Bool, axTrusted: Bool,
-                launchAtLogin: Bool, options: [String: Int]) {
+                launchAtLogin: Bool, controlIcon: NSImage?, controlIconIndex: Int,
+                options: [String: Int]) {
         let changed = self.entries.map { "\($0.key):\($0.mode)" } != entries.map { "\($0.key):\($0.mode)" }
         self.entries = entries
         updateRowHeight()
@@ -535,6 +607,14 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             button.selected = index == theme.rawValue
         }
         appIconView.image = themeIcon(theme)
+        iconPreview.image = controlIcon
+        iconPreview.contentTintColor = controlIconIndex == ControlIcon.symbols.count ? nil : .white
+        for (index, button) in iconButtons.enumerated() {
+            button.layer?.borderWidth = index == controlIconIndex ? 2 : 0
+            button.layer?.borderColor = theme.accent.cgColor
+        }
+        customIconButton.layer?.borderWidth = controlIconIndex == ControlIcon.symbols.count ? 2 : 0
+        customIconButton.layer?.borderColor = theme.accent.cgColor
         let scope = ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both
         let tintedInterface = scope != .stripOnly
         for button in navButtons.values {
@@ -560,7 +640,7 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     func writeSnapshots(to directory: String) {
         let base = URL(fileURLWithPath: directory, isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        for page in ["general", "layout", "appearance"] {
+        for page in ["general", "layout", "appearance", "button"] {
             selectPage(page)
             window.contentView?.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
@@ -605,9 +685,11 @@ final class BarSettings: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         default:
             let rowHeight = tableView.rowHeight
             let view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: rowHeight))
-            let handle = NSTextField(labelWithString: entry.pinned ? "🔒" : "≡")
-            handle.frame = NSRect(x: 14, y: (rowHeight - 18) / 2, width: 18, height: 18)
-            handle.textColor = .tertiaryLabelColor
+            let handle = NSImageView(frame: NSRect(x: 14, y: (rowHeight - 14) / 2, width: 14, height: 14))
+            handle.image = NSImage(systemSymbolName: entry.pinned ? "lock.fill" : "line.3.horizontal",
+                                   accessibilityDescription: nil)
+            handle.contentTintColor = entry.pinned ? .secondaryLabelColor : .tertiaryLabelColor
+            handle.imageScaling = .scaleProportionallyDown
             view.addSubview(handle)
             let label = NSTextField(labelWithString: entry.name)
             label.frame = NSRect(x: 38, y: (rowHeight - 20) / 2, width: 254, height: 20)

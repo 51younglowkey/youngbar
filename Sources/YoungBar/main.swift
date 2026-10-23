@@ -86,6 +86,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
             // beside the live instance and shares its defaults.
             previewOnly = true
             if preview == "en" { options["language"] = 1 } else if preview == "zh" { options["language"] = 0 }
+            // In memory only: the live instance shares these defaults.
+            if let name = ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGS_PREVIEW_THEME"],
+               let theme = ["blue", "pink", "yellow", "clear"].firstIndex(of: name) {
+                options["themeColor"] = theme
+                options["themeScope"] = 0
+            }
             L10n.current = Language(rawValue: options["language"] ?? 0) ?? .chinese
             NSApp.setActivationPolicy(.accessory)
             Task { await runSettingsPreview() }
@@ -278,8 +284,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .blue
     }
 
-    private var stripStyle: StripStyle {
-        StripStyle(rawValue: options["stripStyle"] ?? 0) ?? .solid
+    private var stripOpacity: CGFloat {
+        CGFloat(stripOpacityPercent(options)) / 100
     }
 
     private var themeScope: ThemeScope {
@@ -1145,36 +1151,25 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let themed = themeScope != .interfaceOnly
         let themeForStrip: ThemeColor? = themed ? themeColor : nil
         let systemStrip = themeForStrip == nil || themeForStrip == .clear
-        let useGlass = systemStrip || stripStyle == .vibrant
         let lightStrip = systemStrip ? !isDark : false
         let iconColor: NSColor = lightStrip ? .black : .white
-        let glassTint: NSColor = systemStrip ? .clear : (themeForStrip?.glassTint ?? .clear)
-        let stripColor: NSColor = themeForStrip?.strip ?? .clear
 
-        let background: NSView
-        if useGlass {
-            let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-            effect.material = systemStrip ? (isDark ? .hudWindow : .menu) : .hudWindow
-            effect.blendingMode = .behindWindow
-            effect.state = .active
-            effect.wantsLayer = true
-            effect.layer?.cornerRadius = 8
-            effect.layer?.masksToBounds = true
-            let tint = NSView(frame: effect.bounds)
-            tint.autoresizingMask = [.width, .height]
-            tint.wantsLayer = true
-            tint.layer?.backgroundColor = glassTint.cgColor
-            effect.addSubview(tint)
-            background = effect
-        } else {
-            let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-            view.wantsLayer = true
-            view.layer?.backgroundColor = stripColor
-                .withAlphaComponent(stripStyle == .solid ? 1.0 : 0.72).cgColor
-            view.layer?.cornerRadius = 8
-            view.layer?.masksToBounds = true
-            background = view
-        }
+        // Every theme uses the same two layers: blur, then the theme colour at
+        // the chosen opacity (100% is a solid strip). Clear keeps the blur only.
+        let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        effect.material = systemStrip ? (isDark ? .hudWindow : .menu) : .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 8
+        effect.layer?.masksToBounds = true
+        let tint = NSView(frame: effect.bounds)
+        tint.autoresizingMask = [.width, .height]
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = (systemStrip ? NSColor.clear
+            : (themeForStrip?.strip ?? .clear).withAlphaComponent(stripOpacity)).cgColor
+        effect.addSubview(tint)
+        let background: NSView = effect
         let itemArea = width - gearWidth
         if keys.isEmpty {
             let label = NSTextField(labelWithString: L10n.t("没有收纳项目", "No concealed items"))
@@ -1413,7 +1408,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     renderWindow(force: true)
                     return
                 }
-                if ["appearanceMode", "themeColor", "stripStyle", "themeScope"].contains(key) {
+                if ["appearanceMode", "themeColor", "stripOpacity", "themeScope"].contains(key) {
                     applyAppearance()
                     shelfState = nil
                     if expanded { populateShelf() }
@@ -2022,15 +2017,19 @@ final class BarApp: NSObject, NSApplicationDelegate {
             return true
         }
 
-        // 1. Per-item mode menu: Shown → Hidden → Always Hidden → Shown.
+        // 1. Per-item mode buttons: Shown → Hidden → Always Hidden → Hidden → Shown.
         settings.select(.layout)
         await settle(1000)
         var modeSteps: [[String: Any]] = []
         if let target = settings.currentEntries.first(where: { !$0.pinned && $0.mode == 0 && $0.key.hasPrefix("bundle:") }) {
             result["modeTarget"] = target.key
-            for (keys, expected) in [([CGKeyCode(125)], 1), ([125], 2), ([126], 1), ([126], 0)] {
-                guard let point = popUp("row:\(target.key)") else { modeSteps.append(["error": "picker not reachable"]); break }
-                guard await pick(at: point, keys: keys, "mode") else { modeSteps.append(["error": "menu did not open"]); break }
+            for expected in [1, 2, 1, 0] {
+                guard let control = rect("mode:\(target.key)"),
+                      let point = aim(NSPoint(x: control.minX + control.width * CGFloat(2 * expected + 1) / 6,
+                                              y: control.midY), "mode") else {
+                    modeSteps.append(["error": "segment not reachable"]); break
+                }
+                await Self.postClick(at: point, button: .left)
                 await settle(1200); await waitIdle(); await settle(600)
                 modeSteps.append(["expected": expected, "stored": modes[target.key] ?? 0,
                                   "row": settings.currentEntries.first { $0.key == target.key }?.mode ?? -1])
@@ -2093,10 +2092,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let toOther: CGKeyCode = originalLanguage == 0 ? 125 : 126
         let back: CGKeyCode = originalLanguage == 0 ? 126 : 125
         for (key, expected) in [(toOther, 1 - originalLanguage), (back, originalLanguage)] {
-            guard let point = popUp("language") else { languageSteps.append(["error": "language picker not reachable"]); break }
-            guard await pick(at: point, keys: [key], "language") else { languageSteps.append(["error": "menu did not open"]); break }
-            await settle(1500)
-            languageSteps.append(["expected": expected, "stored": options["language"] ?? -1,
+            // Synthetic keys sometimes miss a freshly opened menu; one retry
+            // separates that from a real failure.
+            var attempts = 0
+            while attempts < 2 && (options["language"] ?? 0) != expected {
+                attempts += 1
+                guard let point = popUp("language"), await pick(at: point, keys: [key], "language") else { break }
+                await settle(1500)
+            }
+            languageSteps.append(["expected": expected, "stored": options["language"] ?? -1, "attempts": attempts,
                                   "title": self.settings?.windowTitle ?? "",
                                   "sameWindow": self.settings === controller,
                                   "frameUnchanged": self.settings?.windowFrame == frameBefore])
@@ -2280,7 +2284,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 settings?.select(page)
                 try? await Task.sleep(for: .milliseconds(700))
                 if let window = settings?.windowForCapture {
-                    await captureWindow(window, to: "preview-\(L10n.current == .english ? "en" : "zh")-\(suffix)-\(page.rawValue).png")
+                    let theme = ["blue", "pink", "yellow", "clear"][themeColor.rawValue]
+                    await captureWindow(window, to: "preview-\(L10n.current == .english ? "en" : "zh")-\(theme)-\(suffix)-\(page.rawValue).png")
                 }
             }
         }

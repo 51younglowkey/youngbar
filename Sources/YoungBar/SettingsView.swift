@@ -82,12 +82,13 @@ final class SettingsModel {
 
     var theme: ThemeColor { ThemeColor(rawValue: value("themeColor")) ?? .blue }
     var scope: ThemeScope { ThemeScope(rawValue: value("themeScope")) ?? .both }
-    var stripStyle: StripStyle { StripStyle(rawValue: value("stripStyle")) ?? .solid }
+    var stripOpacity: Int { stripOpacityPercent(options) }
     var tintsInterface: Bool { scope != .stripOnly }
     var accent: Color? { tintsInterface ? Color(nsColor: theme.accent) : nil }
 
-    /// The strip ignores its material when it follows the system look.
-    var stripStyleLocked: Bool { scope == .interfaceOnly || theme == .clear }
+    /// The strip has no theme colour (so no opacity) when it follows the
+    /// system look.
+    var stripTintLocked: Bool { scope == .interfaceOnly || theme == .clear }
 
     func setMode(_ key: String, _ mode: Int) {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return }
@@ -126,10 +127,11 @@ final class SettingsModel {
 
 // MARK: - Root
 
-/// The detail column. The sidebar lives in its own `NSSplitViewItem` so it
-/// gets the native floating sidebar material.
+/// The detail column. The window behind it is tinted glass (`BarSettings`);
+/// forms draw no background of their own so it shows through.
 struct SettingsDetailView: View {
     @Bindable var model: SettingsModel
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Group {
@@ -139,6 +141,18 @@ struct SettingsDetailView: View {
             case .appearance: AppearancePane(model: model)
             }
         }
+        .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Text((model.page ?? .general).title)
+                .font(.system(size: 20, weight: .semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 30)
+                .frame(height: 52)
+        }
+        // The original window's scrim: keeps text legible on busy wallpapers
+        // while the glass still reads as glass.
+        .background((colorScheme == .dark ? Color.black.opacity(0.46) : Color.white.opacity(0.58))
+            .ignoresSafeArea())
         .tint(model.accent)
         // Strings are read from L10n, so a language switch rebuilds the tree.
         .id(model.value("language"))
@@ -149,20 +163,20 @@ struct SettingsSidebar: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
-        List(selection: $model.page) {
-            AppIdentityRow(theme: model.theme)
-            Section {
-                ForEach(SettingsPage.allCases) { page in
-                    Label {
-                        Text(page.title)
-                    } icon: {
-                        SidebarIcon(symbol: page.symbol, color: color(for: page))
-                    }
-                    .tag(page)
+        VStack(spacing: 2) {
+            AppIdentityHeader(theme: model.theme)
+            ForEach(SettingsPage.allCases) { page in
+                SidebarRow(title: page.title, symbol: page.symbol, color: color(for: page),
+                           accent: model.accent ?? .accentColor, selected: (model.page ?? .general) == page) {
+                    model.page = page
                 }
             }
+            Spacer()
         }
-        .listStyle(.sidebar)
+        .padding(.horizontal, 10)
+        .padding(.top, 36)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background((model.accent ?? .clear).opacity(0.08).ignoresSafeArea())
         .id(model.value("language"))
     }
 
@@ -175,8 +189,39 @@ struct SettingsSidebar: View {
     }
 }
 
-/// The account-style row at the top of the sidebar; not selectable.
-struct AppIdentityRow: View {
+/// A sidebar entry with the theme-coloured selection of the original design.
+struct SidebarRow: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    let accent: Color
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                SidebarIcon(symbol: symbol, color: color)
+                Text(title)
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? accent.opacity(0.22) : (hovering ? Color.primary.opacity(0.06) : .clear)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// The character, name and version at the top of the sidebar; not selectable.
+struct AppIdentityHeader: View {
     let theme: ThemeColor
 
     private var version: String {
@@ -184,7 +229,7 @@ struct AppIdentityRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 6) {
             Group {
                 if let image = themeIcon(theme) {
                     Image(nsImage: image).resizable().scaledToFill()
@@ -192,16 +237,19 @@ struct AppIdentityRow: View {
                     Color.secondary.opacity(0.2)
                 }
             }
-            .frame(width: 36, height: 36)
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text("YoungBar").font(.headline)
-                Text(L10n.t("版本 \(version)", "Version \(version)"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+            Text("YoungBar")
+                .font(.system(size: 21, weight: .semibold))
+                .padding(.top, 4)
+            Text(L10n.t("版本 \(version)", "Version \(version)"))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
         .accessibilityElement(children: .combine)
     }
 }
@@ -253,7 +301,7 @@ struct GeneralPane: View {
                     Text(L10n.t("收纳条把隐藏的图标集中在一条浮动栏里；在菜单栏中展开会让它们临时回到原位。",
                                 "The strip gathers hidden icons in one floating bar; expanding puts them back in the menu bar for a while."))
                 }
-                .tint(.primary)
+                .pickerStyle(.segmented)
                 Toggle(isOn: model.boolBinding("keepShelfOpen")) {
                     Text(L10n.t("始终显示收纳条", "Keep the strip open"))
                     Text(L10n.t("点击别处时不自动关闭", "Don't close it when clicking elsewhere"))
@@ -379,7 +427,7 @@ struct LayoutPane: View {
                     Text(L10n.t("图标间隙", "Icon spacing"))
                     Text(L10n.t("写入系统全局偏好，重启电脑后生效", "Writes a global preference; takes effect after a reboot"))
                 }
-                .tint(.primary)
+                .pickerStyle(.segmented)
             } header: {
                 Text(L10n.t("间距", "Spacing"))
             }
@@ -396,14 +444,7 @@ struct LayoutRow: View {
 
     var body: some View {
         LabeledContent {
-            Picker(entry.name, selection: Binding(get: { entry.mode }, set: { model.setMode(entry.key, $0) })) {
-                Text(L10n.t("显示", "Shown")).tag(0)
-                Text(L10n.t("隐藏", "Hidden")).tag(1)
-                Text(L10n.t("始终隐藏", "Always Hidden")).tag(2)
-            }
-            .labelsHidden()
-            .fixedSize()
-            .tint(.primary)
+            ModeControl(entry: entry, model: model)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: entry.pinned ? "lock.fill" : "line.3.horizontal")
@@ -452,6 +493,25 @@ struct LayoutRow: View {
     }
 }
 
+/// Shown / Hidden / Always Hidden as three buttons, so a change is one click.
+/// Its own view type so `Form` keeps the frame modifier the self-test reads.
+struct ModeControl: View {
+    let entry: BarEntry
+    let model: SettingsModel
+
+    var body: some View {
+        Picker(entry.name, selection: Binding(get: { entry.mode }, set: { model.setMode(entry.key, $0) })) {
+            Text(L10n.t("显示", "Shown")).tag(0)
+            Text(L10n.t("隐藏", "Hidden")).tag(1)
+            Text(L10n.t("始终隐藏", "Always Hidden")).tag(2)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .settingsFrame("mode:\(entry.key)", model)
+    }
+}
+
 // MARK: - Appearance
 
 struct AppearancePane: View {
@@ -469,17 +529,20 @@ struct AppearancePane: View {
 
             Section {
                 StripPreview(color: model.scope == .interfaceOnly ? .clear : model.theme,
-                             style: model.stripStyle,
+                             opacity: CGFloat(model.stripOpacity) / 100,
                              isDark: colorScheme == .dark)
                     .frame(width: 280, height: 40)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                     .accessibilityLabel(L10n.t("收纳条预览", "Strip preview"))
-                LabeledContent {
-                    HStack(spacing: 10) {
+                HStack(alignment: .top) {
+                    Text(L10n.t("配色", "Colour"))
+                    Spacer()
+                    HStack(alignment: .top, spacing: 14) {
                         ForEach(ThemeColor.allCases, id: \.self) { theme in
                             Button { model.set("themeColor", theme.rawValue) } label: {
-                                ThemeSwatch(theme: theme, selected: theme == model.theme)
+                                ThemeSwatch(theme: theme, opacity: CGFloat(model.stripOpacity) / 100,
+                                            selected: theme == model.theme)
                             }
                             .buttonStyle(.plain)
                             .help(theme.title)
@@ -487,26 +550,34 @@ struct AppearancePane: View {
                             .accessibilityAddTraits(theme == model.theme ? .isSelected : [])
                         }
                     }
-                } label: {
-                    Text(L10n.t("配色", "Colour"))
-                    Text(model.theme.title)
                 }
                 Picker(L10n.t("应用到", "Apply to"), selection: model.intBinding("themeScope")) {
                     ForEach(ThemeScope.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
                 }
-                .tint(.primary)
-                Picker(L10n.t("收纳条材质", "Strip material"), selection: model.intBinding("stripStyle")) {
-                    ForEach(StripStyle.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-                }
                 .pickerStyle(.segmented)
-                .disabled(model.stripStyleLocked)
+                LabeledContent {
+                    HStack(spacing: 10) {
+                        Slider(value: Binding(
+                            get: { Double(model.stripOpacity) },
+                            set: { model.set("stripOpacity", Int($0.rounded())) }),
+                               in: Double(stripOpacityRange.lowerBound)...Double(stripOpacityRange.upperBound))
+                            .frame(width: 160)
+                        Text("\(model.stripOpacity)%")
+                            .monospacedDigit()
+                            .frame(minWidth: 40, alignment: .trailing)
+                    }
+                } label: {
+                    Text(L10n.t("收纳条不透明度", "Strip opacity"))
+                    Text(L10n.t("100% 为纯色，越低越透出背后的毛玻璃", "100% is solid; lower shows more of the blur behind"))
+                }
+                .disabled(model.stripTintLocked)
             } header: {
                 Text(L10n.t("主题", "Theme"))
             } footer: {
-                if model.stripStyleLocked {
+                if model.stripTintLocked {
                     Text(model.theme == .clear
-                         ? L10n.t("「透明」主题的收纳条跟随系统材质，不能单独调整。", "The Clear theme follows the system material, so the strip material can't be changed.")
-                         : L10n.t("主题只应用到界面时，收纳条使用系统材质。", "When the theme only applies to the interface, the strip uses the system material."))
+                         ? L10n.t("「透明」主题的收纳条跟随系统毛玻璃，没有主题色可调。", "The Clear theme uses the system blur only, so there is no colour to adjust.")
+                         : L10n.t("主题只应用到界面时，收纳条使用系统毛玻璃。", "When the theme only applies to the interface, the strip uses the system blur."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -516,7 +587,7 @@ struct AppearancePane: View {
                 HStack {
                     Text(L10n.t("图标", "Icon"))
                     Spacer()
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         ForEach(ControlIcon.symbols.indices, id: \.self) { index in
                             IconTile(selected: model.value("controlIcon") == index) {
                                 model.set("controlIcon", index)
@@ -552,7 +623,7 @@ struct AppearancePane: View {
             }
         } content: {
             if let image = model.customIcon {
-                Image(nsImage: image).resizable().scaledToFit().frame(width: 18, height: 18)
+                Image(nsImage: image).resizable().scaledToFit().frame(width: 22, height: 22)
             } else {
                 Image(systemName: "plus")
             }
@@ -567,37 +638,46 @@ struct AppearancePane: View {
     }
 }
 
-/// A miniature strip: the theme accent fading into the strip colour.
+/// A miniature strip drawn like the real one (blur stand-in, then the
+/// theme colour at the current opacity) with the theme name underneath.
 struct ThemeSwatch: View {
     let theme: ThemeColor
+    let opacity: CGFloat
     let selected: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        Group {
-            if theme.isTransparent {
-                Canvas { context, size in
-                    let cell = size.height / 2
-                    for row in 0..<2 {
-                        for column in 0..<Int((size.width / cell).rounded(.up)) {
-                            let light = (row + column) % 2 == 0
-                            context.fill(Path(CGRect(x: CGFloat(column) * cell, y: CGFloat(row) * cell,
-                                                     width: cell, height: cell)),
-                                         with: .color(light ? Color.white.opacity(0.55) : Color.gray.opacity(0.45)))
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        VStack(spacing: 6) {
+            ZStack {
+                Color(white: colorScheme == .dark ? 0.24 : 0.86).opacity(colorScheme == .dark ? 0.55 : 0.72)
+                if theme.isTransparent {
+                    Canvas { context, size in
+                        let cell = size.height / 2
+                        for row in 0..<2 {
+                            for column in 0..<Int((size.width / cell).rounded(.up)) where (row + column) % 2 == 0 {
+                                context.fill(Path(CGRect(x: CGFloat(column) * cell, y: CGFloat(row) * cell,
+                                                         width: cell, height: cell)),
+                                             with: .color(Color.white.opacity(0.35)))
+                            }
                         }
                     }
+                } else {
+                    Color(nsColor: theme.strip).opacity(opacity)
                 }
-            } else {
-                LinearGradient(colors: [Color(nsColor: theme.accent), Color(nsColor: theme.strip)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
             }
+            .frame(width: 52, height: 26)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+            .padding(3)
+            .overlay(RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                .strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2))
+            Text(theme.title)
+                .font(.system(size: 11))
+                .foregroundStyle(selected ? .primary : .secondary)
+                .multilineTextAlignment(.center)
+                .frame(width: 72)
         }
-        .frame(width: 36, height: 22)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
-        .padding(3)
-        .overlay(RoundedRectangle(cornerRadius: 8.5, style: .continuous)
-            .strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2))
         .contentShape(Rectangle())
     }
 }
@@ -610,11 +690,11 @@ struct IconTile<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content()
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quaternary))
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 40, height: 40)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.quaternary))
                 .padding(2)
-                .overlay(RoundedRectangle(cornerRadius: 8.5, style: .continuous)
+                .overlay(RoundedRectangle(cornerRadius: 10.5, style: .continuous)
                     .strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2))
                 .contentShape(Rectangle())
         }
@@ -625,14 +705,14 @@ struct IconTile<Content: View>: View {
 
 struct StripPreview: NSViewRepresentable {
     let color: ThemeColor
-    let style: StripStyle
+    let opacity: CGFloat
     let isDark: Bool
 
     func makeNSView(context: Context) -> ThemePreviewView { ThemePreviewView() }
 
     func updateNSView(_ view: ThemePreviewView, context: Context) {
         view.color = color
-        view.style = style
+        view.opacity = opacity
         view.isDark = isDark
     }
 }

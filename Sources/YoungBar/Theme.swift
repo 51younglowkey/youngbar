@@ -24,8 +24,12 @@ enum AppearanceMode: Int, CaseIterable {
     }
 }
 
-/// Accent + strip palette. The strip colour is deliberately deeper than the
-/// accent so menu-bar symbols stay legible; white uses dark symbols instead.
+/// Accent + strip palette. The three colours share one lightness and
+/// chroma in OKLCH and differ only in hue, so none of them reads brighter or
+/// greyer than the others:
+///   accent  L 0.70  C 0.13      strip  L 0.55  C 0.12
+///   hue     blue 255°, pink 355°, yellow 75°
+/// The strip tone is the darker one so white menu-bar symbols stay legible.
 enum ThemeColor: Int, CaseIterable {
     case blue, pink, yellow, clear
 
@@ -40,33 +44,23 @@ enum ThemeColor: Int, CaseIterable {
 
     var accent: NSColor {
         switch self {
-        case .blue: return NSColor(calibratedRed: 0.20, green: 0.45, blue: 0.95, alpha: 1)
-        case .pink: return NSColor(calibratedRed: 0.85, green: 0.48, blue: 0.60, alpha: 1)
-        case .yellow: return NSColor(calibratedRed: 0.90, green: 0.72, blue: 0.36, alpha: 1)
+        case .blue: return NSColor(srgbRed: 0.392, green: 0.630, blue: 0.907, alpha: 1)
+        case .pink: return NSColor(srgbRed: 0.865, green: 0.479, blue: 0.636, alpha: 1)
+        case .yellow: return NSColor(srgbRed: 0.804, green: 0.570, blue: 0.282, alpha: 1)
         case .clear: return NSColor(calibratedWhite: 0.55, alpha: 1)
         }
     }
 
     var strip: NSColor {
         switch self {
-        case .blue: return NSColor(calibratedRed: 0.16, green: 0.38, blue: 0.72, alpha: 1)
-        case .pink: return NSColor(calibratedRed: 0.29, green: 0.12, blue: 0.17, alpha: 1)
-        case .yellow: return NSColor(calibratedRed: 0.33, green: 0.23, blue: 0.06, alpha: 1)
+        case .blue: return NSColor(srgbRed: 0.239, green: 0.450, blue: 0.692, alpha: 1)
+        case .pink: return NSColor(srgbRed: 0.652, green: 0.316, blue: 0.457, alpha: 1)
+        case .yellow: return NSColor(srgbRed: 0.603, green: 0.397, blue: 0.126, alpha: 1)
         case .clear: return .clear
         }
     }
 
-    var isLightStrip: Bool { false }
     var isTransparent: Bool { self == .clear }
-
-    /// Tint applied when the strip is rendered as glass.
-    var glassTint: NSColor {
-        switch self {
-        case .blue: return NSColor(calibratedRed: 0.12, green: 0.42, blue: 0.95, alpha: 0.55)
-        case .clear: return .clear
-        default: return accent.withAlphaComponent(0.18)
-        }
-    }
 
     var iconResource: String? {
         switch self {
@@ -91,16 +85,16 @@ enum ThemeScope: Int, CaseIterable {
     }
 }
 
-enum StripStyle: Int, CaseIterable {
-    case solid, translucent, vibrant
+/// How opaque the theme colour is over the strip's blur, in percent;
+/// 100 is a solid strip. Older settings stored a three-way `stripStyle`
+/// (solid / translucent / glass), which maps onto the same scale.
+let stripOpacityRange = 30...100
 
-    var title: String {
-        switch self {
-        case .solid: return L10n.t("纯色", "Solid")
-        case .translucent: return L10n.t("半透明", "Translucent")
-        case .vibrant: return L10n.t("毛玻璃", "Glass")
-        }
+func stripOpacityPercent(_ options: [String: Int]) -> Int {
+    if let percent = options["stripOpacity"] {
+        return min(max(percent, stripOpacityRange.lowerBound), stripOpacityRange.upperBound)
     }
+    return [100, 72, 55][min(max(options["stripStyle"] ?? 0, 0), 2)]
 }
 
 /// Tints a transparent menu-bar crop (white symbols) to black for light strips.
@@ -125,10 +119,11 @@ func themeIcon(_ color: ThemeColor) -> NSImage? {
     return NSApp.applicationIconImage
 }
 
-/// Small sample of the strip for the settings window.
+/// Small sample of the strip for the settings window. Draws the same layers
+/// as the real strip: a blur stand-in, then the theme colour at `opacity`.
 final class ThemePreviewView: NSView {
     var color: ThemeColor = .blue { didSet { needsDisplay = true } }
-    var style: StripStyle = .solid { didSet { needsDisplay = true } }
+    var opacity: CGFloat = 1 { didSet { needsDisplay = true } }
     var isDark: Bool = true { didSet { needsDisplay = true } }
 
     override var isFlipped: Bool { true }
@@ -136,26 +131,17 @@ final class ThemePreviewView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let rect = bounds.insetBy(dx: 1, dy: 1)
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-        if color.isTransparent {
-            NSColor(white: isDark ? 0.24 : 0.86, alpha: isDark ? 0.55 : 0.72).setFill()
+        NSColor(white: isDark ? 0.24 : 0.86, alpha: isDark ? 0.55 : 0.72).setFill()
+        path.fill()
+        if !color.isTransparent {
+            color.strip.withAlphaComponent(opacity).setFill()
             path.fill()
-            if color == .blue {
-                color.glassTint.setFill(); path.fill()
-            }
-            NSColor.white.withAlphaComponent(0.14).setStroke(); path.lineWidth = 1; path.stroke()
-        } else {
-            switch style {
-            case .solid:
-                color.strip.setFill(); path.fill()
-            case .translucent:
-                color.strip.withAlphaComponent(0.72).setFill(); path.fill()
-            case .vibrant:
-                color.strip.withAlphaComponent(0.55).setFill(); path.fill()
-                NSColor.white.withAlphaComponent(0.14).setStroke(); path.lineWidth = 1; path.stroke()
-            }
         }
+        NSColor.white.withAlphaComponent(0.14).setStroke()
+        path.lineWidth = 1
+        path.stroke()
 
-        let symbolColor: NSColor = (color == .clear && !isDark) || color.isLightStrip ? .black : .white
+        let symbolColor: NSColor = color == .clear && !isDark ? .black : .white
 
         func drawSymbol(_ name: String, x: CGFloat, height: CGFloat = 14) -> CGFloat {
             guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?

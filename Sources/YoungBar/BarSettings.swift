@@ -29,6 +29,7 @@ final class BarSettings: NSObject {
 
     private let window: NSWindow
     private let model = SettingsModel()
+    private let glass = NSGlassEffectView()
     private(set) var refreshClickCount = 0
 
     override init() {
@@ -38,15 +39,31 @@ final class BarSettings: NSObject {
         super.init()
         window.title = SettingsPage.general.title
         window.isReleasedWhenClosed = false
-        window.toolbarStyle = .unified
-        window.toolbar = NSToolbar(identifier: "YoungBarSettings")
+        // No toolbar: the traffic lights float on the glass and each page
+        // draws its own title. `title` still names the window in Mission
+        // Control and the Window menu.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
 
-        // An AppKit split view gives the sidebar the native floating
-        // material; both columns are SwiftUI.
+        // The whole window is tinted glass, as before the SwiftUI move. The
+        // sidebar adds the translucent behind-window sidebar material on top;
+        // the detail column is transparent and only lays a light scrim.
+        window.isOpaque = false
+        window.backgroundColor = .clear
         let split = NSSplitViewController()
         let sidebarHost = NSHostingController(rootView: SettingsSidebar(model: model))
         sidebarHost.sizingOptions = []
-        let sidebar = NSSplitViewItem(sidebarWithViewController: sidebarHost)
+        let sidebarMaterial = NSVisualEffectView()
+        sidebarMaterial.material = .sidebar
+        sidebarMaterial.blendingMode = .behindWindow
+        sidebarMaterial.state = .followsWindowActiveState
+        let sidebarController = NSViewController()
+        sidebarController.view = sidebarMaterial
+        sidebarController.addChild(sidebarHost)
+        sidebarHost.view.frame = sidebarMaterial.bounds
+        sidebarHost.view.autoresizingMask = [.width, .height]
+        sidebarMaterial.addSubview(sidebarHost.view)
+        let sidebar = NSSplitViewItem(viewController: sidebarController)
         sidebar.minimumThickness = 220
         sidebar.maximumThickness = 220
         sidebar.canCollapse = false
@@ -56,7 +73,15 @@ final class BarSettings: NSObject {
         detail.minimumThickness = 500
         split.addSplitViewItem(sidebar)
         split.addSplitViewItem(detail)
-        window.contentViewController = split
+        split.splitView.dividerStyle = .thin
+
+        glass.style = .regular
+        glass.cornerRadius = 0
+        let root = NSViewController()
+        root.view = glass
+        root.addChild(split)
+        glass.contentView = split.view
+        window.contentViewController = root
 
         window.minSize = NSSize(width: 740, height: 480)
         window.setContentSize(NSSize(width: 760, height: 620))
@@ -111,6 +136,9 @@ final class BarSettings: NSObject {
         if model.axTrusted != axTrusted { model.axTrusted = axTrusted }
         if model.launchAtLogin != launchAtLogin { model.launchAtLogin = launchAtLogin }
         if model.customIcon !== customIcon { model.customIcon = customIcon }
+        let theme = ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .blue
+        let tinted = (ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both) != .stripOnly
+        glass.tintColor = tinted && theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil
     }
 
     // MARK: - Self-test support

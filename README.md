@@ -18,7 +18,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
 - **Menu Bar page**: every item in menu-bar order with a Shown / Hidden / Always Hidden menu; drag a row or right-click it to reorder. Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
-- **Appearance**: system / light / dark, four palettes (blue glass, pink, yellow, neutral clear that follows the system light/dark) with mini-strip swatches, theme-matched sidebar icons for blue/pink/yellow, a three-way scope (interface + strip / interface only / strip only), and solid / translucent / vibrant strip materials.
+- **Appearance**: system / light / dark; three palettes (blue, pink, yellow) with matched lightness and saturation, plus a neutral clear one that follows the system; a theme-tinted glass settings window with the theme character in the sidebar; a three-way scope (interface + strip / interface only / strip only); and one strip opacity slider (30–100%, 100% is solid).
 - **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or your own 36×36 PNG.
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Crash-safe**: a normal quit reveals every concealed item first; if the previous session died, the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.

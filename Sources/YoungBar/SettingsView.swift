@@ -56,7 +56,6 @@ final class SettingsModel {
     var options: [String: Int] = [:]
     var launchAtLogin = false
     var axTrusted = false
-    var captureAllowed = false
     var message = ""
     var customIcon: NSImage?
 
@@ -142,13 +141,21 @@ struct SettingsDetailView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        // The title is its own strip of glass at the very top, level with
+        // the traffic lights; content scrolling underneath is blurred
+        // instead of running into the title.
         .safeAreaInset(edge: .top, spacing: 0) {
             Text((model.page ?? .general).title)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 30)
                 .frame(height: 52)
+                .background(.ultraThinMaterial)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
+                }
         }
+        .ignoresSafeArea(.container, edges: .top)
         // The original window's scrim: keeps text legible on busy wallpapers
         // while the glass still reads as glass.
         .background((colorScheme == .dark ? Color.black.opacity(0.46) : Color.white.opacity(0.58))
@@ -293,15 +300,15 @@ struct GeneralPane: View {
             }
 
             Section {
-                Picker(selection: model.intBinding("nativeExpand")) {
-                    Text(L10n.t("打开收纳条", "Open the strip")).tag(0)
-                    Text(L10n.t("在菜单栏中展开", "Expand in the menu bar")).tag(1)
+                LabeledContent {
+                    SegmentedButtons(options: [L10n.t("打开收纳条", "Open strip"),
+                                               L10n.t("在菜单栏中展开", "Show in bar")],
+                                     selection: model.intBinding("nativeExpand"), width: 240)
                 } label: {
                     Text(L10n.t("点击 ••• 时", "When clicking •••"))
                     Text(L10n.t("收纳条把隐藏的图标集中在一条浮动栏里；在菜单栏中展开会让它们临时回到原位。",
-                                "The strip gathers hidden icons in one floating bar; expanding puts them back in the menu bar for a while."))
+                                "The strip gathers hidden icons; Show in bar puts them back for a while."))
                 }
-                .pickerStyle(.segmented)
                 Toggle(isOn: model.boolBinding("keepShelfOpen")) {
                     Text(L10n.t("始终显示收纳条", "Keep the strip open"))
                     Text(L10n.t("点击别处时不自动关闭", "Don't close it when clicking elsewhere"))
@@ -332,9 +339,6 @@ struct GeneralPane: View {
                 PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
                               detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
                               granted: model.axTrusted) { model.send(.permission("accessibility")) }
-                PermissionRow(title: L10n.t("屏幕录制", "Screen Recording"),
-                              detail: L10n.t("在收纳条中显示原始菜单栏图标", "Show original menu-bar icons in the strip"),
-                              granted: model.captureAllowed) { model.send(.permission("screen")) }
             } header: {
                 Text(L10n.t("权限", "Permissions"))
             }
@@ -410,24 +414,23 @@ struct LayoutPane: View {
                 Text(L10n.t("按菜单栏中的顺序，从左到右", "In menu-bar order, left to right"))
             } footer: {
                 Text(L10n.t("把一行拖到另一行上即可换到那个位置，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
-                            "Drag a row onto another to take its place, or right-click it to reorder. Locked items are placed by macOS but can still be hidden. Always Hidden items only appear in the strip when you ⌥-click •••."))
+                            "Drag a row onto another, or right-click it, to reorder. Locked items stay where macOS puts them but can be hidden. Always Hide items appear in the strip only when you ⌥-click •••."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Picker(selection: Binding(
-                    get: { model.value("iconSpacing") },
-                    set: { model.options["iconSpacing"] = $0; model.send(.spacing($0)) })) {
-                    Text(L10n.t("默认", "Default")).tag(0)
-                    Text(L10n.t("较小", "Smaller")).tag(1)
-                    Text(L10n.t("小", "Small")).tag(2)
-                    Text(L10n.t("无", "None")).tag(3)
+                LabeledContent {
+                    SegmentedButtons(options: [L10n.t("默认", "Default"), L10n.t("较小", "Smaller"),
+                                               L10n.t("小", "Small"), L10n.t("无", "None")],
+                                     selection: Binding(
+                                        get: { model.value("iconSpacing") },
+                                        set: { model.options["iconSpacing"] = $0; model.send(.spacing($0)) }),
+                                     width: 252)
                 } label: {
                     Text(L10n.t("图标间隙", "Icon spacing"))
                     Text(L10n.t("写入系统全局偏好，重启电脑后生效", "Writes a global preference; takes effect after a reboot"))
                 }
-                .pickerStyle(.segmented)
             } header: {
                 Text(L10n.t("间距", "Spacing"))
             }
@@ -473,7 +476,7 @@ struct LayoutRow: View {
                 .padding(.horizontal, -6)
                 .padding(.vertical, -4)
         }
-        .movable(!entry.pinned, key: entry.key)
+        .movable(!entry.pinned, key: entry.key) { LayoutDragPreview(entry: entry) }
         .dropDestination(for: String.self) { keys, _ in
             model.drop(keys.first, on: entry.key)
         } isTargeted: { targeted = $0 }
@@ -493,22 +496,100 @@ struct LayoutRow: View {
     }
 }
 
-/// Shown / Hidden / Always Hidden as three buttons, so a change is one click.
+/// What follows the pointer while a row is dragged: the whole row as one
+/// card (handle, icon, name, current state) rather than just its icon.
+struct LayoutDragPreview: View {
+    let entry: BarEntry
+
+    private var state: String {
+        [L10n.t("显示", "Show"), L10n.t("隐藏", "Hide"), L10n.t("始终隐藏", "Always Hide")][min(max(entry.mode, 0), 2)]
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Group {
+                if let image = entry.image {
+                    Image(nsImage: image).resizable().scaledToFit()
+                } else {
+                    Image(systemName: "app.dashed")
+                }
+            }
+            .frame(width: 20, height: 20)
+            Text(entry.name).lineLimit(1)
+            Spacer(minLength: 12)
+            Text(state)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .frame(width: 360, height: 40)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.96)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+    }
+}
+
+/// Show / Hide / Always Hide as three buttons, so a change is one click.
 /// Its own view type so `Form` keeps the frame modifier the self-test reads.
 struct ModeControl: View {
     let entry: BarEntry
     let model: SettingsModel
 
     var body: some View {
-        Picker(entry.name, selection: Binding(get: { entry.mode }, set: { model.setMode(entry.key, $0) })) {
-            Text(L10n.t("显示", "Shown")).tag(0)
-            Text(L10n.t("隐藏", "Hidden")).tag(1)
-            Text(L10n.t("始终隐藏", "Always Hidden")).tag(2)
+        SegmentedButtons(options: [L10n.t("显示", "Show"), L10n.t("隐藏", "Hide"), L10n.t("始终隐藏", "Always Hide")],
+                         selection: Binding(get: { entry.mode }, set: { model.setMode(entry.key, $0) }),
+                         width: 270)
+            .accessibilityLabel(entry.name)
+            .settingsFrame("mode:\(entry.key)", model)
+    }
+}
+
+/// Equal-width segments drawn by YoungBar instead of `NSSegmentedControl`:
+/// the native control hides the dividers next to the selected segment and
+/// sizes segments by their (bold when selected) labels, so rows didn't line
+/// up. Here every divider is always drawn and the width never changes.
+struct SegmentedButtons: View {
+    let options: [String]
+    @Binding var selection: Int
+    let width: CGFloat
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options.indices, id: \.self) { index in
+                Button { selection = index } label: {
+                    Text(options[index])
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(index == selection ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background {
+                            if index == selection {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(.tint)
+                                    .padding(2)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(options[index])
+                .accessibilityAddTraits(index == selection ? .isSelected : [])
+                if index < options.count - 1 {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.18))
+                        .frame(width: 1, height: 12)
+                }
+            }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-        .settingsFrame("mode:\(entry.key)", model)
+        .frame(width: width, height: 26)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quaternary))
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -521,10 +602,10 @@ struct AppearancePane: View {
     var body: some View {
         Form {
             Section {
-                Picker(L10n.t("外观", "Appearance"), selection: model.intBinding("appearanceMode")) {
-                    ForEach(AppearanceMode.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                LabeledContent(L10n.t("外观", "Appearance")) {
+                    SegmentedButtons(options: AppearanceMode.allCases.map(\.title),
+                                     selection: model.intBinding("appearanceMode"), width: 252)
                 }
-                .pickerStyle(.segmented)
             }
 
             Section {
@@ -538,7 +619,7 @@ struct AppearancePane: View {
                 HStack(alignment: .top) {
                     Text(L10n.t("配色", "Colour"))
                     Spacer()
-                    HStack(alignment: .top, spacing: 14) {
+                    HStack(alignment: .top, spacing: 8) {
                         ForEach(ThemeColor.allCases, id: \.self) { theme in
                             Button { model.set("themeColor", theme.rawValue) } label: {
                                 ThemeSwatch(theme: theme, opacity: CGFloat(model.stripOpacity) / 100,
@@ -551,10 +632,10 @@ struct AppearancePane: View {
                         }
                     }
                 }
-                Picker(L10n.t("应用到", "Apply to"), selection: model.intBinding("themeScope")) {
-                    ForEach(ThemeScope.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                LabeledContent(L10n.t("应用到", "Apply to")) {
+                    SegmentedButtons(options: ThemeScope.allCases.map(\.title),
+                                     selection: model.intBinding("themeScope"), width: 300)
                 }
-                .pickerStyle(.segmented)
                 LabeledContent {
                     HStack(spacing: 10) {
                         Slider(value: Binding(
@@ -568,7 +649,7 @@ struct AppearancePane: View {
                     }
                 } label: {
                     Text(L10n.t("收纳条不透明度", "Strip opacity"))
-                    Text(L10n.t("100% 为纯色，越低越透出背后的毛玻璃", "100% is solid; lower shows more of the blur behind"))
+                    Text(L10n.t("100% 为纯色，越低越透出背后的毛玻璃", "100% is solid; lower is more see-through"))
                 }
                 .disabled(model.stripTintLocked)
             } header: {
@@ -675,8 +756,9 @@ struct ThemeSwatch: View {
             Text(theme.title)
                 .font(.system(size: 11))
                 .foregroundStyle(selected ? .primary : .secondary)
-                .multilineTextAlignment(.center)
-                .frame(width: 72)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(width: 86)
         }
         .contentShape(Rectangle())
     }
@@ -718,10 +800,12 @@ struct StripPreview: NSViewRepresentable {
 }
 
 extension View {
-    /// Lets a menu-bar row be dragged onto another row.
+    /// Lets a menu-bar row be dragged onto another row; `preview` is what
+    /// follows the pointer.
     @ViewBuilder
-    func movable(_ enabled: Bool, key: String) -> some View {
-        if enabled { draggable(key) } else { self }
+    func movable<Preview: View>(_ enabled: Bool, key: String,
+                                @ViewBuilder preview: @escaping () -> Preview) -> some View {
+        if enabled { draggable(key, preview: preview) } else { self }
     }
 
     /// Records the control's frame so self-tests can click it.

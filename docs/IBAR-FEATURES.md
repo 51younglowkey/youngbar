@@ -89,3 +89,31 @@ A concealed item disappears from the AX item tree and ceases drawing in the avai
 A complete behavior-for-behavior clone has not been achieved. The table above retains explicit gaps instead of promoting resource discovery or compilation to live verification.
 
 A native-expand mode has also been implemented: clicking the control reveals all normally hidden items together, and the next click reconceals them. Always Hidden remains separate. It is compiled but not yet tested live.
+
+## How iBar opens a hidden item "in place" (static analysis, 2026-10-23)
+
+Method: `nm -u`, `otool -ov` (Objective-C metadata) and `otool -tV` on the arm64 slice of `/Applications/iBar Pro.app` 1.4.6, with `__objc_stubs` mapped back to selector names. Static reading only; iBar was not run (it does not work on macOS 27 here). Conclusions are about what the code calls, not observed behaviour.
+
+- iBar never reads another app's menu. The binary imports no `AXUIElementCopyAttributeValue` / `AXUIElementPerformAction` at all; its only AX import is `AXIsProcessTrustedWithOptions`.
+- A click on an icon in iBar's own bar goes `Click:` → `showIconWithWindowIDOverMacOS26:ofPID:` (or `showIconWithWindowID:ofPID:` before macOS 26). That method hides the cursor, warps it, posts a three-event mouse sequence with modifier flags (`CGEventCreateMouseEvent` + `CGEventSetFlags` + `CGEventPost`, i.e. a ⌘-drag of the real status item window found by window ID), computes the target from `getOnScreenMenuBarRect` / `getMenuBarViewSpace` / the notch rect, then sends the click straight to the owning process with `CGEventPostToPid`, and finally restores the cursor. It also changes its own bar window's level around the move.
+- Hiding again (`moveIconWithWindowID2:ofPID:withRect:atX:`, called from `displayOrHiddenMenuBarItems`, start-up sorting and quit) is the same ⌘-drag in reverse.
+- So the effect is: the real item is physically dragged next to iBar's bar, and the app opens its own menu or panel there. Every item type works, because nothing is redrawn.
+- Why it fails on macOS 27 (inference): it depends on per-app status-item windows addressed by `CGWindowID` and on dragging them; on macOS 27 the items are hosted by the system menu-bar agent (see `ItemEnumerator`'s stand-ins), which is also why YoungBar hides through the assessment interface instead.
+
+## Can the strip show an item's menu itself? (live probe, 2026-10-23)
+
+A one-off probe (since removed from the code) opened each item once and read its menu through the owning app's `AXExtrasMenuBar`:
+
+| Item | Menu readable through AX | Notes |
+|---|---|---|
+| ChatGPT | yes, before opening (6 entries) | could be redrawn in place without revealing |
+| 输入法 | only after opening (1 → 21 entries) | needs one reveal first |
+| CodexBar | 18 entries, no titles | custom item views; text copy would be wrong |
+| Claude, iFan, WeChat, State | no menu | open their own panel or window |
+| Wi-Fi, 电池, 控制中心, 日期与时间 | no menu | Control Center modules |
+
+Redrawing menus would help at most two of eleven items, so YoungBar does not redraw them.
+
+## What YoungBar does instead (2026-10-23)
+
+The same probe showed every third-party `AXMenuBarItem` offers `AXPress`, and a follow-up showed it works **while the item is still concealed**: ChatGPT's menu, iFan's panel and Claude's window opened under the item's (hidden) slot, next to the strip, with no reveal, no pointer movement and no shift of the bar. So a strip click presses third-party items in place; only system items (Wi-Fi, battery, Control Center, clock), which expose no press action, are revealed and clicked, with the pointer hidden. The strip hangs to the left of the control so these menus open beside it rather than over it.

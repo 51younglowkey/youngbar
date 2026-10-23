@@ -11,8 +11,8 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 ## Features
 
 - **Three states per item**: Visible, Hidden, Always Hidden (⌥-click to include Always Hidden in the strip).
-- **Instant strip**: opening reads a cached menu-bar crop; it never reveals items just to paint the strip (measured ~21 ms, 0 revealed items).
-- **Original menu-bar pixels**: ScreenCaptureKit samples only the menu-bar band. Clock and battery always use a symbol fallback so a stale time/percentage is never shown.
+- **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything.
+- **Open in place**: clicking a third-party item in the strip presses it through Accessibility while it stays hidden, so its menu or panel opens beside the strip without the bar shifting or the pointer moving. System items are revealed and clicked with the pointer hidden.
 - **Click-through**: a synthetic HID click delivers the press to the owning app; menus and panels open natively.
 - **Reorder**: ⌘-drag in the real menu bar (verified with a swap-and-restore test) and drag rows in the layout table.
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
@@ -22,9 +22,8 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 - **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or your own 36×36 PNG.
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Crash-safe**: a normal quit reveals every concealed item first; if the previous session died, the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
-- **Bounded cache**: at most 120 crops, 14 days, 8 MB; the menu can clear it at any time.
 - **Bilingual**: Chinese and English, switchable in General settings; theme names are localised (`怎怎瓦岗蓝` / Hachiware Blue, `羊霸霸粉` / Chiikawa Pink, `乌拉黄` / Usagi Yellow).
-- **Local only**: no telemetry, no network. Menu-bar crops are cached in `~/Library/Application Support/YoungBar/pictures.json` and can be cleared from the menu.
+- **Local only**: no telemetry, no network, no screen capture.
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 
@@ -45,14 +44,13 @@ open build/YoungBar.app
 | Permission | Why | Without it |
 |---|---|---|
 | **Device Control and Data Access** (Accessibility on macOS 27) | enumerate, hide, reveal and reorder menu-bar items | the strip is empty; only settings work |
-| **Screen & System Audio Recording** | sample original menu-bar pixels | app-icon fallback |
 
 Ad-hoc builds are re-signed on every build. If macOS stops recognizing the app, remove it from the permission list and add it again. A notarized Developer ID build removes this friction.
 
 ## How it works (and the trade-offs)
 
 - Hiding uses the private `MenuBarClientCore` assessment interface. It works on macOS 27 but is not a public API and may break on future releases. This app cannot be shipped on the App Store.
-- The strip shows **cached** pixels. A fresh capture requires temporarily revealing concealed items, which makes the bar flash — that is why capture happens only on first run, after an explicit **刷新原始图标**, or when the cache is cleared.
+- The strip shows app icons, not the items' live menu-bar content: a concealed item is not drawn by macOS 27, so there is nothing current to show, and a screenshot would be stale and blurry. Items whose value you watch belong in the visible part of the bar.
 - Dynamic items are never cached: clock and battery use SF Symbols; third-party dynamic content (fan RPM, percentages) shows the acquisition time in its tooltip.
 
 ## Status

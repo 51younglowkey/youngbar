@@ -52,11 +52,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private var catalog: [String: ObservedItem] = [:]
     private var presentKeys: Set<String> = []
     private var shownUntil: [ItemID: Date] = [:]
-    private let pictures = StatusPictures()
     private var settings: BarSettings?
     private var busy = false
     private var refreshing = false
-    private var capturing = false
     private var includeAlwaysHidden = false
     private var feedback = ""
     private var options = UserDefaults.standard.dictionary(forKey: "barOptions") as? [String: Int] ?? [:]
@@ -76,6 +74,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var shelfState: String?
+    /// After an item is opened from the strip, the strip stays where it was
+    /// (no re-centring on the control as the revealed item shifts it) until
+    /// the strip closes.
+    private var shelfAnchored = false
+    /// The strip's own synthetic click on the revealed item is not a click
+    /// outside the strip.
+    private var ignoreOutsideUntil: Date?
     /// Set by `YOUNGBAR_SETTINGS_PREVIEW`: only the settings window runs.
     private var previewOnly = false
     private lazy var customIconImage: NSImage? = NSImage(contentsOf: customControlIconURL)
@@ -127,10 +132,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             await installControlPanelWhenReady()
             await refresh()
             Diagnostics.write(app: self, snapshot: nil)
-            if pictures.isAllowed && pictures.pictures.isEmpty {
-                try? await Task.sleep(for: .seconds(2))
-                await refreshShelfPictures()
-            }
             if ProcessInfo.processInfo.environment["YOUNGBAR_TOPSHOT"] == "1" {
                 try? await Task.sleep(for: .milliseconds(1800))
                 await captureScreen(to: "top-full.png")
@@ -139,9 +140,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 showWindow()
                 try? await Task.sleep(for: .milliseconds(500))
                 await settings?.writeSnapshots(to: directory)
-                writeShelfSnapshot(to: directory)
-            }
-            if let directory = ProcessInfo.processInfo.environment["YOUNGBAR_SNAPSHOT_DIR"] {
                 writeShelfSnapshot(to: directory)
             }
             if ProcessInfo.processInfo.environment["YOUNGBAR_SELFTEST"] == "1" {
@@ -177,14 +175,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if ProcessInfo.processInfo.environment["YOUNGBAR_PINNEDTEST"] == "1" {
                 await runPinnedHideTest()
             }
-            if ProcessInfo.processInfo.environment["YOUNGBAR_CACHETEST"] == "1" {
-                await runCacheTest()
-            }
             if ProcessInfo.processInfo.environment["YOUNGBAR_HOTKEYTEST"] == "1" {
                 await runHotKeyTest()
-            }
-            if ProcessInfo.processInfo.environment["YOUNGBAR_ALWAYSHIDDENTEST"] == "1" {
-                await runAlwaysHiddenTest()
             }
             if ProcessInfo.processInfo.environment["YOUNGBAR_ABOUTTEST"] == "1" {
                 await runAboutTest()
@@ -215,7 +207,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if let raw = ProcessInfo.processInfo.environment["YOUNGBAR_CLOSEWINDOW_PID"], let pid = pid_t(raw) {
                 await runWindowCleanup(pid: pid)
             }
-            if options["keepShelfOpen"] == 1 { showShelf(); await refreshShelfPictures() }
+            if options["keepShelfOpen"] == 1 { showShelf() }
         }
     }
 
@@ -271,8 +263,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     await refresh()
                     await revealHiddenSection()
                 } else {
-                    // Open from the cached pictures first; never reveal items
-                    // just to paint the strip.
+                    // The strip shows app icons; never reveal items to open it.
                     showShelf()
                     await refresh()
                 }
@@ -905,7 +896,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// real bar. Whenever the visible items disagree with their saved order,
     /// rewrite just those slots to the actual left-to-right order and persist.
     private func reconcileVisibleOrder(_ snapshot: EngineSnapshot) {
-        guard !busy, !capturing else { return }
+        guard !busy else { return }
         let actual = uniqueKeys(snapshot.items
             .filter { $0.frame != nil }
             .sorted { ($0.frame?.minX ?? 0) < ($1.frame?.minX ?? 0) }
@@ -991,8 +982,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             menu.addItem(withTitle: L10n.t("恢复我的收纳配置", "Restore my layout"), action: #selector(restoreAppModes), keyEquivalent: "")
             menu.addItem(.separator())
             menu.addItem(withTitle: L10n.t("刷新图标列表", "Refresh item list"), action: #selector(refreshClicked), keyEquivalent: "")
-            menu.addItem(withTitle: L10n.t("刷新原始图标（会短暂显示）", "Refresh original icons (briefly reveals)"), action: #selector(refreshPicturesNow), keyEquivalent: "")
-            menu.addItem(withTitle: L10n.t("清除图标缓存", "Clear icon cache"), action: #selector(clearPictureCache), keyEquivalent: "")
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.t("打开设置窗口", "Open Settings"), action: #selector(showWindow), keyEquivalent: "")
@@ -1076,9 +1065,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     private func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
-        // While a picture pass temporarily reveals items, keep the control
-        // anchored instead of chasing the moving leading icon.
-        guard !capturing, let panel = controlPanel,
+        guard let panel = controlPanel,
               let screen = panel.screen ?? NSScreen.main else { return }
         let leadingIcon = snapshot.items.compactMap { item -> CGFloat? in
             guard let frame = item.frame,
@@ -1090,9 +1077,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
         guard let leadingIcon else { return }
         let x = max(screen.frame.minX + 12, leadingIcon - panel.frame.width - 6)
         if abs(panel.frame.minX - x) > 1 {
-            panel.setFrameOrigin(NSPoint(x: x, y: panel.frame.minY))
+            // Slide with the bar's own shift instead of jumping a beat later.
+            let origin = NSPoint(x: x, y: panel.frame.minY)
+            // (`animator()` on this panel never applied the move, leaving
+            // the control wherever it was installed.)
+            let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && abs(panel.frame.minX - x) < 200
+            panel.setFrame(NSRect(origin: origin, size: panel.frame.size), display: true, animate: animate)
         }
-        if expanded { positionShelf() }
+        if expanded && !shelfAnchored { positionShelf() }
     }
 
     private func showShelf() {
@@ -1101,7 +1093,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 160, height: 40),
                                 styleMask: [.borderless, .nonactivatingPanel],
                                 backing: .buffered, defer: false)
-            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             panel.isOpaque = false
             panel.backgroundColor = .clear
@@ -1110,6 +1101,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
             shelfPanel = panel
         }
         expanded = true
+        shelfAnchored = false
+        // Above the menu bar while browsing; lowered while an item's own menu
+        // or panel is open so that opens on top of the strip.
+        shelfPanel?.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         populateShelf()
         guard let shelfPanel else { return }
         positionShelf()
@@ -1121,12 +1116,17 @@ final class BarApp: NSObject, NSApplicationDelegate {
         guard let anchor = controlPanel, let shelfPanel,
               let screen = anchor.screen ?? NSScreen.main else { return }
         let width = shelfPanel.frame.width
-        let x = min(max(anchor.frame.midX - width / 2, screen.frame.minX + 8), screen.frame.maxX - width - 8)
+        // The strip hangs to the left of the control and ends just before it.
+        // Hidden items sit to the control's right, and an item's menu or
+        // panel opens under its own slot, so it opens beside the strip
+        // instead of over it.
+        let x = min(max(anchor.frame.minX - 14 - width, screen.frame.minX + 8), screen.frame.maxX - width - 8)
         shelfPanel.setFrameOrigin(NSPoint(x: x, y: anchor.frame.minY - shelfPanel.frame.height - 7))
     }
 
     private func closeShelf() {
         expanded = false
+        shelfAnchored = false
         shelfPanel?.orderOut(nil)
     }
 
@@ -1137,10 +1137,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
     private func populateShelf() {
         guard let shelfPanel else { return }
         let keys = shelfKeys()
-        let state = keys.map { "\($0):\(pictures.pictures[$0]?.takenAt.timeIntervalSince1970 ?? 0)" }.joined(separator: "|")
+        let state = keys.joined(separator: "|")
         guard state != shelfState || shelfPanel.contentView == nil else { return }
         shelfState = state
-        let widths = keys.map { max(32, pictures.pictures[$0]?.image.size.width ?? 28) + 12 }
+        // Each item shows its app's own icon (or the system symbol): sharp at
+        // any size, unlike a menu-bar crop.
+        let widths = keys.map { _ in CGFloat(40) }
         let itemContentWidth = widths.reduce(16, +)
         let screenWidth = (controlPanel?.screen ?? NSScreen.main)?.frame.width ?? 800
         let gearWidth: CGFloat = 38
@@ -1188,22 +1190,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 button.title = ""; button.isBordered = false
                 button.imagePosition = .imageOnly; button.imageScaling = .scaleProportionallyDown
                 button.identifier = .init(key); button.target = self; button.action = #selector(pressShelfItem(_:))
-                if let picture = pictures.pictures[key], !isVolatileKey(key) {
-                    button.image = lightStrip ? tintedImage(picture.image, color: .black) : picture.image
-                    button.toolTip = L10n.t(
-                        "\(name(for: key)) · 状态采集于 \(picture.takenAt.formatted(date: .omitted, time: .standard))",
-                        "\(name(for: key)) · captured at \(picture.takenAt.formatted(date: .omitted, time: .standard))")
-                } else if isVolatileKey(key) {
-                    button.image = fallbackImage(for: key)
-                    button.toolTip = L10n.t(
-                        "\(name(for: key)) · 动态项目不缓存旧值；点开后显示实时状态",
-                        "\(name(for: key)) · dynamic item is not cached; open it for live state")
-                } else {
-                    button.image = fallbackImage(for: key)
-                    button.toolTip = L10n.t(
-                        "\(name(for: key)) · 开启原始状态显示后可显示菜单栏内容",
-                        "\(name(for: key)) · enable original status to show menu-bar content")
-                }
+                let image = fallbackImage(for: key)
+                image?.size = NSSize(width: 22, height: 22)
+                button.image = image
+                button.toolTip = name(for: key)
                 button.contentTintColor = iconColor
                 button.setAccessibilityLabel(name(for: key))
                 document.addSubview(button); x += widths[index]
@@ -1235,12 +1225,23 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     /// Clock and battery change continuously; a cached crop would show a
     /// stale time or percentage. They always use the symbol fallback.
-    private func isVolatileKey(_ key: String) -> Bool {
-        guard let system = MenuBarPolicy.systemItem(for: ItemID(rawValue: key)) else { return false }
-        switch system {
-        case .clock, .battery: return true
-        default: return false
-        }
+    /// Orders the strip just below the frontmost window of `pid` that overlaps
+    /// it, if there is one.
+    private func tuckShelf(below pid: pid_t) {
+        guard pid > 0, let shelfPanel, expanded else { return }
+        let screenTop = NSScreen.screens.first?.frame.maxY ?? 0
+        let shelf = shelfPanel.frame
+        let shelfCG = CGRect(x: shelf.minX, y: screenTop - shelf.maxY, width: shelf.width, height: shelf.height)
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        guard let panel = windows.first(where: { info in
+            guard (info[kCGWindowOwnerPID as String] as? pid_t) == pid,
+                  ((info[kCGWindowLayer as String] as? Int) ?? 0) < shelfPanel.level.rawValue,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat] else { return false }
+            let rect = CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+            return rect.intersects(shelfCG)
+        }), let number = panel[kCGWindowNumber as String] as? Int else { return }
+        shelfPanel.level = NSWindow.Level(rawValue: (panel[kCGWindowLayer as String] as? Int) ?? 0)
+        shelfPanel.order(.below, relativeTo: number)
     }
 
     private func fallbackImage(for key: String) -> NSImage? {
@@ -1265,42 +1266,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
         return last
     }
 
-    private func refreshShelfPictures() async {
-        guard !busy, pictures.isAllowed else { return }
-        busy = true
-        capturing = true
-        defer { busy = false; capturing = false }
-        let snapshot = await engine.freshSnapshot()
-        remember(snapshot)
-        // Capture both Hidden and Always Hidden items so ⌥-opening the strip
-        // also has original pixels; the strip itself still filters by mode.
-        let keys = Set(orderedKeys().filter { (modes[$0] ?? 0) > 0 })
-        let ids = Set(catalog.filter { keys.contains($0.key) }.map { $0.value.id })
-        guard !ids.isEmpty else { return }
-        let temporary = ids.subtracting(shownUntil.keys)
-        await engine.reveal(items: ids)
-        var shown = await settledSnapshot(for: ids)
-        try? await Task.sleep(for: .milliseconds(350))
-        shown = await engine.freshSnapshot()
-        positionControlBesideMenuIcons(in: shown)
-        await pictures.capture(shown.items.filter {
-            keys.contains($0.id.sectionKey.rawValue) && !isVolatileKey($0.id.sectionKey.rawValue)
-        })
-        // The privacy indicator can shift the menu bar after the first capture.
-        shown = await settledSnapshot(for: ids)
-        try? await Task.sleep(for: .milliseconds(250))
-        shown = await engine.freshSnapshot()
-        positionControlBesideMenuIcons(in: shown)
-        await pictures.capture(shown.items.filter {
-            keys.contains($0.id.sectionKey.rawValue) && !isVolatileKey($0.id.sectionKey.rawValue)
-        })
-        await engine.conceal(items: temporary)
-        capturing = false
-        positionControlBesideMenuIcons(in: await engine.freshSnapshot())
-        if expanded { populateShelf() }
-        renderWindow()
-    }
-
     private func icon(for bundle: String) -> NSImage? {
         let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle)
         guard let url else { return NSImage(systemSymbolName: "app", accessibilityDescription: nil) }
@@ -1316,7 +1281,30 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     @objc private func pressShelfItem(_ button: NSButton) {
         guard !busy, let key = button.identifier?.rawValue, let item = catalog[key] else { return }
-        if options["keepShelfOpen"] != 1 { closeShelf() }
+        // The strip stays where it is and the item's own menu or panel opens
+        // next to it.
+        flashPressed(button)
+        shelfAnchored = true
+        ignoreOutsideUntil = Date().addingTimeInterval(2)
+        shelfPanel?.level = .floating
+        let owner = NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == item.id.bundleID }?.processIdentifier ?? 0
+        if let element = pressableElement(for: key, item: item, pid: owner) {
+            // Third-party items take AXPress while still concealed: no
+            // reveal (so nothing on the bar shifts), no pointer movement.
+            // The press can block until a menu closes, so it runs off the
+            // main actor with a short timeout.
+            nonisolated(unsafe) let target = element
+            Task.detached { _ = AXUIElementPerformAction(target, kAXPressAction as CFString) }
+            Task {
+                for delay in [350, 600] {
+                    try? await Task.sleep(for: .milliseconds(delay))
+                    tuckShelf(below: owner)
+                }
+            }
+            return
+        }
+        // System items (Wi-Fi, battery…) have no press action: reveal and
+        // click, as iBar did, with the pointer hidden so it doesn't jump.
         busy = true
         Task {
             defer { busy = false }
@@ -1333,8 +1321,61 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 renderWindow(force: true)
                 return
             }
+            NSCursor.hide()
             await ItemMover.shieldedClick(at: CGPoint(x: frame.midX, y: frame.midY))
+            NSCursor.unhide()
+            // Menus open above everything, but many items open an ordinary
+            // window-level panel. Tuck the strip directly under it so the
+            // panel is on top while the strip still covers other windows.
+            for delay in [350, 600] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                tuckShelf(below: snapshot.items.first { $0.id.sectionKey == item.id.sectionKey }?.pid ?? 0)
+            }
             renderWindow()
+        }
+    }
+
+    /// The owning app's own status-item element when it can be pressed in
+    /// place: a third-party app with exactly one item exposing AXPress.
+    private func pressableElement(for key: String, item: ObservedItem, pid: pid_t) -> AXUIElement? {
+        guard let element = statusElement(for: key, item: item, pid: pid) else { return nil }
+        var actions: CFArray?
+        AXUIElementCopyActionNames(element, &actions)
+        guard ((actions as? [String]) ?? []).contains(kAXPressAction) else { return nil }
+        AXUIElementSetMessagingTimeout(element, 0.5)
+        return element
+    }
+
+    /// The owning app's own status-item element (third-party apps with a
+    /// single item). It stays in the app's AX tree while concealed.
+    private func statusElement(for key: String, item: ObservedItem, pid: pid_t, timeout: Float = 0.5) -> AXUIElement? {
+        guard pid > 0, key.hasPrefix("bundle:"), MenuBarPolicy.systemItem(for: item.id) == nil else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, timeout)
+        var extras: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, "AXExtrasMenuBar" as CFString, &extras) == .success,
+              let extras, CFGetTypeID(extras) == AXUIElementGetTypeID() else { return nil }
+        var children: CFTypeRef?
+        AXUIElementCopyAttributeValue(extras as! AXUIElement, kAXChildrenAttribute as CFString, &children)
+        guard let items = children as? [AXUIElement], items.count == 1, let element = items.first else { return nil }
+        AXUIElementSetMessagingTimeout(element, timeout)
+        return element
+    }
+
+    /// Immediate feedback on the strip: the pressed icon lights up briefly.
+    private func flashPressed(_ button: NSButton) {
+        guard button.superview != nil else { return }
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 7
+        button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.22).cgColor
+        Task {
+            try? await Task.sleep(for: .milliseconds(220))
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = button.layer?.backgroundColor
+            fade.toValue = NSColor.clear.cgColor
+            fade.duration = 0.25
+            button.layer?.add(fade, forKey: "fade")
+            button.layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
 
@@ -1355,7 +1396,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     private func outsideClick() {
-        guard !busy else { return }
+        guard !busy, (ignoreOutsideUntil ?? .distantPast) < Date() else { return }
         let location = NSEvent.mouseLocation
         if expanded && options["keepShelfOpen"] != 1,
            shelfPanel?.frame.contains(location) != true,
@@ -1381,7 +1422,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             controller.onMove = { [weak self] key, before in self?.moveItem(key: key, before: before) }
             controller.onPermission = { [weak self] kind in
                 guard let self else { return }
-                if kind == "accessibility" { self.requestAccessibility() } else { self.requestPictures() }
+                if kind == "accessibility" { self.requestAccessibility() }
                 self.renderWindow()
             }
             controller.onLogin = { [weak self] enabled in self?.setLaunchAtLogin(enabled) }
@@ -1416,7 +1457,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     return
                 }
                 if key == "keepShelfOpen" {
-                    if value == 1 { showShelf(); Task { await refreshShelfPictures() } }
+                    if value == 1 { showShelf() }
                     else { closeShelf() }
                 }
                 renderWindow()
@@ -1439,11 +1480,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let message: String
         if !AXIsProcessTrusted() { message = L10n.t("需要辅助功能权限", "Accessibility permission required") }
         else if !feedback.isEmpty { message = feedback }
-        else if let error = pictures.error { message = L10n.t("原始状态采集失败：\(error)", "Screen capture failed: \(error)") }
-        else { message = pictures.isAllowed
-            ? L10n.t("已就绪 · 展开时刷新原始菜单栏状态", "Ready · original menu-bar state refreshes on open")
-            : L10n.t("已就绪 · 原始状态显示需要屏幕录制权限", "Ready · Screen Recording is required for original icons") }
-        settings?.update(entries: entries, message: message, captureAllowed: pictures.isAllowed,
+        else { message = "" }
+        settings?.update(entries: entries, message: message,
                          axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled,
                          customIcon: customIconImage, options: options)
     }
@@ -1573,13 +1611,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw NSError(domain: "YoungBar", code: Int(process.terminationStatus),
                           userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "defaults 退出码 \(process.terminationStatus)" : text])
-        }
-    }
-
-    private func requestPictures() {
-        if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-            NSWorkspace.shared.open(url)
         }
     }
 
@@ -1733,11 +1764,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func toggleCheckbox(_ button: NSButton) {
-        guard let bundle = button.identifier?.rawValue else { return }
-        setHidden(bundle: bundle)
-    }
-
     @objc private func toggleBundle(_ item: NSMenuItem) {
         guard let bundle = item.representedObject as? String else { return }
         setHidden(bundle: bundle)
@@ -1790,58 +1816,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func clearPictureCache() {
-        pictures.clearCache()
-        shelfState = nil
-        if expanded { populateShelf() }
-        feedback = L10n.t("图标缓存已清除，收纳条暂时使用应用图标", "Icon cache cleared; the strip will use app icons for now")
-        renderWindow(force: true)
-    }
-
-    /// Opt-in (`YOUNGBAR_CACHETEST=1`): hides the clock, runs a capture pass,
-    /// and proves the clock was not cached; clears the cache; then restores
-    /// the clock and recaptures the static items.
-    private func runCacheTest() async {
-        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
-        let clockKey = "status:com.apple.MenuBarAgent::com.apple.menuextra.clock"
-        let original = modes[clockKey] ?? 0
-        modes[clockKey] = 1
-        UserDefaults.standard.set(modes, forKey: "itemModes")
-        await engine.conceal()
-        await engine.setModel(currentModel())
-        try? await Task.sleep(for: .milliseconds(700))
-        await refreshShelfPictures()
-        result["clockCached"] = pictures.pictures[clockKey] != nil
-        result["cacheFileBefore"] = pictures.cacheFileExists
-        pictures.clearCache()
-        result["cacheFileAfterClear"] = pictures.cacheFileExists
-        result["countAfterClear"] = pictures.pictures.count
-        modes[clockKey] = original
-        UserDefaults.standard.set(modes, forKey: "itemModes")
-        await engine.conceal()
-        await engine.setModel(currentModel())
-        try? await Task.sleep(for: .milliseconds(700))
-        await refreshShelfPictures()
-        result["cacheRestored"] = pictures.cacheFileExists && !pictures.pictures.isEmpty
-        result["passed"] = (result["clockCached"] as? Bool == false)
-            && (result["cacheFileAfterClear"] as? Bool == false)
-            && (result["countAfterClear"] as? Int == 0)
-            && (result["cacheRestored"] as? Bool == true)
-        writeJSON(result, name: "cachetest.json")
-    }
-
-    @objc private func refreshPicturesNow() {
-        guard pictures.isAllowed else {
-            requestPictures()
-            return
-        }
-        Task {
-            await refreshShelfPictures()
-            feedback = pictures.error == nil ? L10n.t("原始图标已刷新并缓存", "Original icons refreshed and cached") : L10n.t("原始图标刷新失败", "Failed to refresh original icons")
-            renderWindow(force: true)
-        }
-    }
-
     /// Opt-in (`YOUNGBAR_SHELFOPENTEST=1`): opening the strip must be instant
     /// and must not reveal any menu-bar item.
     /// Opt-in (`YOUNGBAR_PINNEDTEST=1`): checks whether the clock and Control
@@ -1875,36 +1849,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             && (result["controlCenterConcealed"] as? Bool == true)
             && (result["restored"] as? Bool == true)
         writeJSON(result, name: "pinnedtest.json")
-    }
-
-    /// Opt-in (`YOUNGBAR_ALWAYSHIDDENTEST=1`): marks an item Always Hidden,
-    /// captures, and checks that its original pixels are cached for the ⌥ view.
-    private func runAlwaysHiddenTest() async {
-        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
-        guard let key = catalog.first(where: { $0.value.id.bundleID == "com.anthropic.claudefordesktop" })?.key,
-              let item = catalog[key] else {
-            result["error"] = "Claude item not present"
-            writeJSON(result, name: "alwayshiddentest.json")
-            return
-        }
-        let original = modes[key] ?? 0
-        modes[key] = 2
-        UserDefaults.standard.set(modes, forKey: "itemModes")
-        await engine.conceal()
-        await engine.setModel(currentModel())
-        try? await Task.sleep(for: .milliseconds(700))
-        await refreshShelfPictures()
-        result["target"] = key
-        result["cachedForAlwaysHidden"] = pictures.pictures[key] != nil
-        result["originalMode"] = original
-        modes[key] = original
-        UserDefaults.standard.set(modes, forKey: "itemModes")
-        await engine.conceal()
-        await engine.setModel(currentModel())
-        try? await Task.sleep(for: .milliseconds(500))
-        result["restored"] = (modes[key] ?? 0) == original
-        result["passed"] = (result["cachedForAlwaysHidden"] as? Bool == true) && (result["restored"] as? Bool == true)
-        writeJSON(result, name: "alwayshiddentest.json")
     }
 
     /// Opt-in (`YOUNGBAR_HOTKEYTEST=1`): posts the real ⌃⌥B chord and checks
@@ -2135,19 +2079,18 @@ final class BarApp: NSObject, NSApplicationDelegate {
         settings.close()
     }
 
-    /// Moves at most a few items so the items now in the menu bar follow
-    /// `target` again, through the same path as a user move. Items that are
+    /// Moves items until the ones now in the menu bar follow `target`,
+    /// through the same path as a user move: at each step the first item out
+    /// of place is moved in front of whatever sits in its slot. Items that are
     /// not present are ignored. Returns the moves made.
     private func restoreOrder(to target: [String]) async -> [String] {
         var moves: [String] = []
         func present(_ keys: [String]) -> [String] { keys.filter { catalog[$0] != nil && presentKeys.contains($0) } }
-        for _ in 0..<4 where present(savedOrder) != present(target) {
-            let current = present(savedOrder), wanted = present(target)
-            // Find one item whose removal makes both orders agree.
-            guard let key = current.first(where: { key in
-                current.filter { $0 != key } == wanted.filter { $0 != key }
-            }), let index = wanted.firstIndex(of: key) else { break }
-            let before = index + 1 < wanted.count ? wanted[index + 1] : ""
+        for _ in 0..<12 {
+            let current = present(savedOrder), wanted = present(target).filter { current.contains($0) }
+            guard current != wanted,
+                  let slot = current.indices.first(where: { $0 < wanted.count && current[$0] != wanted[$0] }) else { break }
+            let key = wanted[slot], before = current[slot]
             moveItem(key: key, before: before)
             moves.append("\(key) before \(before)")
             try? await Task.sleep(for: .milliseconds(500))
@@ -2408,14 +2351,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     @objc private func refreshClicked() {
         Task { await refresh(); renderWindow(force: true) }
-    }
-
-    @objc private func revealAllAndQuit() {
-        Task { @MainActor in
-            await revealEverything()
-            UserDefaults.standard.set(false, forKey: "sessionActive")
-            NSApp.terminate(nil)
-        }
     }
 
     @objc private func quit() {

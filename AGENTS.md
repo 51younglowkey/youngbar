@@ -4,7 +4,7 @@
 
 ## 1. 项目边界
 
-- 只做 macOS 27 的菜单栏收纳工具：隐藏 / 展开 / 排序 / 原始图标 / 快捷键 / 外观。
+- 只做 macOS 27 的菜单栏收纳工具：隐藏 / 展开 / 排序 / 原地打开 / 快捷键 / 外观。
 - 代码在 `Sources/YoungBar/`，依赖在 `Vendor/`（Dimble 的 PelmetCore / PelmetEngine，GPLv3）。
 - 记录在 `docs/STATUS.md`（验证状态）与 `docs/IBAR-FEATURES.md`（iBar 对照表）。独立之前的轮次记在 Leorea 的 `docs/JOURNAL.md`。
 - 不要依赖仓库外的路径（例如原来的 `../../app`、`../../projects`）。
@@ -18,7 +18,7 @@ open build/YoungBar.app
 ```
 
 - `Scripts/build.sh` 带 `--disable-sandbox`：SwiftPM 的 manifest 沙箱无法嵌套在宿主沙箱里。
-- 产物是 ad-hoc 签名；**重建后系统权限可能需要重新授权**（辅助功能 / 屏幕录制）。
+- 产物是 ad-hoc 签名；**重建后系统权限可能需要重新授权**（辅助功能）。
 - 改代码后先构建，再启动 `build/YoungBar.app`；不要直接跑 `.build/release/YoungBar`（会丢 bundle 权限身份）。
 
 ## 3. 权限
@@ -26,7 +26,6 @@ open build/YoungBar.app
 | 权限 | 用途 | 没有时 |
 |---|---|---|
 | 设备控制与数据访问（辅助功能） | 枚举、隐藏、展开、排序菜单栏项 | 收纳条为空，只有设置页 |
-| 屏幕录制 | 抓原始菜单栏像素 | 回退为应用图标 |
 
 macOS 27 的界面叫「设备控制与数据访问」，不是旧的「辅助功能」。
 
@@ -37,21 +36,20 @@ Sources/YoungBar/
   main.swift          AppDelegate、控制条、收纳条、菜单、测试钩子（~1600 行）
   BarSettings.swift   设置窗口的 AppKit 外壳：NSWindow + NSSplitViewController，把 SettingsAction 转给 main.swift
   SettingsView.swift  设置窗口内容（SwiftUI）：侧栏、通用 / 菜单栏 / 外观三页，Form .grouped
-  StatusPictures.swift 菜单栏条带抓图、磁盘缓存
   Diagnostics.swift   运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）
 Vendor/
   PelmetCore          菜单栏模型、策略、ItemID
   PelmetEngine        隐藏/展开/排序、MenuBarClientCore 评估接口
 ```
 
-- 收纳条点击**只读缓存**，不临时 reveal；抓图只在首次缓存为空、手动刷新时发生。这是为了不闪图标。
-- 时钟/电池不缓存（会显示旧值），统一走 SF Symbol。
+- 收纳条显示**应用图标**（系统项用 SF Symbol），打开时不临时 reveal 任何东西。截图方案（缓存菜单栏像素、显示拍摄时间、AX 实时文字）试过并被用户否决：分辨率低、发糊；会变的数值应该留在菜单栏常显区。
+- 点收纳条里的第三方项：对隐藏状态下的 AXMenuBarItem 直接 AXPress（不 reveal、不动鼠标、••• 不漂移）；系统项没有 AXPress，才 reveal + 点击，点击时隐藏光标。
 - 日期与控制中心位置由 macOS 固定，不能拖；**可以隐藏**。
 
 ## 5. 验证纪律
 
 - 每条结论必须有证据：`~/Library/Application Support/YoungBar/*.json`、截图、或命令输出。
-- 自检开关（环境变量）：`YOUNGBAR_SELFTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_ORDERTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_CACHETEST`、`YOUNGBAR_HOTKEYTEST`、`YOUNGBAR_PINNEDTEST`、`YOUNGBAR_ALWAYSHIDDENTEST`、`YOUNGBAR_GEARTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_ABOUTTEST`、`YOUNGBAR_CONCEALTEST`。
+- 自检开关（环境变量）：`YOUNGBAR_SELFTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_ORDERTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_HOTKEYTEST`、`YOUNGBAR_PINNEDTEST`、`YOUNGBAR_GEARTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_ABOUTTEST`、`YOUNGBAR_CONCEALTEST`。
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。
 - 构建时可以不退出正在运行的 YoungBar：`build.sh` 会整包替换，不再原地覆盖可执行文件。
 - 设置窗口截图：`open -n --env YOUNGBAR_SETTINGS_PREVIEW=zh build/YoungBar.app`（或 `=en`）。只开设置窗口、**不碰菜单栏**，可以和正在运行的 YoungBar 并存；深浅两套截图写到 `~/Library/Application Support/YoungBar/preview-*.png`，然后自动退出。
@@ -82,5 +80,5 @@ Vendor/
 
 - 不要在没有恢复逻辑的情况下改用户的真实菜单栏顺序/可见性。
 - 不要把测试钩子暴露成普通用户功能；未来应移到独立 target 或 `#if DEBUG`。
-- 不要在收纳条打开路径里重新引入“临时显示全部图标”的抓图流程（用户明确讨厌闪烁）。
-- 不要提交 `build/`、`.build/`、`pictures.json`、诊断 JSON。
+- 不要在收纳条打开路径里重新引入“临时显示全部图标”的抓图流程（用户明确讨厌闪烁），也不要再回到截图显示。
+- 不要提交 `build/`、`.build/`、诊断 JSON。

@@ -24,7 +24,6 @@ enum Diagnostics {
         let at: String
         let axTrusted: Bool
         let assessmentAvailable: Bool
-        let screenCaptureAllowed: Bool
         let launched: Bool
         let itemCount: Int
         let concealedCount: Int
@@ -52,7 +51,6 @@ enum Diagnostics {
             at: ISO8601DateFormatter().string(from: Date()),
             axTrusted: AXIsProcessTrusted(),
             assessmentAvailable: AssessmentMode.isAvailable,
-            screenCaptureAllowed: CGPreflightScreenCaptureAccess(),
             launched: app.diagnosticsStarted,
             itemCount: entries.count,
             concealedCount: snapshot?.concealed.count ?? 0,

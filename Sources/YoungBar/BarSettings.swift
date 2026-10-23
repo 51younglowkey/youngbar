@@ -51,6 +51,8 @@ final class BarSettings: NSObject {
         window.isOpaque = false
         window.backgroundColor = .clear
         let split = NSSplitViewController()
+        split.splitView = SeamlessSplitView()
+        split.splitView.isVertical = true
         let sidebarHost = NSHostingController(rootView: SettingsSidebar(model: model))
         sidebarHost.sizingOptions = []
         let sidebarMaterial = NSVisualEffectView()
@@ -73,7 +75,6 @@ final class BarSettings: NSObject {
         detail.minimumThickness = 500
         split.addSplitViewItem(sidebar)
         split.addSplitViewItem(detail)
-        split.splitView.dividerStyle = .thin
 
         glass.style = .regular
         glass.cornerRadius = 0
@@ -124,7 +125,7 @@ final class BarSettings: NSObject {
     /// Re-reads localized strings that live outside SwiftUI.
     func languageChanged() { window.title = (model.page ?? .general).title }
 
-    func update(entries: [BarEntry], message: String, captureAllowed: Bool, axTrusted: Bool,
+    func update(entries: [BarEntry], message: String, axTrusted: Bool,
                 launchAtLogin: Bool, customIcon: NSImage?, options: [String: Int]) {
         // `update` runs on every refresh tick; only touch what changed so an
         // open picker or a drag in progress is not rebuilt underneath the user.
@@ -132,7 +133,6 @@ final class BarSettings: NSObject {
         if model.entries.map(signature) != entries.map(signature) { model.entries = entries }
         if model.options != options { model.options = options }
         if model.message != message { model.message = message }
-        if model.captureAllowed != captureAllowed { model.captureAllowed = captureAllowed }
         if model.axTrusted != axTrusted { model.axTrusted = axTrusted }
         if model.launchAtLogin != launchAtLogin { model.launchAtLogin = launchAtLogin }
         if model.customIcon !== customIcon { model.customIcon = customIcon }
@@ -203,4 +203,13 @@ final class BarSettings: NSObject {
         }
         model.page = original
     }
+}
+
+/// No divider between sidebar and content: the sidebar's material is the
+/// boundary, as in the original design. The sidebar width is fixed, so
+/// there is nothing to drag.
+final class SeamlessSplitView: NSSplitView {
+    override var dividerThickness: CGFloat { 0 }
+    override var dividerColor: NSColor { .clear }
+    override func drawDivider(in rect: NSRect) {}
 }

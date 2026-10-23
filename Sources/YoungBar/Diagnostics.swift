@@ -17,6 +17,9 @@ enum Diagnostics {
         let y: Double?
         let width: Double?
         let height: Double?
+        /// Where the owning app's own status item says it is (AX), even
+        /// while concealed: an in-place press opens its menu under this.
+        let axX: Double?
         let mode: Int
     }
 

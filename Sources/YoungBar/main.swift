@@ -1286,7 +1286,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         ignoreOutsideUntil = Date().addingTimeInterval(2)
         shelfPanel?.level = .floating
         let owner = NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == item.id.bundleID }?.processIdentifier ?? 0
-        if let element = pressableElement(for: key, item: item, pid: owner) {
+        if let element = pressableElement(for: key, item: item, pid: owner), pressOpensNearStrip(key) {
             // Third-party items take AXPress while still concealed: no
             // reveal (so nothing on the bar shifts), no pointer movement.
             // The press can block until a menu closes, so it runs off the
@@ -1358,6 +1358,30 @@ final class BarApp: NSObject, NSApplicationDelegate {
         guard let items = children as? [AXUIElement], items.count == 1, let element = items.first else { return nil }
         AXUIElementSetMessagingTimeout(element, timeout)
         return element
+    }
+
+    /// A press opens the menu under the item's own (hidden) slot. macOS can
+    /// park that slot far from the bar's icons — the menu then opened at the
+    /// left edge of the screen. Only press in place when the slot is near the
+    /// control; otherwise reveal and click like a system item.
+    private func pressOpensNearStrip(_ key: String) -> Bool {
+        guard let point = axPosition(for: key), let control = controlPanel?.frame,
+              let screen = controlPanel?.screen ?? NSScreen.main else { return false }
+        let near = point.x > screen.frame.midX && abs(point.x - control.midX) < 400
+        if !near { NSLog("YoungBar: \(key) slot at x=\(point.x) is away from the control; revealing instead") }
+        return near
+    }
+
+    private func axPosition(for key: String) -> CGPoint? {
+        guard let item = catalog[key],
+              let pid = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == item.id.bundleID })?.processIdentifier,
+              let element = statusElement(for: key, item: item, pid: pid, timeout: 0.3) else { return nil }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var point = CGPoint.zero
+        AXValueGetValue(value as! AXValue, .cgPoint, &point)
+        return point
     }
 
     /// Immediate feedback on the strip: the pressed icon lights up briefly.
@@ -1820,6 +1844,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 y: frame.map { Double($0.minY) },
                 width: frame.map { Double($0.width) },
                 height: frame.map { Double($0.height) },
+                axX: axPosition(for: key).map { Double($0.x) },
                 mode: modes[key] ?? 0
             )
         }

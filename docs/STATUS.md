@@ -4,7 +4,7 @@
 > 运行态由 `YOUNGBAR_DIAGNOSTICS=1` 写出：`~/Library/Application Support/YoungBar/diagnostics.json`；
 > 一次性真机自检用 `YOUNGBAR_SELFTEST=1` 与 `YOUNGBAR_INTERACTIONTEST=1`，结果分别在 `selftest.json` / `interactiontest.json`。
 >
-> 最后核对：**2026-10-22 22:25 +01:00**
+> 最后核对：**2026-10-23 21:20 +01:00**
 
 ## 1. 构建
 
@@ -20,6 +20,8 @@
 应用图标由用户提供的 `Resources/AppIcon-source.jpg` 经 `Scripts/make-icon.swift` 生成：粉色圆角底 + 完整手绘边框，输出 `Resources/AppIcon.icns`。
 
 ## 2. 真机状态
+
+> 本节与 4.1–4.6 保留了 5.5 之前的阶段性记录，包含已删除的截图缓存/屏幕录制/旧 AppKit 设置窗口。**当前实现以 4.7 为准。**
 
 | 项 | 状态 | 证据 |
 |---|---|---|
@@ -197,3 +199,32 @@
 1. 重启验证图标间隙四档；登出验证开机自启动。
 2. 多显示器。
 4. 在第二块显示器上重复布局与收纳。
+
+
+## 4.7 当前基线（2026-10-23 21:20，5.5 大改后）
+
+> 这一节是独立仓库后的当前状态；上面的 2 / 4.1–4.6 是历史阶段，不再作为现状依据。
+
+| 项 | 当前状态 | 证据 |
+|---|---|---|
+| 仓库 | `~/Documents/General_Workspace/YoungBar`，私有远程 `51younglowkey/youngbar`，观察时 `main` 与 `origin/main` 同步在 `8fab9f0` | `git status -sb`；`gh repo view` |
+| 版本 | `0.1.0 (1)`，显示名 YoungBar | `Info.plist` |
+| 构建 | `Scripts/build.sh` 先组装 + 签名 staging，再整包替换；运行中重建不再被 `Code Signature Invalid` 杀掉 | `Scripts/build.sh`；4.2 的崩溃对比 |
+| 签名 | 本地 `YoungBar Local Signing` 证书（非 Developer ID）；bundle 内带 LICENSE/NOTICES | `codesign -dv`：`Authority=YoungBar Local Signing` |
+| 设置窗口 | **SwiftUI** `Form(.grouped)` + 侧栏 List，AppKit 只做 `NSWindow + NSSplitViewController` 外壳；三页：通用 / 菜单栏 / 外观 | `Sources/YoungBar/SettingsView.swift`、`BarSettings.swift`；`swiftui-*.png` |
+| 设置交互 | 逐项模式菜单、拖动排序、右键移动、原地切换语言均通过真实鼠标/键盘测试；测试后设置与备份一致 | `settingsuitest.json`（`modePassed/dragPassed/languagePassed:true`，02:30；之后 `ea54e9c` 删了屏幕录制行，未重跑整套设置测试） |
+| 收纳条内容 | 应用图标（系统项 SF Symbol），**不再截图/缓存，不需要屏幕录制** | `StatusPictures.swift` 已删除；README；4.4 |
+| 点隐藏项 | 第三方项在隐藏状态下直接 AXPress：不 reveal、鼠标不动、••• 不漂移；系统项仍 reveal + 点击 | `ea54e9c` 真机记录；`axX` 诊断 |
+| 收纳条位置 | 在 ••• 正下方居中；固定到关闭 | `870db8a`；4.5 |
+| 菜单偏移保护 | 按下前读 AX 位置，只有靠近 •••（屏幕右半、<400pt）才原地按，否则显示后点击 | `8fab9f0`；`axX` |
+| 菜单栏读取 | 本机 11 项，辅助功能已授权 | `diagnostics.json`（20:07；`itemCount:11`、`axTrusted:true`） |
+| 登录项 | 路径变化时自动重新登记（仓库移到 General_Workspace 后已更新） | 4.5；`sfltool dumpbtm` |
+| 外观 | 蓝/粉/黄 OKLCH 同亮度同彩度 + 中性透明；收纳条不透明度 30–100%；主题色玻璃、侧栏角色图 | 4.3；`swiftui-appearance-*.png` |
+| 已知未验证 | 多显示器；图标间隙需重启观察；开机自启动需登出再登录；真实触控板拖动手感；英文菜单栏页截图；系统项 reveal+点击路径 | 4.2/4.4/4.6 |
+| 已知功能缺口 | 可配置快捷键、键盘导航、收纳条内拖拽排序、通知/配置导出 | README Roadmap |
+
+### 已废弃的旧记录
+
+- 屏幕录制、`StatusPictures`、`pictures.json`、120 项/14 天/8 MB 缓存、`cachetest` 都属于 5.5 之前的实现，已随 `ea54e9c` 删除。
+- 旧 AppKit 设置窗口的 860×660 / 860×692、NSScrollView、固定 header 等记录，已被 4.1 的 SwiftUI 设置替换。
+- 旧的「原始菜单栏像素」描述不再是当前产品行为；当前收纳条显示应用图标，不是菜单栏截图。

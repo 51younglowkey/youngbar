@@ -2,7 +2,9 @@
 
 Target: installed `/Applications/iBar Pro.app`, version 1.4.6. No update or modification of the original application. YoungBar uses Dimble's GPLv3 PelmetCore/PelmetEngine and an original AppKit interface.
 
-Last updated: 2026-10-22, YoungBar 0.1.0.
+Last updated: 2026-10-23, YoungBar 0.1.0 (5.5).
+
+> **2026-10-23 更正：** 5.5 起收纳条改用应用图标，不再抓取/缓存菜单栏像素，也不再需要屏幕录制。本文中「原始菜单栏图片 / 截图 / 缓存 / ScreenCaptureKit」的描述只对应历史阶段；当前实现见 `STATUS.md` 4.7。
 
 ## Evidence and its boundary
 

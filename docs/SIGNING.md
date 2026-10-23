@@ -2,7 +2,7 @@
 
 An **ad-hoc** signature (`codesign -s -`) has a designated requirement based on
 the binary's `cdhash`. Every rebuild changes that hash, so macOS TCC stops
-matching the old Accessibility/Screen Recording grant. That is why the app can
+matching the old Accessibility grant. That is why the app can
 show “granted” in System Settings while `AXIsProcessTrusted()` is still false.
 
 A **self-signed code-signing certificate** gives the app a stable identity. If
@@ -58,7 +58,6 @@ Because the signature changed from ad-hoc to the certificate:
 
 ```sh
 tccutil reset Accessibility dev.leorea.youngbar
-tccutil reset ScreenCapture dev.leorea.youngbar
 ```
 
 Then launch the app and grant both permissions again. Future builds signed with

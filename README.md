@@ -32,7 +32,7 @@ See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution quest
 Requirements: macOS 27, Xcode Command Line Tools (Swift 6.3).
 
 ```sh
-cd youngbar
+cd YoungBar
 sh Scripts/build.sh
 open build/YoungBar.app
 ```
@@ -51,13 +51,13 @@ Ad-hoc builds are re-signed on every build. If macOS stops recognizing the app, 
 
 - Hiding uses the private `MenuBarClientCore` assessment interface. It works on macOS 27 but is not a public API and may break on future releases. This app cannot be shipped on the App Store.
 - The strip shows app icons, not the items' live menu-bar content: a concealed item is not drawn by macOS 27, so there is nothing current to show, and a screenshot would be stale and blurry. Items whose value you watch belong in the visible part of the bar.
-- Dynamic items are never cached: clock and battery use SF Symbols; third-party dynamic content (fan RPM, percentages) shows the acquisition time in its tooltip.
+- No menu-bar screenshot is captured or cached; the strip uses app icons, so no Screen Recording permission is involved.
 
 ## Status
 
 The current verification matrix — including what is implemented, what is verified live, and what is blocked — lives in [docs/STATUS.md](docs/STATUS.md). The iBar Pro 1.4.6 feature comparison and evidence are in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
 
-Known gaps: multi-display, live (non-cached) mode, configurable hotkey, drag-reordering inside the strip.
+Known gaps: multi-display, configurable hotkey, drag-reordering inside the strip, and a real-trackpad pass on the new SwiftUI settings. The old screenshot/cache pipeline is gone; the strip uses app icons and no longer needs Screen Recording.
 
 ## Roadmap
 

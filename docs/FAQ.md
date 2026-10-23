@@ -46,10 +46,8 @@ GPLv3 与是否盈利无关：它允许收费，但要求源码、许可证和�
 3. **安装脚本**：`curl -fsSL .../install.sh | sh`，下载最新 Release、移动到 /Applications；适合其他 Agent，但要说明 Gatekeeper 与权限。
 4. **源码构建**：`git clone && sh Scripts/build.sh && open build/YoungBar.app`，适合开发者和 Agent。
 
-辅助功能和屏幕录制必须由用户在系统设置里手动授权，任何安装方式都不能完全自动化。没有 Developer ID 时只能 ad-hoc 签名，权限可能因重建而重置。
+辅助功能必须由用户在系统设置里手动授权，任何安装方式都不能完全自动化。没有 Developer ID 时只能 ad-hoc 签名，权限可能因重建而重置。
 
-## 5. 缓存里有什么？
+## 5. 还缓存菜单栏截图吗？
 
-`~/Library/Application Support/YoungBar/pictures.json` 保存菜单栏条带的裁剪图，用来让收纳条瞬间打开。它可能包含未读计数、股价等敏感信息。
-
-当前策略：最多 120 项、14 天、编码后 8 MB；超出时丢最旧的。菜单里可以随时清除缓存。
+不缓存。5.5 起删除了 `StatusPictures` 和菜单栏像素缓存：收纳条显示应用图标（系统项用 SF Symbol），不抓取、不保存菜单栏内容，也不需要屏幕录制。`~/Library/Application Support/YoungBar/` 现在只保留设置诊断和测试 JSON。

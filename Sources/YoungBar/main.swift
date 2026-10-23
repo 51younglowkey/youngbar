@@ -127,6 +127,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             Task { @MainActor in self?.outsideClick() }
         }
         registerHotKey()
+        refreshLoginItemIfMoved()
         if !AXIsProcessTrusted() { showWindow() }
         Task {
             await installControlPanelWhenReady()
@@ -1116,11 +1117,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         guard let anchor = controlPanel, let shelfPanel,
               let screen = anchor.screen ?? NSScreen.main else { return }
         let width = shelfPanel.frame.width
-        // The strip hangs to the left of the control and ends just before it.
-        // Hidden items sit to the control's right, and an item's menu or
-        // panel opens under its own slot, so it opens beside the strip
-        // instead of over it.
-        let x = min(max(anchor.frame.minX - 14 - width, screen.frame.minX + 8), screen.frame.maxX - width - 8)
+        // Centred under the control.
+        let x = min(max(anchor.frame.midX - width / 2, screen.frame.minX + 8), screen.frame.maxX - width - 8)
         shelfPanel.setFrameOrigin(NSPoint(x: x, y: anchor.frame.minY - shelfPanel.frame.height - 7))
     }
 
@@ -1564,6 +1562,17 @@ final class BarApp: NSObject, NSApplicationDelegate {
             feedback = L10n.t("开机自启动设置失败：\(error.localizedDescription)", "Launch-at-login failed: \(error.localizedDescription)")
         }
         renderWindow(force: true)
+    }
+
+    /// The login item records the app's path. After the bundle moves it would
+    /// launch nothing, so re-register once from the new location.
+    private func refreshLoginItemIfMoved() {
+        let path = Bundle.main.bundlePath
+        let previous = UserDefaults.standard.string(forKey: "loginItemPath")
+        UserDefaults.standard.set(path, forKey: "loginItemPath")
+        guard SMAppService.mainApp.status == .enabled, previous != path else { return }
+        try? SMAppService.mainApp.unregister()
+        try? SMAppService.mainApp.register()
     }
 
     /// Values recovered from iBar Pro 1.4.6's own spacing commands:

@@ -8,12 +8,22 @@ cd "$(dirname "$0")/.."
 # nothing here.
 swift build -c release --product YoungBar --disable-sandbox
 app='build/YoungBar.app'
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp .build/release/YoungBar "$app/Contents/MacOS/YoungBar"
-cp Info.plist "$app/Contents/Info.plist"
-cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
-cp -f Resources/Theme-*.jpg "$app/Contents/Resources/"
-cp LICENSE "$app/Contents/Resources/LICENSE"
-cp THIRD_PARTY_NOTICES.md "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
-sh Scripts/sign.sh "$app"
+# Assemble and sign a fresh bundle, then swap it in. Overwriting the
+# executable of a running YoungBar in place gets it killed with
+# "Code Signature Invalid" (it pages in the new bytes), which skips the
+# reveal-on-quit path.
+staging='build/YoungBar.app.staging'
+rm -rf "$staging"
+mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources"
+cp .build/release/YoungBar "$staging/Contents/MacOS/YoungBar"
+cp Info.plist "$staging/Contents/Info.plist"
+cp Resources/AppIcon.icns "$staging/Contents/Resources/AppIcon.icns"
+cp -f Resources/Theme-*.jpg "$staging/Contents/Resources/"
+cp LICENSE "$staging/Contents/Resources/LICENSE"
+cp THIRD_PARTY_NOTICES.md "$staging/Contents/Resources/THIRD_PARTY_NOTICES.md"
+sh Scripts/sign.sh "$staging"
+rm -rf "$app.old"
+if [ -d "$app" ]; then mv "$app" "$app.old"; fi
+mv "$staging" "$app"
+rm -rf "$app.old"
 echo "$PWD/$app"

@@ -130,6 +130,26 @@
 
 ![外观（深色）](images/swiftui-appearance-dark.png)
 
+## 4.2 更正（2026-10-23，真机交互验证）
+
+4.1 节里标 🟡 的几项已在真机用真实鼠标/键盘事件验证，结论如下（`YOUNGBAR_SETTINGSUITEST=1`，结果 `~/Library/Application Support/YoungBar/settingsuitest.json`）：
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 每项「显示 / 隐藏 / 始终隐藏」菜单 | ✅ WeChat：显示→隐藏→始终隐藏→隐藏→显示，四步界面与存档一致 | `modeSteps`、`modePassed:true` |
+| 拖动排序 | ✅ **改了实现**：分组表单里的 `onMove` 不响应拖动（真机实测 `dragPassed:false`），改为 `draggable` + `dropDestination`，拖到某行上即占那一行的位置；WeChat 拖到 CodexBar 上后菜单栏顺序真实改变 | `orderBefore [4,6]` → `orderAfterDrag [6,5]`、「顺序已应用到菜单栏」 |
+| 右键移动 | ✅「左移一位」「右移一位」都真实改动菜单栏顺序，并移回原位 | `contextSteps`、`contextPassed:true` |
+| 切换语言 | ✅ 中文→English→中文，同一个窗口、位置不变、标题跟着变 | `languageSteps`：`sameWindow:true`、`frameUnchanged:true` |
+| 测试后复原 | ✅ 模式、顺序、外观选项、隐藏列表与测试前备份逐项相同 | `defaults export` 前后对比 |
+
+同一轮发现并修好的问题：
+
+- **构建会杀掉正在运行的 YoungBar**：`build.sh` 原地覆盖可执行文件，运行中的进程被系统以 `SIGKILL (Code Signature Invalid)` 杀掉，跳过退出时的全部显示（2026-10-23 00:19–00:59 的几份崩溃报告都是这个原因，不是代码崩溃）。现在先组装、签名到 `build/YoungBar.app.staging`，再整包替换。
+- **错误提示**：移动到一个当前不在菜单栏里的项目旁边时，原来提示「日期和控制中心的位置由 macOS 固定」，现在提示「目标位置旁边的项目当前不在菜单栏中」。
+- **自检本身**：只在确认菜单真的弹出后才发送按键。早一版没有这个检查，菜单没弹出时方向键和回车落到了别的控件上，改动了「应用到」和「收纳条材质」，已按备份恢复。
+
+仍未验证：用手（真实触控板）拖动时的视觉反馈是否顺手；英文界面下菜单栏页的布局截图。
+
 ## 5. 下一步
 
 1. 重启验证图标间隙四档；登出验证开机自启动。

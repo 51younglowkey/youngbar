@@ -186,6 +186,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if ProcessInfo.processInfo.environment["YOUNGBAR_CONCEALTEST"] == "1" {
                 await runConcealTest()
             }
+            if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSUITEST"] == "1" {
+                await runSettingsUITest()
+            }
             if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSCLICKTEST"] == "1" {
                 await runSettingsClickTest()
             }
@@ -1613,8 +1616,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
         Task {
             defer { busy = false; renderWindow() }
             let targetKey = before.isEmpty ? savedOrder.dropLast().last : before
-            guard let targetKey, let target = catalog[targetKey],
-                  !(before.isEmpty && MenuBarPolicy.isPinnedSystemItem(target.id)) else {
+            guard let targetKey, let target = catalog[targetKey], presentKeys.contains(targetKey) else {
+                savedOrder = originalOrder; feedback = L10n.t("目标位置旁边的项目当前不在菜单栏中", "The neighbouring item is not in the menu bar right now"); return
+            }
+            guard !(before.isEmpty && MenuBarPolicy.isPinnedSystemItem(target.id)) else {
                 savedOrder = originalOrder; feedback = L10n.t("日期和控制中心的位置由 macOS 固定", "Date and Control Center are pinned by macOS"); return
             }
             let ids: Set<ItemID> = [item.id, target.id]
@@ -1943,6 +1948,248 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     mouseButton: .left)?.post(tap: .cghidEventTap)
             usleep(30_000)
         }
+    }
+
+    /// Opt-in (`YOUNGBAR_SETTINGSUITEST=1`): drives the SwiftUI settings window
+    /// with real HID events — per-item mode menu, drag and right-click reorder,
+    /// language menu — then restores modes, order and language. Every event is
+    /// aimed only after checking the settings window is the topmost window at
+    /// that point, so a stray click never lands in another app.
+    /// `YOUNGBAR_EXPECT_ORDER` (comma-separated keys) is the order to restore;
+    /// it defaults to the order at the start of the test.
+    private func runSettingsUITest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        var debug: [String] = []
+        defer {
+            result["debug"] = debug
+            writeJSON(result, name: "settingsuitest.json")
+        }
+        for _ in 0..<40 where catalog.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+        func settle(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
+        func waitIdle() async { for _ in 0..<80 where busy { await settle(250) } }
+        let originalModes = modes
+        let expected = ProcessInfo.processInfo.environment["YOUNGBAR_EXPECT_ORDER"]?
+            .split(separator: ",").map(String.init) ?? savedOrder
+        let originalLanguage = options["language"] ?? 0
+        let originalOptions = options
+        result["restoredAtStart"] = await restoreOrder(to: expected)
+
+        showWindow()
+        await settle(1200)
+        guard let settings, NSApp.isActive, settings.windowForCapture.isKeyWindow else {
+            result["error"] = "settings window is not key; refusing to post events"
+            return
+        }
+        let controller = settings
+        let ourWindow = settings.windowForCapture.windowNumber
+        let screenTop = NSScreen.screens.first?.frame.maxY ?? 0
+        /// Converts an AppKit screen point to CG space, or nil if another
+        /// window would receive the event.
+        func aim(_ point: NSPoint, _ label: String) -> CGPoint? {
+            let topmost = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+            guard topmost == ourWindow else {
+                debug.append("\(label): \(NSStringFromPoint(point)) is covered by window \(topmost), ours \(ourWindow)")
+                return nil
+            }
+            return CGPoint(x: point.x, y: screenTop - point.y)
+        }
+        func rect(_ key: String) -> NSRect? {
+            let found = settings.screenRect(for: key)
+            if found == nil { debug.append("no frame for \(key)") }
+            return found
+        }
+        /// The value of a right-aligned pop-up in a form row.
+        func popUp(_ key: String) -> CGPoint? {
+            guard let row = rect(key) else { return nil }
+            debug.append("\(key) row \(NSStringFromRect(row)), window \(NSStringFromRect(settings.windowFrame))")
+            return aim(NSPoint(x: row.maxX - 30, y: row.midY), key)
+        }
+        func order(_ key: String) -> Int { savedOrder.firstIndex(of: key) ?? -1 }
+        /// Opens a menu with a click and picks an item with the keyboard.
+        /// Keys are only sent once a menu window is on screen; otherwise they
+        /// would reach whatever control has focus.
+        func pick(at point: CGPoint, keys: [CGKeyCode], button: CGMouseButton = .left, _ label: String) async -> Bool {
+            let before = menuWindowCount()
+            await Self.postClick(at: point, button: button)
+            for _ in 0..<10 where menuWindowCount() <= before { await settle(100) }
+            guard menuWindowCount() > before else {
+                debug.append("\(label): no menu opened; keys not sent")
+                return false
+            }
+            // A key sent while the menu is still appearing can be dropped.
+            await settle(700)
+            await Self.postKeys(keys + [36])
+            return true
+        }
+
+        // 1. Per-item mode menu: Shown → Hidden → Always Hidden → Shown.
+        settings.select(.layout)
+        await settle(1000)
+        var modeSteps: [[String: Any]] = []
+        if let target = settings.currentEntries.first(where: { !$0.pinned && $0.mode == 0 && $0.key.hasPrefix("bundle:") }) {
+            result["modeTarget"] = target.key
+            for (keys, expected) in [([CGKeyCode(125)], 1), ([125], 2), ([126], 1), ([126], 0)] {
+                guard let point = popUp("row:\(target.key)") else { modeSteps.append(["error": "picker not reachable"]); break }
+                guard await pick(at: point, keys: keys, "mode") else { modeSteps.append(["error": "menu did not open"]); break }
+                await settle(1200); await waitIdle(); await settle(600)
+                modeSteps.append(["expected": expected, "stored": modes[target.key] ?? 0,
+                                  "row": settings.currentEntries.first { $0.key == target.key }?.mode ?? -1])
+            }
+        }
+        result["modeSteps"] = modeSteps
+        result["modePassed"] = modeSteps.count == 4 && modeSteps.allSatisfy { ($0["expected"] as? Int) == ($0["stored"] as? Int) && ($0["expected"] as? Int) == ($0["row"] as? Int) }
+
+        // 2. Drag a row below its right-hand neighbour; 3. move it back with
+        //    the context menu ("左移一位" is the second item).
+        await settle(800)
+        let entries = settings.currentEntries
+        let pairs = entries.indices.dropLast().filter { index in
+            let a = entries[index], b = entries[index + 1]
+            return !a.pinned && !b.pinned && a.key.hasPrefix("bundle:") && b.key.hasPrefix("bundle:")
+        }
+        let shownPair = pairs.first { entries[$0].mode == 0 && entries[$0 + 1].mode == 0 }
+        if let index = shownPair ?? pairs.first,
+           let rowA = rect("row:\(entries[index].key)"),
+           let rowB = rect("row:\(entries[index + 1].key)"),
+           let from = aim(NSPoint(x: rowA.minX + 90, y: rowA.midY), "drag start"),
+           let to = aim(NSPoint(x: rowB.minX + 90, y: rowB.midY), "drag end") {
+            let a = entries[index].key, b = entries[index + 1].key
+            result["dragPair"] = [a, b]
+            result["orderBefore"] = [order(a), order(b)]
+            await Self.postDrag(from: from, to: to)
+            await settle(1500); await waitIdle(); await settle(800)
+            let dragged = order(a) > order(b)
+            result["orderAfterDrag"] = [order(a), order(b)]
+            result["dragFeedback"] = feedback
+            result["dragPassed"] = dragged
+
+            var contextSteps: [[String: Any]] = []
+            // Without a successful drag, move right first so there is something to undo.
+            let plan: [(Int, Bool)] = dragged ? [(2, false)] : [(3, true), (2, false)]
+            for (downs, expectRight) in plan {
+                await settle(1000)
+                if !settings.windowForCapture.isKeyWindow { showWindow(); await settle(800) }
+                guard let row = rect("row:\(a)"), let point = aim(NSPoint(x: row.minX + 90, y: row.midY), "context") else {
+                    contextSteps.append(["error": "row not reachable"]); break
+                }
+                guard await pick(at: point, keys: Array(repeating: CGKeyCode(125), count: downs), button: .right, "context") else {
+                    contextSteps.append(["error": "menu did not open"]); break
+                }
+                await settle(1500); await waitIdle(); await settle(800)
+                contextSteps.append(["downs": downs, "aRightOfB": order(a) > order(b), "expectedRight": expectRight, "feedback": feedback])
+            }
+            result["contextSteps"] = contextSteps
+            result["contextPassed"] = contextSteps.count == plan.count && contextSteps.allSatisfy { ($0["aRightOfB"] as? Bool) == ($0["expectedRight"] as? Bool) }
+        } else {
+            result["dragError"] = "no movable adjacent pair reachable"
+        }
+
+        // 4. Language menu: there and back, in place.
+        if !settings.windowForCapture.isKeyWindow { showWindow(); await settle(800) }
+        settings.select(.general)
+        await settle(1000)
+        let frameBefore = settings.windowFrame
+        var languageSteps: [[String: Any]] = []
+        let toOther: CGKeyCode = originalLanguage == 0 ? 125 : 126
+        let back: CGKeyCode = originalLanguage == 0 ? 126 : 125
+        for (key, expected) in [(toOther, 1 - originalLanguage), (back, originalLanguage)] {
+            guard let point = popUp("language") else { languageSteps.append(["error": "language picker not reachable"]); break }
+            guard await pick(at: point, keys: [key], "language") else { languageSteps.append(["error": "menu did not open"]); break }
+            await settle(1500)
+            languageSteps.append(["expected": expected, "stored": options["language"] ?? -1,
+                                  "title": self.settings?.windowTitle ?? "",
+                                  "sameWindow": self.settings === controller,
+                                  "frameUnchanged": self.settings?.windowFrame == frameBefore])
+        }
+        result["languageSteps"] = languageSteps
+        result["languagePassed"] = languageSteps.count == 2 && languageSteps.allSatisfy {
+            ($0["expected"] as? Int) == ($0["stored"] as? Int) && ($0["sameWindow"] as? Bool) == true && ($0["frameUnchanged"] as? Bool) == true
+        }
+
+        // Restore anything a failed step left behind.
+        await waitIdle()
+        for (key, mode) in originalModes where modes[key] != mode { setMode(key: key, mode: mode); await settle(800); await waitIdle() }
+        for key in modes.keys where originalModes[key] == nil && modes[key] != 0 { setMode(key: key, mode: 0); await settle(800); await waitIdle() }
+        if (options["language"] ?? 0) != originalLanguage {
+            options["language"] = originalLanguage
+            UserDefaults.standard.set(options, forKey: "barOptions")
+            L10n.current = Language(rawValue: originalLanguage) ?? .chinese
+            renderWindow(force: true)
+        }
+        result["restoredAtEnd"] = await restoreOrder(to: expected)
+        // Items that are not in the menu bar only differ in their saved slot;
+        // put that back too once the visible order matches.
+        if savedOrder != expected, Set(savedOrder) == Set(expected),
+           savedOrder.filter({ presentKeys.contains($0) }) == expected.filter({ presentKeys.contains($0) }) {
+            savedOrder = expected
+            UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
+        }
+        result["modesRestored"] = modes.filter { $0.value != 0 } == originalModes.filter { $0.value != 0 }
+        result["orderRestored"] = savedOrder == expected
+        result["languageRestored"] = (options["language"] ?? 0) == originalLanguage
+        result["optionsUnchanged"] = options == originalOptions
+        settings.close()
+    }
+
+    /// Moves at most a few items so the items now in the menu bar follow
+    /// `target` again, through the same path as a user move. Items that are
+    /// not present are ignored. Returns the moves made.
+    private func restoreOrder(to target: [String]) async -> [String] {
+        var moves: [String] = []
+        func present(_ keys: [String]) -> [String] { keys.filter { catalog[$0] != nil && presentKeys.contains($0) } }
+        for _ in 0..<4 where present(savedOrder) != present(target) {
+            let current = present(savedOrder), wanted = present(target)
+            // Find one item whose removal makes both orders agree.
+            guard let key = current.first(where: { key in
+                current.filter { $0 != key } == wanted.filter { $0 != key }
+            }), let index = wanted.firstIndex(of: key) else { break }
+            let before = index + 1 < wanted.count ? wanted[index + 1] : ""
+            moveItem(key: key, before: before)
+            moves.append("\(key) before \(before)")
+            try? await Task.sleep(for: .milliseconds(500))
+            for _ in 0..<80 where busy { try? await Task.sleep(for: .milliseconds(250)) }
+            moves.append("→ \(feedback)")
+        }
+        return moves
+    }
+
+    nonisolated private static func postClick(at point: CGPoint, button: CGMouseButton) async {
+        await Task.detached {
+            let source = CGEventSource(stateID: .hidSystemState)
+            let down: CGEventType = button == .right ? .rightMouseDown : .leftMouseDown
+            let up: CGEventType = button == .right ? .rightMouseUp : .leftMouseUp
+            CGEvent(mouseEventSource: source, mouseType: down, mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
+            usleep(40_000)
+            CGEvent(mouseEventSource: source, mouseType: up, mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
+        }.value
+    }
+
+    nonisolated private static func postKeys(_ keys: [CGKeyCode]) async {
+        await Task.detached {
+            let source = CGEventSource(stateID: .hidSystemState)
+            for key in keys {
+                CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)?.post(tap: .cghidEventTap)
+                usleep(30_000)
+                CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false)?.post(tap: .cghidEventTap)
+                usleep(200_000)
+            }
+        }.value
+    }
+
+    nonisolated private static func postDrag(from: CGPoint, to: CGPoint) async {
+        await Task.detached {
+            let source = CGEventSource(stateID: .hidSystemState)
+            CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: from, mouseButton: .left)?.post(tap: .cghidEventTap)
+            usleep(300_000)
+            for step in 1...20 {
+                let t = CGFloat(step) / 20
+                let point = CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
+                CGEvent(mouseEventSource: source, mouseType: .leftMouseDragged, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                usleep(40_000)
+            }
+            usleep(400_000)
+            CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: to, mouseButton: .left)?.post(tap: .cghidEventTap)
+        }.value
     }
 
     private func runSettingsClickTest() async {

@@ -97,7 +97,17 @@ final class SettingsModel {
         send(.mode(key, mode))
     }
 
-    /// `destination` follows `onMove`: the index the row is dropped before.
+    /// Dropping a row on another takes that row's place.
+    func drop(_ key: String?, on target: String) -> Bool {
+        guard let key, key != target,
+              let source = entries.firstIndex(where: { $0.key == key }),
+              let index = entries.firstIndex(where: { $0.key == target }),
+              !entries[source].pinned else { return false }
+        move(from: source, to: source < index ? index + 1 : index)
+        return true
+    }
+
+    /// `destination` is the index the row is placed before (as in `onMove`).
     /// Rows never land after the macOS-pinned items at the right edge.
     func move(from source: Int, to destination: Int) {
         guard entries.indices.contains(source), !entries[source].pinned else { return }
@@ -221,10 +231,17 @@ struct GeneralPane: View {
                     get: { model.launchAtLogin },
                     set: { model.launchAtLogin = $0; model.send(.login($0)) }))
                     .settingsFrame("login", model)
-                Picker(L10n.t("语言", "Language"), selection: model.intBinding("language")) {
-                    ForEach(Language.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                // Form drops geometry modifiers on its pickers, so the row
+                // is wrapped to give the self-test a frame.
+                LabeledContent(L10n.t("语言", "Language")) {
+                    Picker(L10n.t("语言", "Language"), selection: model.intBinding("language")) {
+                        ForEach(Language.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .tint(.primary)
                 }
-                .tint(.primary)
+                .settingsFrame("language", model)
             }
 
             Section {
@@ -336,19 +353,16 @@ struct LayoutPane: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 } else {
+                    // Form rows don't honour `onMove`, so rows use drag and drop.
                     ForEach(model.entries) { entry in
                         LayoutRow(entry: entry, model: model)
-                            .moveDisabled(entry.pinned)
-                    }
-                    .onMove { offsets, destination in
-                        if let source = offsets.first { model.move(from: source, to: destination) }
                     }
                 }
             } header: {
                 Text(L10n.t("按菜单栏中的顺序，从左到右", "In menu-bar order, left to right"))
             } footer: {
-                Text(L10n.t("拖动行可以调整顺序，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
-                            "Drag a row, or right-click it, to reorder. Locked items are placed by macOS but can still be hidden. Always Hidden items only appear in the strip when you ⌥-click •••."))
+                Text(L10n.t("把一行拖到另一行上即可换到那个位置，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
+                            "Drag a row onto another to take its place, or right-click it to reorder. Locked items are placed by macOS but can still be hidden. Always Hidden items only appear in the strip when you ⌥-click •••."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -378,6 +392,7 @@ struct LayoutPane: View {
 struct LayoutRow: View {
     let entry: BarEntry
     let model: SettingsModel
+    @State private var targeted = false
 
     var body: some View {
         LabeledContent {
@@ -410,6 +425,17 @@ struct LayoutRow: View {
                     .truncationMode(.tail)
             }
         }
+        .settingsFrame("row:\(entry.key)", model)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(targeted ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear))
+                .padding(.horizontal, -6)
+                .padding(.vertical, -4)
+        }
+        .movable(!entry.pinned, key: entry.key)
+        .dropDestination(for: String.self) { keys, _ in
+            model.drop(keys.first, on: entry.key)
+        } isTargeted: { targeted = $0 }
         .help(entry.pinned
               ? L10n.t("位置由 macOS 固定，不能移动；仍然可以隐藏", "macOS fixes this item's position; it can still be hidden")
               : "")
@@ -612,6 +638,12 @@ struct StripPreview: NSViewRepresentable {
 }
 
 extension View {
+    /// Lets a menu-bar row be dragged onto another row.
+    @ViewBuilder
+    func movable(_ enabled: Bool, key: String) -> some View {
+        if enabled { draggable(key) } else { self }
+    }
+
     /// Records the control's frame so self-tests can click it.
     func settingsFrame(_ key: String, _ model: SettingsModel) -> some View {
         onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.frames[key] = $0 }

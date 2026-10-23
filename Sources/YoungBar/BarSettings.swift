@@ -115,8 +115,14 @@ final class BarSettings: NSObject {
 
     // MARK: - Self-test support
 
-    /// Converts a frame recorded in SwiftUI's global space to screen space.
-    private func screenRect(for key: String) -> NSRect? {
+    var currentEntries: [BarEntry] { model.entries }
+    var currentPage: SettingsPage { model.page ?? .general }
+    var windowFrame: NSRect { window.frame }
+    var windowTitle: String { window.title }
+
+    /// Converts a frame recorded in SwiftUI's global space (the window's
+    /// content, sidebar included) to screen space.
+    func screenRect(for key: String) -> NSRect? {
         guard window.isVisible, let view = window.contentView, let rect = model.frames[key] else { return nil }
         let local = view.isFlipped
             ? rect

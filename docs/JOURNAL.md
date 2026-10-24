@@ -103,3 +103,13 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
   `YoungBar-0.1.0.zip`、校验 SHA256、解压到 `~/Applications/YoungBar.app` 并打开。
   因此普通用户和 Agent 都不需要 Xcode Command Line Tools；只有从源码构建才需要。
 - Release 的 `.sha256` 改成只含文件名，`shasum -a 256` 可直接在下载目录校验。
+
+
+---
+
+## 2026-10-24 · README 安装说明精简
+
+- 安装只保留下载、解压、右键打开、辅助功能四步。
+- Agent 安装改为一句自然语言 + 一行命令，举例 ChatGPT、豆包、
+  Claude、DeepSeek（DSH）；不再解释 Xcode / 构建工具。
+- 从源码构建只写「macOS 27 + Swift 6.3 工具链」。

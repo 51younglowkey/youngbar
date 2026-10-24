@@ -16,27 +16,23 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 
 ## Install
 
-Requires **macOS 27**. YoungBar has **no Dock icon** — it lives in the menu bar.
+1. Download `YoungBar-0.1.0.zip` from [Releases](../../releases).
+2. Unzip it and move `YoungBar.app` into `/Applications`.
+3. First launch: right-click the app → **Open**.
+4. Allow Accessibility when prompted. Enable *Open at login* in Settings if you want it at login.
 
-1. Download `YoungBar-0.1.0.zip` from [Releases](../../releases), unzip it and move `YoungBar.app` into `/Applications`.
-2. First launch: right-click the app → **Open** → **Open**. The build is not notarized, so Gatekeeper warns once.
-3. Grant **Device Control and Data Access** (Accessibility). Screen Recording is **not** used and not required.
-4. Enable *Open at login* in Settings if you want it back after login.
-
-The older install notes are in [docs/INSTALL.md](docs/INSTALL.md).
+YoungBar lives in the menu bar (•••); it has no Dock icon.
 
 ### Install with an agent
 
-Paste this one line into an agent on macOS 27; **no Xcode required** — it downloads the release:
+Send this to ChatGPT, Doubao, Claude, DeepSeek (DSH), or any other agent:
+
+> Install YoungBar for me: run `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh`
+
+Or run the command directly:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
-```
-
-The script downloads `YoungBar-0.1.0.zip`, verifies its SHA256, copies `YoungBar.app` to `~/Applications`, and opens it. Accessibility still has to be granted by the user. Building from source is the only path that needs Xcode Command Line Tools:
-
-```sh
-git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-src && cd ~/Applications/YoungBar-src && sh Scripts/build.sh && cp -R build/YoungBar.app ~/Applications/ && open ~/Applications/YoungBar.app
 ```
 
 ## Features
@@ -59,7 +55,7 @@ See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution quest
 
 ## Build from source
 
-Building from source needs macOS 27 and Xcode Command Line Tools (Swift 6.3). The Release download does not.
+Building from source needs macOS 27 and the Swift 6.3 toolchain.
 
 ```sh
 sh Scripts/build.sh

@@ -16,27 +16,23 @@
 
 ## 安装
 
-需要 **macOS 27**。YoungBar 没有 Dock 图标，只住在菜单栏里。
+1. 从 [Releases](../../releases) 下载 `YoungBar-0.1.0.zip`。
+2. 解压，把 `YoungBar.app` 放进 `/Applications`。
+3. 第一次打开：右键 app → **打开**。
+4. 按提示允许辅助功能；需要开机启动就在设置里打开「登录时打开」。
 
-1. 从 [Releases](../../releases) 下载 `YoungBar-0.1.0.zip`，解压后把 `YoungBar.app` 放进 `/Applications`。
-2. 第一次打开：右键 app → **打开** → **打开**。构建没有经过 Apple 公证，Gatekeeper 会警告一次。
-3. 授权 **设备控制与数据访问**（辅助功能）。**不需要**屏幕录制。
-4. 想开机后自动出现，在设置里打开「登录时打开」。
-
-更早的安装说明在 [docs/INSTALL.md](docs/INSTALL.md)。
+安装后入口在菜单栏 •••，没有 Dock 图标。
 
 ### 用 Agent 安装
 
-在 macOS 27 上把这一行发给 Agent；**不需要 Xcode**，脚本直接下载 Release：
+把下面这句话发给 ChatGPT、豆包、Claude、DeepSeek（DSH）等任意 Agent：
+
+> 帮我安装 YoungBar：运行 `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh`
+
+也可以直接复制命令：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
-```
-
-脚本会下载 `YoungBar-0.1.0.zip`、校验 SHA256、把 `YoungBar.app` 复制到 `~/Applications` 并打开。辅助功能仍然需要用户手动授权。要从源码构建才需要 Xcode Command Line Tools：
-
-```sh
-git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-src && cd ~/Applications/YoungBar-src && sh Scripts/build.sh && cp -R build/YoungBar.app ~/Applications/ && open ~/Applications/YoungBar.app
 ```
 
 ## 功能
@@ -59,7 +55,7 @@ git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-
 
 ## 从源码构建
 
-只有从源码构建才需要：macOS 27、Xcode Command Line Tools（Swift 6.3）。直接下载 Release 的用户不需要这些。
+需要 macOS 27 和 Swift 6.3 工具链。
 
 ```sh
 sh Scripts/build.sh

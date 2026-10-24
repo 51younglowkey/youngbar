@@ -34,7 +34,7 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
   `settingsuitest.json` 02:30 全通过，但那之后 `ea54e9c` 删了设置里的屏幕录制行，
   **整套设置测试没有再跑**。当前版本 `0.1.0 (1)`。
 - **登录项排查（2026-10-24）**：`sfltool dumpbtm` 里 YoungBar 的 URL 显示为
-  `/Users/501/...`，而实际路径是 `/Users/51young/...`；`launchctl print` 的
+  `/Users/501/...`，而实际路径是 `<home>/...`；`launchctl print` 的
   `program` 指向当前 bundle。把登录项 token 改成「路径 + CFBundleVersion」，
   路径/版本变化时自动 unregister/register 一次；当前 `loginItemToken` 已更新。
   `who` 显示本机自 10-21 未重启，app 的 PPID 1 只能说明由 launchd 启动，

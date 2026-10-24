@@ -4,8 +4,6 @@
 
 A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.
 
-> YoungBar is a standalone repository, split out of the Leorea workspace with its history.
-
 ![YoungBar appearance](docs/images/readme-appearance-clear.png)
 
 ## Install

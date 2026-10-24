@@ -83,3 +83,13 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - 注意：仓库 URL/所有者仍是 `51younglowkey`。要让 URL 里也不出现 51young，
   需要改 GitHub 用户名或把仓库转移到一个中性 org；这次没有动账号。
 - 后续提交使用中性作者配置，避免旧名字重新出现在 contributors。
+
+
+---
+
+## 2026-10-24 · 中英双语 README 与截图排版
+
+- `README.md` 改为默认中文；新增 `README.en.md` 英文版，顶部互相切换。
+- 软件名在两版都保留 `YoungBar · 羊霸霸`，不拆成两个名字。
+- 截图改为「一张大图 + 三张 32% 宽度横排」，不再四张纵向平铺。
+- README 安装段去掉 Private 仓库的临时说法，改为手动 clone/构建。

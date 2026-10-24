@@ -2,115 +2,113 @@
 
 # YoungBar · 羊霸霸
 
-A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.
+**中文** | [English](README.en.md)
 
-![YoungBar appearance](docs/images/readme-appearance-clear.png)
+一个为 **macOS 27** 设计的键盘优先菜单栏收纳工具。把不常用的图标收起来，从一条紧凑的收纳条里打开；点一下就能进入应用原生的菜单或面板，菜单栏不会闪烁或重排。
 
-## Install
+![YoungBar 外观](docs/images/readme-appearance-clear.png)
 
-Requires **macOS 27**. YoungBar has **no Dock icon** — it lives in the menu bar.
+<p align="center">
+  <img src="docs/images/readme-general.png" width="32%" alt="通用设置">
+  <img src="docs/images/readme-menu-bar.png" width="32%" alt="菜单栏页">
+  <img src="docs/images/readme-appearance-yellow.png" width="32%" alt="黄色外观">
+</p>
 
-1. Download `YoungBar-0.1.0.zip` from [Releases](../../releases), unzip it and move `YoungBar.app` into `/Applications`.
-2. First launch: right-click the app → **Open** → **Open**. The build is not notarized, so Gatekeeper warns once.
-3. Grant **Device Control and Data Access** (Accessibility). Screen Recording is **not** used and not required.
-4. Enable *Open at login* in Settings if you want it back after login.
+## 安装
 
-The older install notes are in [docs/INSTALL.md](docs/INSTALL.md).
+需要 **macOS 27**。YoungBar 没有 Dock 图标，只住在菜单栏里。
 
-### Install with an agent
+1. 从 [Releases](../../releases) 下载 `YoungBar-0.1.0.zip`，解压后把 `YoungBar.app` 放进 `/Applications`。
+2. 第一次打开：右键 app → **打开** → **打开**。构建没有经过 Apple 公证，Gatekeeper 会警告一次。
+3. 授权 **设备控制与数据访问**（辅助功能）。**不需要**屏幕录制。
+4. 想开机后自动出现，在设置里打开「登录时打开」。
 
-Paste this one line into an agent on a Mac with Xcode Command Line Tools:
+更早的安装说明在 [docs/INSTALL.md](docs/INSTALL.md)。
+
+### 用 Agent 安装
+
+在有 Xcode Command Line Tools 的 Mac 上，把这一行发给 Agent：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
 ```
 
-The script clones into `~/Applications/YoungBar-src`, builds, copies `YoungBar.app` to `~/Applications`, and opens it. Accessibility still has to be granted by the user. If the repository is private, use a clone with access instead:
+脚本会克隆到 `~/Applications/YoungBar-src`、构建、把 `YoungBar.app` 复制到 `~/Applications` 并打开。辅助功能仍然需要用户手动授权。也可以手动 clone 构建：
 
 ```sh
 git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-src && cd ~/Applications/YoungBar-src && sh Scripts/build.sh && cp -R build/YoungBar.app ~/Applications/ && open ~/Applications/YoungBar.app
 ```
 
-## Screenshots
+## 功能
 
-![General](docs/images/readme-general.png)
+- **每个项目三种状态**：显示 / 隐藏 / 始终隐藏（⌥ 点击 ••• 可把「始终隐藏」也放进收纳条）。
+- **即时收纳条**：每个隐藏项显示应用自己的图标（系统项用 SF Symbol）；打开收纳条不会临时显示任何图标。
+- **原地打开**：点收纳条里的第三方项时，在隐藏状态下直接 AXPress，不显示图标、不动鼠标，菜单或面板就在收纳条旁打开。系统项没有 AXPress，才短暂显示后点击，点击时隐藏光标。
+- **排序**：在真实菜单栏里 ⌘ 拖动，或在「菜单栏」页拖动整行；右键可以左移/右移。
+- **全局快捷键**：⌃⌥B 打开/收起收纳条。
+- **菜单栏页**：按菜单栏顺序列出每一项，用「显示 / 隐藏 / 始终隐藏」分段按钮选择；日期与控制中心由 macOS 固定位置，但仍可隐藏。
+- **设置窗口**：System Settings 风格的侧栏 + 分组表单（SwiftUI 内容，AppKit 外壳）；菜单栏逻辑仍在 AppKit。
+- **外观**：跟随系统 / 浅色 / 深色；蓝 / 粉 / 黄使用 OKLCH 同亮度同彩度，另有中性透明；主题色玻璃窗口、侧栏角色图、三档应用范围和 30–100% 收纳条不透明度。
+- **自定义菜单栏按钮**：省略号、爱心、星形、闪光、网格，或你自己的 36×36 PNG。
+- **收纳条设置入口**：右侧固定齿轮。
+- **崩溃恢复**：正常退出前先显示所有隐藏项；异常退出后，下次启动会先全部显示再套用规则。`--reveal-all` 是救援参数。
+- **中英双语**：在「通用」里切换。
+- **纯本地**：没有遥测、没有网络、不截屏。
 
-![Menu bar](docs/images/readme-menu-bar.png)
+关于 IP、许可证、私有 API 和分发，见 [docs/FAQ.md](docs/FAQ.md)。
 
-![Appearance — yellow](docs/images/readme-appearance-yellow.png)
+## 构建与运行
 
-![Appearance — clear](docs/images/readme-appearance-clear.png)
-
-## Features
-
-- **Three states per item**: Visible, Hidden, Always Hidden (⌥-click to include Always Hidden in the strip).
-- **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything.
-- **Open in place**: clicking a third-party item in the strip presses it through Accessibility while it stays hidden, so its menu or panel opens beside the strip without the bar shifting or the pointer moving. System items are revealed and clicked with the pointer hidden.
-- **Reorder**: ⌘-drag in the real menu bar and drag a row in the Menu Bar page; right-click a row for left/right moves.
-- **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
-- **Menu Bar page**: every item in menu-bar order with Shown / Hidden / Always Hidden segmented choices; Date and Control Center keep their macOS-fixed position but can be hidden.
-- **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
-- **Appearance**: system / light / dark; blue, pink and yellow palettes with matched OKLCH lightness/saturation, plus a neutral clear one; a theme-tinted glass window with the theme character in the sidebar; three-way scope and one strip opacity slider (30–100%).
-- **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or a 36×36 PNG.
-- **Settings entry from the strip**: a pinned gear at the right edge.
-- **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
-- **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no network, no screen capture.
-
-See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
-
-## Build and run
-
-Requirements: macOS 27, Xcode Command Line Tools (Swift 6.3).
+要求：macOS 27、Xcode Command Line Tools（Swift 6.3）。
 
 ```sh
 sh Scripts/build.sh
 open build/YoungBar.app
 ```
 
-`Scripts/build.sh` builds a release executable, assembles `build/YoungBar.app`, installs the icon, and signs with a stable local certificate if one is configured (otherwise ad-hoc). See [docs/SIGNING.md](docs/SIGNING.md), [docs/INSTALL.md](docs/INSTALL.md) and [docs/RELEASING.md](docs/RELEASING.md).
+`Scripts/build.sh` 会编译 release、组装 `build/YoungBar.app`、装图标，并在配置了本地证书时用证书签名（否则 ad-hoc）。详见 [docs/SIGNING.md](docs/SIGNING.md)、[docs/INSTALL.md](docs/INSTALL.md) 和 [docs/RELEASING.md](docs/RELEASING.md)。
 
-To produce a release zip and SHA256:
+打发布包：
 
 ```sh
 make package
 ```
 
-## Permissions
+## 权限
 
-| Permission | Why | Without it |
+| 权限 | 用途 | 没有时 |
 |---|---|---|
-| **Device Control and Data Access** (Accessibility on macOS 27) | enumerate, hide, reveal and reorder menu-bar items | the strip is empty; only settings work |
+| **设备控制与数据访问**（macOS 27 的辅助功能） | 枚举、隐藏、展开、排序菜单栏项目 | 收纳条为空，只能打开设置 |
 
-YoungBar does **not** capture the screen and does **not** need Screen & System Audio Recording. If macOS stops recognizing the app after a rebuild, remove the old YoungBar entry and grant Accessibility again. A notarized Developer ID build removes that friction.
+YoungBar **不截屏**，**不需要屏幕录制**。如果重建后 macOS 不再信任这个 app，删掉旧的 YoungBar 条目，重新打开辅助功能即可。使用 Developer ID 公证的构建可以消除这个摩擦。
 
-## How it works (and the trade-offs)
+## 工作原理与取舍
 
-- Hiding uses the private `MenuBarClientCore` assessment interface. It works on macOS 27 but is not a public API and may break on future releases. This app cannot be shipped on the App Store.
-- The strip shows app icons, not the items' live menu-bar content: a concealed item is not drawn by macOS 27, so there is nothing current to show. Items whose value you watch belong in the visible part of the bar.
-- There is no menu-bar screenshot capture or cache.
+- 隐藏使用私有 `MenuBarClientCore` 评估接口。它在 macOS 27 上可用，但不是公开 API，未来系统更新可能失效；因此不能上架 Mac App Store。
+- 收纳条显示应用图标，而不是隐藏项当前的菜单栏内容：项目隐藏后 macOS 27 不再绘制它，没有实时内容可显示。需要一直看的数值应该留在菜单栏常显区。
+- 不抓取、不缓存菜单栏截图。
 
-## Status and gaps
+## 状态与缺口
 
-The current verification matrix is in [docs/STATUS.md](docs/STATUS.md); the iBar Pro 1.4.6 comparison is in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
+当前验证矩阵在 [docs/STATUS.md](docs/STATUS.md)；iBar Pro 1.4.6 的对照在 [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md)。
 
-Known gaps: multi-display, configurable hotkey, keyboard navigation, drag-reordering inside the strip, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
+已知缺口：多显示器、可配置快捷键、键盘导航、收纳条内拖拽排序，以及 SwiftUI 设置的真实触控板手感。登录项已注册，但还需要真正登出/重启验证一次。
 
-## Roadmap
+## 路线图
 
-- Configurable hotkey, keyboard navigation (arrows / Enter / Esc), layout search.
-- Profiles with export/import, per-app rules.
-- Multi-display.
-- Notarized releases, auto-update.
+- 可配置快捷键、键盘导航（方向键 / Enter / Esc）、布局搜索。
+- 配置导入导出、按应用规则。
+- 多显示器。
+- 公证发布、自动更新。
 
-## License and credits
+## 许可证与致谢
 
-YoungBar is licensed under **GPL-3.0-only**. The full text is in [LICENSE](LICENSE); third-party components and asset provenance are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Distribution rules, the corresponding-source checklist, and the MIT question are covered in [docs/LICENSING.md](docs/LICENSING.md); release steps are in [docs/RELEASING.md](docs/RELEASING.md).
+YoungBar 使用 **GPL-3.0-only**。完整文本见 [LICENSE](LICENSE)；第三方组件与素材来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。分发规则、对应源码清单和「为什么不能改 MIT」见 [docs/LICENSING.md](docs/LICENSING.md)；发布步骤见 [docs/RELEASING.md](docs/RELEASING.md)。
 
-`Vendor/PelmetCore` and `Vendor/PelmetEngine` come from the [Dimble source repository](https://github.com/fif7y/dimble), commit `23a5412` (0.3.2, build 71), originally named Pelmet, under GPLv3. The vendored manifests drop the upstream probe executable and tests; implementation files are retained. A copy of the license sits in `Vendor/LICENSE`.
+`Vendor/PelmetCore` 与 `Vendor/PelmetEngine` 来自 [Dimble 源码仓库](https://github.com/fif7y/dimble) 的 `23a5412`（0.3.2，build 71，原 Pelmet），使用 GPLv3。vendored manifest 去掉了上游的 probe 可执行文件和测试，实现文件保留；许可证副本在 `Vendor/LICENSE`。
 
-YoungBar's own UI and app code are original. The interaction model is informed by iBar Pro 1.4.6; no iBar assets, icons, or code are included. Theme artwork is user-supplied and is **not yet cleared for public distribution**; see [docs/FAQ.md](docs/FAQ.md).
+YoungBar 自己的 UI 与应用代码是原创的。交互模型参考了 iBar Pro 1.4.6；没有包含 iBar 的素材、图标或代码。主题角色素材由用户提供，**尚未确认公开分发授权**，见 [docs/FAQ.md](docs/FAQ.md)。
 
-## Contact
+## 联系方式
 
-Rights-holder and removal requests: **wuyiyang.studio@gmail.com**
+权利人或相关方请联系：**wuyiyang.studio@gmail.com**

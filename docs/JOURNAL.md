@@ -66,3 +66,20 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
   尚未上传 GitHub Release（仓库仍为 private）。
 - **仍未验证**：真实登出/重启后的登录启动、旧登录项清理、TCC 重新授权后的
   完整交互；多显示器等旧缺口不变。
+
+
+---
+
+## 2026-10-24 · 0.1.0 公开与作者历史清理
+
+- 仓库转为 **Public**，发布 `v0.1.0`：<https://github.com/51younglowkey/youngbar/releases/tag/v0.1.0>
+  资产 `YoungBar-0.1.0.zip` 与 `.sha256`；下载后 SHA256 与本地一致
+  `f83081e0f16e7c7a761df90cf78276e6c6718dd7090e927f3ade17f255ea6bbe`。
+- 重写了全部 41 个提交的作者/提交者：`YoungBar <youngbar@users.noreply.github.com>`；
+  删除所有 `Co-Authored-By: Claude` trailer。GitHub contributors 现在只显示
+  `Youngbar`，不再显示 `51young` / `Claude`。
+- README 删除了 “YoungBar is a standalone repository, split out of the Leorea
+  workspace with its history.” 这句。
+- 注意：仓库 URL/所有者仍是 `51younglowkey`。要让 URL 里也不出现 51young，
+  需要改 GitHub 用户名或把仓库转移到一个中性 org；这次没有动账号。
+- 后续提交使用中性作者配置，避免旧名字重新出现在 contributors。

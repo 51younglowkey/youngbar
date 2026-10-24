@@ -207,10 +207,10 @@
 
 | 项 | 当前状态 | 证据 |
 |---|---|---|
-| 仓库 | `~/Documents/General_Workspace/YoungBar`，私有远程 `51younglowkey/youngbar`，观察时 `main` 与 `origin/main` 同步在 `8fab9f0` | `git status -sb`；`gh repo view` |
+| 仓库 | `~/Documents/General_Workspace/YoungBar`，公开远程 `51younglowkey/youngbar`；0.1.0 已发布 | `git status -sb`；`gh repo view` |
 | 版本 / Bundle ID | `0.1.0 (1)`，显示名 YoungBar；Bundle ID 改为 `studio.wuyiyang.youngbar` | `Info.plist`；旧 `dev.leorea.youngbar` 设置会迁移（已实测 `itemOrder` 拷入新域） |
 | 构建 | `Scripts/build.sh` 先组装 + 签名 staging，再整包替换；运行中重建不再被 `Code Signature Invalid` 杀掉 | `Scripts/build.sh`；4.2 的崩溃对比 |
-| 0.1.0 发布包 | ✅ `dist/YoungBar-0.1.0.zip` + `.sha256`，bundle 内带 LICENSE/NOTICES；**尚未上传 GitHub Release** | `dist/YoungBar-0.1.0.zip`；SHA256 `f83081e0…` |
+| 0.1.0 发布包 | ✅ 已上传 GitHub Release（公开）；`YoungBar-0.1.0.zip` + `.sha256`，bundle 内带 LICENSE/NOTICES | [Release v0.1.0](https://github.com/51younglowkey/youngbar/releases/tag/v0.1.0)；SHA256 `f83081e0…` |
 | 签名 | 本地 `YoungBar Local Signing` 证书（非 Developer ID）；bundle 内带 LICENSE/NOTICES | `codesign -dv`：`Authority=YoungBar Local Signing` |
 | 设置窗口 | **SwiftUI** `Form(.grouped)` + 侧栏 List，AppKit 只做 `NSWindow + NSSplitViewController` 外壳；三页：通用 / 菜单栏 / 外观 | `Sources/YoungBar/SettingsView.swift`、`BarSettings.swift`；`swiftui-*.png` |
 | 设置交互 | 逐项模式菜单、拖动排序、右键移动、原地切换语言均通过真实鼠标/键盘测试；测试后设置与备份一致 | `settingsuitest.json`（`modePassed/dragPassed/languagePassed:true`，02:30；之后 `ea54e9c` 删了屏幕录制行，未重跑整套设置测试） |

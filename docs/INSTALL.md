@@ -8,6 +8,9 @@ macOS will warn on first launch. This is expected for a small open-source app.
 Download `YoungBar-<version>.zip` from the GitHub Release, unzip it, and move
 `YoungBar.app` to `/Applications`.
 
+The prebuilt Release does not require Xcode. Only building from source needs
+Command Line Tools.
+
 ## 2. First launch
 
 Because the build is ad-hoc or self-signed:

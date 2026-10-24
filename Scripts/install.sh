@@ -3,23 +3,29 @@
 # SPDX-License-Identifier: GPL-3.0-only
 set -eu
 
-repo="${YOUNGBAR_REPO:-https://github.com/51younglowkey/youngbar.git}"
-src="${YOUNGBAR_SRC:-$HOME/Applications/YoungBar-src}"
+version="${YOUNGBAR_VERSION:-0.1.0}"
+asset="YoungBar-${version}.zip"
+base="${YOUNGBAR_RELEASE_BASE:-https://github.com/51younglowkey/youngbar/releases/download/v${version}}"
 app="$HOME/Applications/YoungBar.app"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$HOME/Applications"
-if [ -d "$src/.git" ]; then
-    git -C "$src" pull --ff-only
-else
-    rm -rf "$src"
-    git clone --depth 1 "$repo" "$src"
+echo "Downloading $asset ..."
+curl -fL --retry 2 "$base/$asset" -o "$tmp/$asset"
+curl -fsSL "$base/$asset.sha256" -o "$tmp/$asset.sha256"
+
+expected="$(awk '{print $1}' "$tmp/$asset.sha256")"
+actual="$(shasum -a 256 "$tmp/$asset" | awk '{print $1}')"
+if [ "$expected" != "$actual" ]; then
+    echo "Checksum mismatch: expected $expected, got $actual" >&2
+    exit 1
 fi
 
-cd "$src"
-sh Scripts/build.sh
-
+ditto -x -k "$tmp/$asset" "$tmp/out"
 rm -rf "$app"
-ditto build/YoungBar.app "$app"
+ditto "$tmp/out/YoungBar.app" "$app"
+xattr -dr com.apple.quarantine "$app" 2>/dev/null || true
 open "$app"
 
 cat <<'TEXT'

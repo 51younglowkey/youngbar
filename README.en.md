@@ -27,13 +27,13 @@ The older install notes are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ### Install with an agent
 
-Paste this one line into an agent on a Mac with Xcode Command Line Tools:
+Paste this one line into an agent on macOS 27; **no Xcode required** — it downloads the release:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
 ```
 
-The script clones into `~/Applications/YoungBar-src`, builds, copies `YoungBar.app` to `~/Applications`, and opens it. Accessibility still has to be granted by the user. Or clone and build manually:
+The script downloads `YoungBar-0.1.0.zip`, verifies its SHA256, copies `YoungBar.app` to `~/Applications`, and opens it. Accessibility still has to be granted by the user. Building from source is the only path that needs Xcode Command Line Tools:
 
 ```sh
 git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-src && cd ~/Applications/YoungBar-src && sh Scripts/build.sh && cp -R build/YoungBar.app ~/Applications/ && open ~/Applications/YoungBar.app
@@ -57,9 +57,9 @@ git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 
-## Build and run
+## Build from source
 
-Requirements: macOS 27, Xcode Command Line Tools (Swift 6.3).
+Building from source needs macOS 27 and Xcode Command Line Tools (Swift 6.3). The Release download does not.
 
 ```sh
 sh Scripts/build.sh

@@ -27,13 +27,13 @@
 
 ### 用 Agent 安装
 
-在有 Xcode Command Line Tools 的 Mac 上，把这一行发给 Agent：
+在 macOS 27 上把这一行发给 Agent；**不需要 Xcode**，脚本直接下载 Release：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
 ```
 
-脚本会克隆到 `~/Applications/YoungBar-src`、构建、把 `YoungBar.app` 复制到 `~/Applications` 并打开。辅助功能仍然需要用户手动授权。也可以手动 clone 构建：
+脚本会下载 `YoungBar-0.1.0.zip`、校验 SHA256、把 `YoungBar.app` 复制到 `~/Applications` 并打开。辅助功能仍然需要用户手动授权。要从源码构建才需要 Xcode Command Line Tools：
 
 ```sh
 git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-src && cd ~/Applications/YoungBar-src && sh Scripts/build.sh && cp -R build/YoungBar.app ~/Applications/ && open ~/Applications/YoungBar.app
@@ -57,9 +57,9 @@ git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-
 
 关于 IP、许可证、私有 API 和分发，见 [docs/FAQ.md](docs/FAQ.md)。
 
-## 构建与运行
+## 从源码构建
 
-要求：macOS 27、Xcode Command Line Tools（Swift 6.3）。
+只有从源码构建才需要：macOS 27、Xcode Command Line Tools（Swift 6.3）。直接下载 Release 的用户不需要这些。
 
 ```sh
 sh Scripts/build.sh

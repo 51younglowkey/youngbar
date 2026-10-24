@@ -93,3 +93,13 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - 软件名在两版都保留 `YoungBar · 羊霸霸`，不拆成两个名字。
 - 截图改为「一张大图 + 三张 32% 宽度横排」，不再四张纵向平铺；大图用粉色通用页，横排为菜单栏 / 黄色外观 / 透明外观。
 - README 安装段去掉 Private 仓库的临时说法，改为手动 clone/构建。
+
+
+---
+
+## 2026-10-24 · 一键安装改为 Release 下载
+
+- `Scripts/install.sh` 不再 `git clone` + `swift build`，改为下载
+  `YoungBar-0.1.0.zip`、校验 SHA256、解压到 `~/Applications/YoungBar.app` 并打开。
+  因此普通用户和 Agent 都不需要 Xcode Command Line Tools；只有从源码构建才需要。
+- Release 的 `.sha256` 改成只含文件名，`shasum -a 256` 可直接在下载目录校验。

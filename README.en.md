@@ -6,12 +6,12 @@
 
 A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.
 
-![YoungBar appearance](docs/images/readme-appearance-clear.png)
+![YoungBar settings](docs/images/readme-general.png)
 
 <p align="center">
-  <img src="docs/images/readme-general.png" width="32%" alt="General">
   <img src="docs/images/readme-menu-bar.png" width="32%" alt="Menu bar">
   <img src="docs/images/readme-appearance-yellow.png" width="32%" alt="Appearance — yellow">
+  <img src="docs/images/readme-appearance-clear.png" width="32%" alt="Appearance — clear">
 </p>
 
 ## Install

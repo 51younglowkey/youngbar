@@ -6,12 +6,12 @@
 
 一个为 **macOS 27** 设计的键盘优先菜单栏收纳工具。把不常用的图标收起来，从一条紧凑的收纳条里打开；点一下就能进入应用原生的菜单或面板，菜单栏不会闪烁或重排。
 
-![YoungBar 外观](docs/images/readme-appearance-clear.png)
+![YoungBar 设置](docs/images/readme-general.png)
 
 <p align="center">
-  <img src="docs/images/readme-general.png" width="32%" alt="通用设置">
   <img src="docs/images/readme-menu-bar.png" width="32%" alt="菜单栏页">
   <img src="docs/images/readme-appearance-yellow.png" width="32%" alt="黄色外观">
+  <img src="docs/images/readme-appearance-clear.png" width="32%" alt="透明外观">
 </p>
 
 ## 安装

@@ -2394,17 +2394,24 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Leorea Bar stored its settings under `dev.leorea.bar`. Carry the user's
-/// layout over once so renaming the app does not reset it.
+/// Carry the user's layout across bundle-id/name changes.
+/// `dev.leorea.bar` → `dev.leorea.youngbar` → `studio.wuyiyang.youngbar`.
 enum YoungBarDefaults {
     static func migrateIfNeeded() {
         let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: "migratedFromLeoreaBar") else { return }
-        defer { defaults.set(true, forKey: "migratedFromLeoreaBar") }
-        guard let legacy = UserDefaults(suiteName: "dev.leorea.bar") else { return }
-        for key in ["itemModes", "itemOrder", "barOptions", "hiddenBundles"] where defaults.object(forKey: key) == nil {
+        migrate(from: "dev.leorea.bar", marker: "migratedFromLeoreaBar")
+        migrate(from: "dev.leorea.youngbar", marker: "migratedFromLeoreaYoungBar")
+    }
+
+    private static func migrate(from suiteName: String, marker: String) {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: marker),
+              let legacy = UserDefaults(suiteName: suiteName) else { return }
+        for key in ["itemModes", "itemOrder", "barOptions", "hiddenBundles"]
+        where defaults.object(forKey: key) == nil {
             if let value = legacy.object(forKey: key) { defaults.set(value, forKey: key) }
         }
+        defaults.set(true, forKey: marker)
     }
 }
 

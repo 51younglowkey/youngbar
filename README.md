@@ -6,23 +6,57 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 
 > YoungBar is a standalone repository, split out of the Leorea workspace with its history.
 
-![收纳条](docs/images/shelf-expanded.png)
+![YoungBar appearance](docs/images/readme-appearance-clear.png)
+
+## Install
+
+Requires **macOS 27**. YoungBar has **no Dock icon** — it lives in the menu bar.
+
+1. Download `YoungBar-0.1.0.zip` from [Releases](../../releases), unzip it and move `YoungBar.app` into `/Applications`.
+2. First launch: right-click the app → **Open** → **Open**. The build is not notarized, so Gatekeeper warns once.
+3. Grant **Device Control and Data Access** (Accessibility). Screen Recording is **not** used and not required.
+4. Enable *Open at login* in Settings if you want it back after login.
+
+The older install notes are in [docs/INSTALL.md](docs/INSTALL.md).
+
+### Install with an agent
+
+Paste this one line into an agent on a Mac with Xcode Command Line Tools:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
+```
+
+The script clones into `~/Applications/YoungBar-src`, builds, copies `YoungBar.app` to `~/Applications`, and opens it. Accessibility still has to be granted by the user. If the repository is private, use a clone with access instead:
+
+```sh
+git clone https://github.com/51younglowkey/youngbar.git ~/Applications/YoungBar-src && cd ~/Applications/YoungBar-src && sh Scripts/build.sh && cp -R build/YoungBar.app ~/Applications/ && open ~/Applications/YoungBar.app
+```
+
+## Screenshots
+
+![General](docs/images/readme-general.png)
+
+![Menu bar](docs/images/readme-menu-bar.png)
+
+![Appearance — yellow](docs/images/readme-appearance-yellow.png)
+
+![Appearance — clear](docs/images/readme-appearance-clear.png)
 
 ## Features
 
 - **Three states per item**: Visible, Hidden, Always Hidden (⌥-click to include Always Hidden in the strip).
 - **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything.
 - **Open in place**: clicking a third-party item in the strip presses it through Accessibility while it stays hidden, so its menu or panel opens beside the strip without the bar shifting or the pointer moving. System items are revealed and clicked with the pointer hidden.
-- **Click-through**: a synthetic HID click delivers the press to the owning app; menus and panels open natively.
-- **Reorder**: ⌘-drag in the real menu bar (verified with a swap-and-restore test) and drag rows in the layout table.
+- **Reorder**: ⌘-drag in the real menu bar and drag a row in the Menu Bar page; right-click a row for left/right moves.
 - **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
-- **Menu Bar page**: every item in menu-bar order with a Shown / Hidden / Always Hidden menu; drag a row or right-click it to reorder. Date and Control Center keep their macOS-fixed position but can be hidden.
+- **Menu Bar page**: every item in menu-bar order with Shown / Hidden / Always Hidden segmented choices; Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
-- **Appearance**: system / light / dark; three palettes (blue, pink, yellow) with matched lightness and saturation, plus a neutral clear one that follows the system; a theme-tinted glass settings window with the theme character in the sidebar; a three-way scope (interface + strip / interface only / strip only); and one strip opacity slider (30–100%, 100% is solid).
-- **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or your own 36×36 PNG.
+- **Appearance**: system / light / dark; blue, pink and yellow palettes with matched OKLCH lightness/saturation, plus a neutral clear one; a theme-tinted glass window with the theme character in the sidebar; three-way scope and one strip opacity slider (30–100%).
+- **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or a 36×36 PNG.
 - **Settings entry from the strip**: a pinned gear at the right edge.
-- **Crash-safe**: a normal quit reveals every concealed item first; if the previous session died, the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
-- **Bilingual**: Chinese and English, switchable in General settings; theme names are localised (`怎怎瓦岗蓝` / Hachiware Blue, `羊霸霸粉` / Chiikawa Pink, `乌拉黄` / Usagi Yellow).
+- **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
+- **Bilingual**: Chinese and English, switchable in General.
 - **Local only**: no telemetry, no network, no screen capture.
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
@@ -32,12 +66,17 @@ See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution quest
 Requirements: macOS 27, Xcode Command Line Tools (Swift 6.3).
 
 ```sh
-cd YoungBar
 sh Scripts/build.sh
 open build/YoungBar.app
 ```
 
-`Scripts/build.sh` builds a release executable, assembles `build/YoungBar.app`, installs the icon and signs ad-hoc (or with `YOUNGBAR_SIGN_IDENTITY`). See [docs/SIGNING.md](docs/SIGNING.md) for a stable local certificate and [docs/INSTALL.md](docs/INSTALL.md) for the GitHub download flow. The `--disable-sandbox` flag lets SwiftPM build inside a host sandbox; the package has no build plugins.
+`Scripts/build.sh` builds a release executable, assembles `build/YoungBar.app`, installs the icon, and signs with a stable local certificate if one is configured (otherwise ad-hoc). See [docs/SIGNING.md](docs/SIGNING.md), [docs/INSTALL.md](docs/INSTALL.md) and [docs/RELEASING.md](docs/RELEASING.md).
+
+To produce a release zip and SHA256:
+
+```sh
+make package
+```
 
 ## Permissions
 
@@ -45,27 +84,26 @@ open build/YoungBar.app
 |---|---|---|
 | **Device Control and Data Access** (Accessibility on macOS 27) | enumerate, hide, reveal and reorder menu-bar items | the strip is empty; only settings work |
 
-Ad-hoc builds are re-signed on every build. If macOS stops recognizing the app, remove it from the permission list and add it again. A notarized Developer ID build removes this friction.
+YoungBar does **not** capture the screen and does **not** need Screen & System Audio Recording. If macOS stops recognizing the app after a rebuild, remove the old YoungBar entry and grant Accessibility again. A notarized Developer ID build removes that friction.
 
 ## How it works (and the trade-offs)
 
 - Hiding uses the private `MenuBarClientCore` assessment interface. It works on macOS 27 but is not a public API and may break on future releases. This app cannot be shipped on the App Store.
-- The strip shows app icons, not the items' live menu-bar content: a concealed item is not drawn by macOS 27, so there is nothing current to show, and a screenshot would be stale and blurry. Items whose value you watch belong in the visible part of the bar.
-- No menu-bar screenshot is captured or cached; the strip uses app icons, so no Screen Recording permission is involved.
+- The strip shows app icons, not the items' live menu-bar content: a concealed item is not drawn by macOS 27, so there is nothing current to show. Items whose value you watch belong in the visible part of the bar.
+- There is no menu-bar screenshot capture or cache.
 
-## Status
+## Status and gaps
 
-The current verification matrix — including what is implemented, what is verified live, and what is blocked — lives in [docs/STATUS.md](docs/STATUS.md). The iBar Pro 1.4.6 feature comparison and evidence are in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
+The current verification matrix is in [docs/STATUS.md](docs/STATUS.md); the iBar Pro 1.4.6 comparison is in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
 
-Known gaps: multi-display, configurable hotkey, drag-reordering inside the strip, and a real-trackpad pass on the new SwiftUI settings. The old screenshot/cache pipeline is gone; the strip uses app icons and no longer needs Screen Recording.
+Known gaps: multi-display, configurable hotkey, keyboard navigation, drag-reordering inside the strip, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
 
 ## Roadmap
 
-- Themes: color skins, transparent strip, polished light and dark.
 - Configurable hotkey, keyboard navigation (arrows / Enter / Esc), layout search.
 - Profiles with export/import, per-app rules.
 - Multi-display.
-- Localization (Chinese / English), notarized releases.
+- Notarized releases, auto-update.
 
 ## License and credits
 

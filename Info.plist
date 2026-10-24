@@ -3,7 +3,7 @@
 <plist version="1.0"><dict>
   <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
   <key>CFBundleExecutable</key><string>YoungBar</string>
-  <key>CFBundleIdentifier</key><string>dev.leorea.youngbar</string>
+  <key>CFBundleIdentifier</key><string>studio.wuyiyang.youngbar</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>YoungBar</string>
   <key>CFBundleDisplayName</key><string>YoungBar</string>

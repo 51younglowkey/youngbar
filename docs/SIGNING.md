@@ -47,7 +47,7 @@ codesign -d -r- build/YoungBar.app
 You want to see something like:
 
 ```text
-designated => identifier "dev.leorea.youngbar" and certificate leaf = H"…"
+designated => identifier "studio.wuyiyang.youngbar" and certificate leaf = H"…"
 ```
 
 If it still says `cdhash H"…"`, the identity was not used.
@@ -57,7 +57,7 @@ If it still says `cdhash H"…"`, the identity was not used.
 Because the signature changed from ad-hoc to the certificate:
 
 ```sh
-tccutil reset Accessibility dev.leorea.youngbar
+tccutil reset Accessibility studio.wuyiyang.youngbar
 ```
 
 Then launch the app and grant both permissions again. Future builds signed with

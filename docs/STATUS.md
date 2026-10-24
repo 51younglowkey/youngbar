@@ -4,7 +4,7 @@
 > 运行态由 `YOUNGBAR_DIAGNOSTICS=1` 写出：`~/Library/Application Support/YoungBar/diagnostics.json`；
 > 一次性真机自检用 `YOUNGBAR_SELFTEST=1` 与 `YOUNGBAR_INTERACTIONTEST=1`，结果分别在 `selftest.json` / `interactiontest.json`。
 >
-> 最后核对：**2026-10-23 21:20 +01:00**
+> 最后核对：**2026-10-24 14:25 +01:00**
 
 ## 1. 构建
 
@@ -12,7 +12,7 @@
 |---|---|
 | 命令 | `cd youngbar && sh Scripts/build.sh` |
 | 产物 | `build/YoungBar.app`（ad-hoc 签名） |
-| 标识 | `dev.leorea.youngbar`，显示名 **YoungBar**，版本 0.1.0 |
+| 标识 | `studio.wuyiyang.youngbar`，显示名 **YoungBar**，版本 0.1.0 |
 | 工具链 | Swift 6.3.3 / macOS 27.0.1 arm64 |
 | 结果 | 构建通过（2026-10-21） |
 
@@ -40,7 +40,7 @@
 | 动态项不缓存旧值 | ✅ 时钟/电池始终用符号回退 | `cachetest.json`：`clockCached:false` |
 | 始终隐藏项原始图标 | ✅ 抓图覆盖「隐藏」与「始终隐藏」 | `alwayshiddentest.json`：`cachedForAlwaysHidden:true` |
 | 清除缓存 | ✅ 文件与内存同时清除，可重建 | `cachetest.json`：`countAfterClear:0`、`cacheRestored:true` |
-| 旧设置迁移 | ✅ `dev.leorea.bar` → `dev.leorea.youngbar` | `defaults read dev.leorea.youngbar` |
+| 旧设置迁移 | ✅ `dev.leorea.bar` → `studio.wuyiyang.youngbar` | `defaults read studio.wuyiyang.youngbar` |
 | 辅助功能 | ✅ 已授权 | diagnostics `"axTrusted": true` |
 | 菜单栏项目读取 | ✅ 10 个在场项目 | diagnostics `"itemCount": 10` |
 | 隐藏 → 展开 → 收起 | ✅ 真机通过 | `selftest.json`：`appeared: true`、`goneAgain: true` |
@@ -208,8 +208,9 @@
 | 项 | 当前状态 | 证据 |
 |---|---|---|
 | 仓库 | `~/Documents/General_Workspace/YoungBar`，私有远程 `51younglowkey/youngbar`，观察时 `main` 与 `origin/main` 同步在 `8fab9f0` | `git status -sb`；`gh repo view` |
-| 版本 | `0.1.0 (1)`，显示名 YoungBar | `Info.plist` |
+| 版本 / Bundle ID | `0.1.0 (1)`，显示名 YoungBar；Bundle ID 改为 `studio.wuyiyang.youngbar` | `Info.plist`；旧 `dev.leorea.youngbar` 设置会迁移（已实测 `itemOrder` 拷入新域） |
 | 构建 | `Scripts/build.sh` 先组装 + 签名 staging，再整包替换；运行中重建不再被 `Code Signature Invalid` 杀掉 | `Scripts/build.sh`；4.2 的崩溃对比 |
+| 0.1.0 发布包 | ✅ `dist/YoungBar-0.1.0.zip` + `.sha256`，bundle 内带 LICENSE/NOTICES；**尚未上传 GitHub Release** | `dist/YoungBar-0.1.0.zip`；SHA256 `f83081e0…` |
 | 签名 | 本地 `YoungBar Local Signing` 证书（非 Developer ID）；bundle 内带 LICENSE/NOTICES | `codesign -dv`：`Authority=YoungBar Local Signing` |
 | 设置窗口 | **SwiftUI** `Form(.grouped)` + 侧栏 List，AppKit 只做 `NSWindow + NSSplitViewController` 外壳；三页：通用 / 菜单栏 / 外观 | `Sources/YoungBar/SettingsView.swift`、`BarSettings.swift`；`swiftui-*.png` |
 | 设置交互 | 逐项模式菜单、拖动排序、右键移动、原地切换语言均通过真实鼠标/键盘测试；测试后设置与备份一致 | `settingsuitest.json`（`modePassed/dragPassed/languagePassed:true`，02:30；之后 `ea54e9c` 删了屏幕录制行，未重跑整套设置测试） |
@@ -218,7 +219,7 @@
 | 收纳条位置 | 在 ••• 正下方居中；固定到关闭 | `870db8a`；4.5 |
 | 菜单偏移保护 | 按下前读 AX 位置，只有靠近 •••（屏幕右半、<400pt）才原地按，否则显示后点击 | `8fab9f0`；`axX` |
 | 菜单栏读取 | 本机 11 项，辅助功能已授权 | `diagnostics.json`（20:07；`itemCount:11`、`axTrusted:true`） |
-| 登录项 | 🟡 `SMAppService` 已启用；现在用「路径 + CFBundleVersion」token 在路径/版本变化时自动重登；`launchctl print` 的 program 指向当前 bundle。**真实登出/重启仍未验证** | `loginItemToken`；`launchctl print`；BTM 里仍显示 `/Users/501/...`，需登出确认是否为 UID 表示 |
+| 登录项 | 🟡 新 Bundle ID 需要重新打开「登录时打开」；旧 `dev.leorea.youngbar` 的登录项需要在系统设置里移除。路径/版本 token 变化会自动重登。**真实登出/重启仍未验证** | `loginItemToken`；`launchctl print` |
 | 外观 | 蓝/粉/黄 OKLCH 同亮度同彩度 + 中性透明；收纳条不透明度 30–100%；主题色玻璃、侧栏角色图 | 4.3；`swiftui-appearance-*.png` |
 | 已知未验证 | 多显示器；图标间隙需重启观察；开机自启动需登出再登录；真实触控板拖动手感；英文菜单栏页截图；系统项 reveal+点击路径 | 4.2/4.4/4.6 |
 | 已知功能缺口 | 可配置快捷键、键盘导航、收纳条内拖拽排序、通知/配置导出 | README Roadmap |

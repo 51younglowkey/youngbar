@@ -47,3 +47,22 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
   标明 5.5 起不再截图/缓存；FAQ / INSTALL / SIGNING 删除了已不存在的
   屏幕录制与 `pictures.json` 缓存说明。旧缓存/屏幕录制/旧 AppKit 设置的描述保留为历史，
   不再作为现状。
+
+
+---
+
+## 2026-10-24 · 0.1.0 发布准备
+
+- **Bundle ID**：`dev.leorea.youngbar` → `studio.wuyiyang.youngbar`。旧设置通过
+  `UserDefaults(suiteName:)` 迁移到新域；启动后实测 `itemOrder` / `itemModes`
+  已拷入 `studio.wuyiyang.youngbar`。改了身份，辅助功能需要重新授权一次，
+  旧 `dev.leorea.youngbar` 登录项也要在系统设置里移除。
+- **README**：加入四张真实截图（通用 / 菜单栏 / 黄色外观 / 透明外观），
+  增加下载、权限、一键 Agent 安装、无 Dock 图标说明；构建路径改为仓库根目录。
+- **安装**：新增 `Scripts/install.sh`，克隆到 `~/Applications/YoungBar-src`、
+  构建、复制 `~/Applications/YoungBar.app` 并打开；辅助功能仍需用户手动授权。
+- **发布包**：`Scripts/package.sh` 生成 `dist/YoungBar-0.1.0.zip` 和 SHA256
+  `f83081e0f16e…`；zip 内 app 的 Bundle ID 已确认是 `studio.wuyiyang.youngbar`。
+  尚未上传 GitHub Release（仓库仍为 private）。
+- **仍未验证**：真实登出/重启后的登录启动、旧登录项清理、TCC 重新授权后的
+  完整交互；多显示器等旧缺口不变。

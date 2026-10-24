@@ -64,7 +64,7 @@ YoungBar maps 默认 / 较小 / 小 / 无 to those four commands, in that order,
 ## Verified on this Mac (2026-10-21)
 
 - `sh Scripts/build.sh` builds `build/YoungBar.app` and signs it ad-hoc.
-- The app launches as `dev.leorea.youngbar`; the settings window is 860 × 692 on screen (title bar included) and the overlay control is installed at the menu bar.
+- The app launches as `studio.wuyiyang.youngbar`; the settings window is 860 × 692 on screen (title bar included) and the overlay control is installed at the menu bar.
 - Settings from the previous `dev.leorea.bar` domain were migrated: the new domain contains the same `itemModes`, `itemOrder`, `barOptions` and `hiddenBundles`.
 - The window renders both pages; snapshots are written by `YOUNGBAR_SNAPSHOT_DIR=...` (see `docs/images/`).
 - Screen Recording is granted: the menu-bar-band capture produces original item pixels.

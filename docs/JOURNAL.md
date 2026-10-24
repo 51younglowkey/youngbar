@@ -113,3 +113,9 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - Agent 安装改为一句自然语言 + 一行命令，举例 ChatGPT、豆包、
   Claude、DeepSeek（DSH）；不再解释 Xcode / 构建工具。
 - 从源码构建只写「macOS 27 + Swift 6.3 工具链」。
+
+- 2026-10-24 更正：作者身份最终改回仓库所有者 **51Young**
+  `<193584257+51younglowkey@users.noreply.github.com>`，全部 46 个提交重写并
+  force-push；GitHub 的 commit author 已链接到 `51younglowkey`。上一节里
+  “重写为 YoungBar” 的记录仅代表中间状态。GitHub Contributors API 仍有
+  旧缓存，显示 `Youngbar`，以提交页作者为准。

@@ -1592,9 +1592,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// launch nothing, so re-register once from the new location.
     private func refreshLoginItemIfMoved() {
         let path = Bundle.main.bundlePath
-        let previous = UserDefaults.standard.string(forKey: "loginItemPath")
-        UserDefaults.standard.set(path, forKey: "loginItemPath")
-        guard SMAppService.mainApp.status == .enabled, previous != path else { return }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        let token = "\(path)|\(version)"
+        let previous = UserDefaults.standard.string(forKey: "loginItemToken")
+        UserDefaults.standard.set(token, forKey: "loginItemToken")
+        guard SMAppService.mainApp.status == .enabled, previous != token else { return }
         try? SMAppService.mainApp.unregister()
         try? SMAppService.mainApp.register()
     }

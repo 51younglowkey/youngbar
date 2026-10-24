@@ -218,7 +218,7 @@
 | 收纳条位置 | 在 ••• 正下方居中；固定到关闭 | `870db8a`；4.5 |
 | 菜单偏移保护 | 按下前读 AX 位置，只有靠近 •••（屏幕右半、<400pt）才原地按，否则显示后点击 | `8fab9f0`；`axX` |
 | 菜单栏读取 | 本机 11 项，辅助功能已授权 | `diagnostics.json`（20:07；`itemCount:11`、`axTrusted:true`） |
-| 登录项 | 路径变化时自动重新登记（仓库移到 General_Workspace 后已更新） | 4.5；`sfltool dumpbtm` |
+| 登录项 | 🟡 `SMAppService` 已启用；现在用「路径 + CFBundleVersion」token 在路径/版本变化时自动重登；`launchctl print` 的 program 指向当前 bundle。**真实登出/重启仍未验证** | `loginItemToken`；`launchctl print`；BTM 里仍显示 `/Users/501/...`，需登出确认是否为 UID 表示 |
 | 外观 | 蓝/粉/黄 OKLCH 同亮度同彩度 + 中性透明；收纳条不透明度 30–100%；主题色玻璃、侧栏角色图 | 4.3；`swiftui-appearance-*.png` |
 | 已知未验证 | 多显示器；图标间隙需重启观察；开机自启动需登出再登录；真实触控板拖动手感；英文菜单栏页截图；系统项 reveal+点击路径 | 4.2/4.4/4.6 |
 | 已知功能缺口 | 可配置快捷键、键盘导航、收纳条内拖拽排序、通知/配置导出 | README Roadmap |

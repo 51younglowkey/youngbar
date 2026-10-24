@@ -33,6 +33,12 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - **本轮核对**：`diagnostics.json` 20:07，`axTrusted:true`、`itemCount:11`；
   `settingsuitest.json` 02:30 全通过，但那之后 `ea54e9c` 删了设置里的屏幕录制行，
   **整套设置测试没有再跑**。当前版本 `0.1.0 (1)`。
+- **登录项排查（2026-10-24）**：`sfltool dumpbtm` 里 YoungBar 的 URL 显示为
+  `/Users/501/...`，而实际路径是 `/Users/51young/...`；`launchctl print` 的
+  `program` 指向当前 bundle。把登录项 token 改成「路径 + CFBundleVersion」，
+  路径/版本变化时自动 unregister/register 一次；当前 `loginItemToken` 已更新。
+  `who` 显示本机自 10-21 未重启，app 的 PPID 1 只能说明由 launchd 启动，
+  **不能当作真实登录验证**；真实登出/重启仍未做。
 - **仍然未验证 / 未做**：多显示器；图标间隙重启后的实际间距；开机自启动
   登出再登录；真实触控板拖动手感；英文菜单栏页截图；系统项 reveal+点击路径；
   可配置快捷键、键盘导航、收纳条内拖拽排序、配置导出。

@@ -94,6 +94,13 @@ the app, README URLs, CI output, or public websites. The receiver endpoints
 are public by design and can be spoofed or flooded; configure Cloudflare
 rate-limiting/WAF controls if necessary and interpret counts as approximate.
 
+### Local server checks
+
+Run `cd telemetry && npm test` with Node.js 20 or newer before deploying.
+These tests validate endpoint authorization, input checking, pseudonymous-ID
+hashing and the opt-out DELETE route. They do not validate a real D1 deployment
+or a compiled macOS client.
+
 ### Checks before enabling a release / 发布验证
 
 - Default OFF; check that a freshly installed app creates **no** ID and

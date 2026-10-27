@@ -17,11 +17,10 @@ YoungBar 默认完全离线运行。只有开发者先部署统计服务，且�
 - **Version distribution**: current app versions for those installation IDs.
 - These are **not** download counts, guaranteed installs, unique humans, or
   all users. GitHub Release asset `download_count` is a separate metric.
-- A single opted-in instance sends a POST on its first eligible launch and
-  then at most once per UTC calendar day while running; the app checks
-  periodically, but skips transmission once that day's request succeeds.
-  If it is offline, the next eligible check may retry. Sending never blocks
-  launch, UI or menu-bar functions.
+- An opted-in instance attempts a daily POST on its first eligible launch.
+  The app checks periodically and skips further attempts after a successful
+  submission for that UTC day. Network failures may lead to retry attempts.
+  Sending never blocks launch, UI or menu-bar functions.
 
 ## Data sent / 收集内容
 

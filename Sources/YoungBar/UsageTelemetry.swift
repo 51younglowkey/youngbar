@@ -33,11 +33,18 @@ final class UsageTelemetry {
     /// Empty/missing endpoint deliberately means "no network requests".
     /// Configure YoungBarUsageEndpoint in Info.plist only after deploying a
     /// server described in docs/TELEMETRY.md.
-    private var endpoint: URL? {
+    static var isConfigured: Bool {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: "YoungBarUsageEndpoint") as? String,
               let url = URL(string: raw), url.scheme?.lowercased() == "https",
-              url.host != nil else { return nil }
-        return url
+              url.host != nil else { return false }
+        return true
+    }
+
+    private var endpoint: URL? {
+        guard Self.isConfigured,
+              let raw = Bundle.main.object(forInfoDictionaryKey: "YoungBarUsageEndpoint") as? String
+        else { return nil }
+        return URL(string: raw)
     }
 
     func start() {

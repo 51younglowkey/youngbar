@@ -344,6 +344,28 @@ struct GeneralPane: View {
             }
 
             Section {
+                Toggle(isOn: model.boolBinding("shareAnonymousUsage")) {
+                    Text(L10n.t("分享匿名使用统计", "Share anonymous usage statistics"))
+                    Text(L10n.t(
+                        "自愿开启；每天最多发送一次随机安装标识和版本号。不读取菜单栏内容或设备身份；关闭后停止发送并请求删除记录。",
+                        "Optional: sends a random installation ID and app version at most once daily. No menu-bar content or hardware identity. Turning off stops reporting and requests deletion."
+                    ))
+                }
+                .disabled(!UsageTelemetry.isConfigured)
+                .help(L10n.t("此功能默认关闭", "Off by default"))
+                if !UsageTelemetry.isConfigured {
+                    Text(L10n.t(
+                        "统计服务尚未配置，当前无法开启。软件仍完全离线运行。",
+                        "The metrics service is not configured yet. YoungBar remains fully offline."
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text(L10n.t("隐私", "Privacy"))
+            }
+
+            Section {
                 LabeledContent {
                     Button(L10n.t("刷新", "Refresh")) { model.send(.refresh) }
                         .settingsFrame("refresh", model)

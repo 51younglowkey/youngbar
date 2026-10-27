@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no network, no screen capture.
+- **Offline by default; privacy-first**: no screen capture or menu-bar content collection. If the maintainer deploys the optional telemetry service, users can voluntarily enable an at-most-daily installation-count signal (random installation ID and app version) in General → Privacy. This is OFF by default; disabling stops requests and asks the server to delete prior data. See [Telemetry & Privacy](docs/TELEMETRY.md).
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 

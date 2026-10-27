@@ -1,0 +1,17 @@
+# Copy to wrangler.toml after creating your own D1 database.
+# Never commit wrangler.toml if it includes information you prefer to keep private.
+name = "youngbar-usage"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "youngbar-telemetry"
+database_id = "REPLACE_WITH_YOUR_REAL_D1_DATABASE_ID"
+
+[triggers]
+crons = ["20 3 * * *"]
+
+# Install secrets with "npx wrangler secret put HMAC_SECRET"
+# and "npx wrangler secret put STATS_TOKEN".
+# Neither secret belongs in this file.

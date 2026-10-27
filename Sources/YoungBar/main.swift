@@ -39,6 +39,7 @@ final class BarControlPanel: NSPanel {
 @MainActor
 final class BarApp: NSObject, NSApplicationDelegate {
     private let engine = AgentBarEngine()
+    private let usageTelemetry = UsageTelemetry()
     private var statusItem: NSStatusItem!
     private var knownBundles: [String: String] = [:]
     private var modes: [String: Int] = {
@@ -107,6 +108,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         writeJSON(["args": CommandLine.arguments, "rescue": rescueRequested,
                    "crashed": previousSessionCrashed], name: "launch.json")
         NSApp.setActivationPolicy(.accessory)
+        if !rescueRequested { usageTelemetry.start() }
         // A previous synthetic drag can leave the global mouse association
         // off; reset it before any UI is shown.
         CGAssociateMouseAndMouseCursorPosition(1)
@@ -1455,6 +1457,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 options[key] = value
                 UserDefaults.standard.set(options, forKey: "barOptions")
+                if key == "shareAnonymousUsage" {
+                    usageTelemetry.setEnabled(value == 1)
+                    renderWindow()
+                    return
+                }
                 if key == "language" {
                     // The SwiftUI tree rebuilds in place; the window keeps
                     // its position and page.

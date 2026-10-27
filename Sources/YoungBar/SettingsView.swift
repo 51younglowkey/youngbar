@@ -347,8 +347,8 @@ struct GeneralPane: View {
                 Toggle(isOn: model.boolBinding("shareAnonymousUsage")) {
                     Text(L10n.t("分享匿名使用统计", "Share anonymous usage statistics"))
                     Text(L10n.t(
-                        "自愿开启；每天最多发送一次随机安装标识和版本号。不读取菜单栏内容或设备身份；关闭后停止发送并请求删除记录。",
-                        "Optional: sends a random installation ID and app version at most once daily. No menu-bar content or hardware identity. Turning off stops reporting and requests deletion."
+                        "自愿开启；每日汇报活跃状态，仅发送随机安装标识和版本号（失败可能重试）。不读取菜单栏内容或设备身份；关闭后停止发送并请求删除记录。",
+                        "Optional daily activity signal: a random installation ID and app version (failed sends may retry). No menu-bar content or hardware identity. Turning off stops reporting and requests deletion."
                     ))
                 }
                 .disabled(!UsageTelemetry.isConfigured)

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
+import YoungBarCore
 
 struct BarEntry {
     let key: String
@@ -20,12 +22,21 @@ final class BarSettings: NSObject {
     var onMode: ((String, Int) -> Void)?
     var onMove: ((String, String) -> Void)?
     var onRefresh: (() -> Void)?
-    var onOption: ((String, Int) -> Void)?
+    var onOption: ((Option, Int) -> Void)?
     var onLogin: ((Bool) -> Void)?
     var onPermission: ((String) -> Void)?
     var onSpacing: ((Int) -> Void)?
     var onCustomIcon: (() -> Void)?
     var onRemoveCustomIcon: (() -> Void)?
+    /// Recording started (true) or ended (false): the live shortcut is off
+    /// meanwhile, so pressing it records instead of opening the strip.
+    var onHotKeyRecording: ((Bool) -> Void)?
+    var onHotKey: ((HotKeyCombo?) -> Void)?
+    var onExport: (() -> Void)?
+    var onImport: (() -> Void)?
+    var onGuide: (() -> Void)?
+    private var keyMonitor: Any?
+    private var resignObserver: NSObjectProtocol?
 
     private let window: NSWindow
     private let model = SettingsModel()
@@ -105,7 +116,50 @@ final class BarSettings: NSObject {
         case .refresh:
             refreshClickCount += 1
             onRefresh?()
+        case .recordHotKey(let start):
+            if start { startRecording() } else { stopRecording() }
+        case .clearHotKey: onHotKey?(nil)
+        case .exportConfig: onExport?()
+        case .importConfig: onImport?()
+        case .showGuide: onGuide?()
         }
+    }
+
+    private func startRecording() {
+        guard keyMonitor == nil else { return }
+        model.recordingHotKey = true
+        onHotKeyRecording?(true)
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.model.recordingHotKey else { return event }
+            let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            let code = Int(event.keyCode)
+            if flags.isEmpty && code == kVK_Escape {
+                self.stopRecording()
+            } else if flags.isEmpty && (code == kVK_Delete || code == kVK_ForwardDelete) {
+                self.stopRecording(saving: .some(nil))
+            } else {
+                let combo = HotKeyCombo(keyCode: UInt32(code), modifiers: BarApp.carbonModifiers(flags))
+                if combo.isUsable { self.stopRecording(saving: .some(combo)) } else { NSSound.beep() }
+            }
+            return nil
+        }
+        // Clicking elsewhere ends recording without a change.
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.stopRecording() }
+        }
+    }
+
+    /// `saving` is nil to cancel, `.some(nil)` to clear the shortcut.
+    private func stopRecording(saving: HotKeyCombo?? = nil) {
+        guard keyMonitor != nil else { return }
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        model.recordingHotKey = false
+        onHotKeyRecording?(false)
+        if let saving { onHotKey?(saving) }
     }
 
     // MARK: - State
@@ -126,7 +180,11 @@ final class BarSettings: NSObject {
     func languageChanged() { window.title = (model.page ?? .general).title }
 
     func update(entries: [BarEntry], message: String, axTrusted: Bool,
-                launchAtLogin: Bool, customIcon: NSImage?, options: [String: Int]) {
+                launchAtLogin: Bool, customIcon: NSImage?, options: [String: Int],
+                hotKey: String, hasHotKey: Bool, hasNotch: Bool) {
+        if model.hotKeyDisplay != hotKey { model.hotKeyDisplay = hotKey }
+        if model.hasHotKey != hasHotKey { model.hasHotKey = hasHotKey }
+        if model.hasNotch != hasNotch { model.hasNotch = hasNotch }
         // `update` runs on every refresh tick; only touch what changed so an
         // open picker or a drag in progress is not rebuilt underneath the user.
         let signature: (BarEntry) -> String = { "\($0.key)|\($0.name)|\($0.mode)|\($0.pinned)" }
@@ -136,11 +194,12 @@ final class BarSettings: NSObject {
         if model.axTrusted != axTrusted { model.axTrusted = axTrusted }
         if model.launchAtLogin != launchAtLogin { model.launchAtLogin = launchAtLogin }
         if model.customIcon !== customIcon { model.customIcon = customIcon }
-        let theme = ThemeColor(rawValue: options["themeColor"] ?? 0) ?? .blue
-        let tinted = (ThemeScope(rawValue: options["themeScope"] ?? 0) ?? .both) != .stripOnly
+        let theme = ThemeColor(rawValue: options[.themeColor] ?? 0) ?? .blue
+        let tinted = (ThemeScope(rawValue: options[.themeScope] ?? 0) ?? .both) != .stripOnly
         glass.tintColor = tinted && theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil
     }
 
+    #if YOUNGBAR_TESTHOOKS
     // MARK: - Self-test support
 
     var currentEntries: [BarEntry] { model.entries }
@@ -203,6 +262,7 @@ final class BarSettings: NSObject {
         }
         model.page = original
     }
+    #endif
 }
 
 /// No divider between sidebar and content: the sidebar's material is the

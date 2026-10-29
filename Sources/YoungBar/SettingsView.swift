@@ -3,6 +3,7 @@
 
 import AppKit
 import SwiftUI
+import YoungBarCore
 
 /// Settings window content, modelled on System Settings: a source-list
 /// sidebar and grouped forms. Hosted by `BarSettings`; everything that touches
@@ -35,7 +36,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 }
 
 enum SettingsAction {
-    case option(String, Int)
+    case option(Option, Int)
     case mode(String, Int)
     case move(String, String)
     case login(Bool)
@@ -44,6 +45,12 @@ enum SettingsAction {
     case chooseCustomIcon
     case removeCustomIcon
     case refresh
+    /// Start (true) or cancel (false) recording a new global shortcut.
+    case recordHotKey(Bool)
+    case clearHotKey
+    case exportConfig
+    case importConfig
+    case showGuide
 }
 
 @MainActor
@@ -58,29 +65,39 @@ final class SettingsModel {
     var axTrusted = false
     var message = ""
     var customIcon: NSImage?
+    /// Hover and drop highlights live here, not in `@State`: on the
+    /// Command Line Tools toolchain `@State` is a macro whose plugin
+    /// ships only with Xcode, so the package must not use it.
+    var hoveredPage: SettingsPage?
+    var dropTarget: String?
+    var hotKeyDisplay = ""
+    var hasHotKey = true
+    var recordingHotKey = false
+    /// The control's display has a notch.
+    var hasNotch = false
 
     /// Frames (SwiftUI global space) of controls the self-tests click.
     @ObservationIgnored var frames: [String: CGRect] = [:]
     @ObservationIgnored var send: (SettingsAction) -> Void = { _ in }
     @ObservationIgnored var onPageChange: (SettingsPage) -> Void = { _ in }
 
-    func value(_ key: String, _ fallback: Int = 0) -> Int { options[key] ?? fallback }
+    func value(_ key: Option, _ fallback: Int = 0) -> Int { options[key] ?? fallback }
 
-    func set(_ key: String, _ value: Int) {
+    func set(_ key: Option, _ value: Int) {
         options[key] = value
         send(.option(key, value))
     }
 
-    func intBinding(_ key: String, _ fallback: Int = 0) -> Binding<Int> {
+    func intBinding(_ key: Option, _ fallback: Int = 0) -> Binding<Int> {
         Binding(get: { self.value(key, fallback) }, set: { self.set(key, $0) })
     }
 
-    func boolBinding(_ key: String) -> Binding<Bool> {
-        Binding(get: { self.value(key) == 1 }, set: { self.set(key, $0 ? 1 : 0) })
+    func boolBinding(_ key: Option, default fallback: Bool = false) -> Binding<Bool> {
+        Binding(get: { self.value(key, fallback ? 1 : 0) == 1 }, set: { self.set(key, $0 ? 1 : 0) })
     }
 
-    var theme: ThemeColor { ThemeColor(rawValue: value("themeColor")) ?? .blue }
-    var scope: ThemeScope { ThemeScope(rawValue: value("themeScope")) ?? .both }
+    var theme: ThemeColor { ThemeColor(rawValue: value(.themeColor)) ?? .blue }
+    var scope: ThemeScope { ThemeScope(rawValue: value(.themeScope)) ?? .both }
     var stripOpacity: Int { stripOpacityPercent(options) }
     var tintsInterface: Bool { scope != .stripOnly }
     var accent: Color? { tintsInterface ? Color(nsColor: theme.accent) : nil }
@@ -162,7 +179,7 @@ struct SettingsDetailView: View {
             .ignoresSafeArea())
         .tint(model.accent)
         // Strings are read from L10n, so a language switch rebuilds the tree.
-        .id(model.value("language"))
+        .id(model.value(.language))
     }
 }
 
@@ -174,7 +191,11 @@ struct SettingsSidebar: View {
             AppIdentityHeader(theme: model.theme)
             ForEach(SettingsPage.allCases) { page in
                 SidebarRow(title: page.title, symbol: page.symbol, color: color(for: page),
-                           accent: model.accent ?? .accentColor, selected: (model.page ?? .general) == page) {
+                           accent: model.accent ?? .accentColor, selected: (model.page ?? .general) == page,
+                           hovering: model.hoveredPage == page,
+                           onHover: { inside in
+                               if inside { model.hoveredPage = page } else if model.hoveredPage == page { model.hoveredPage = nil }
+                           }) {
                     model.page = page
                 }
             }
@@ -184,7 +205,7 @@ struct SettingsSidebar: View {
         .padding(.top, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background((model.accent ?? .clear).opacity(0.08).ignoresSafeArea())
-        .id(model.value("language"))
+        .id(model.value(.language))
     }
 
     private func color(for page: SettingsPage) -> Color {
@@ -203,8 +224,9 @@ struct SidebarRow: View {
     let color: Color
     let accent: Color
     let selected: Bool
+    let hovering: Bool
+    let onHover: (Bool) -> Void
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -222,7 +244,7 @@ struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover(perform: onHover)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -289,7 +311,7 @@ struct GeneralPane: View {
                 // Form drops geometry modifiers on its pickers, so the row
                 // is wrapped to give the self-test a frame.
                 LabeledContent(L10n.t("语言", "Language")) {
-                    Picker(L10n.t("语言", "Language"), selection: model.intBinding("language")) {
+                    Picker(L10n.t("语言", "Language"), selection: model.intBinding(.language)) {
                         ForEach(Language.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
                     }
                     .labelsHidden()
@@ -301,29 +323,49 @@ struct GeneralPane: View {
 
             Section {
                 LabeledContent {
+                    HotKeyField(model: model)
+                } label: {
+                    Text(L10n.t("打开收纳条", "Open the strip"))
+                    Text(L10n.t("打开后直接输入名称搜索，← → 选择，回车打开，Esc 关闭",
+                                "Then type to search, ← → to choose, Return to open, Esc to close"))
+                }
+            } header: {
+                Text(L10n.t("快捷键", "Shortcut"))
+            }
+
+            Section {
+                LabeledContent {
                     SegmentedButtons(options: [L10n.t("打开收纳条", "Open strip"),
                                                L10n.t("在菜单栏中展开", "Show in bar")],
-                                     selection: model.intBinding("nativeExpand"), width: 240)
+                                     selection: model.intBinding(.nativeExpand), width: 240)
                 } label: {
                     Text(L10n.t("点击 ••• 时", "When clicking •••"))
                     Text(L10n.t("收纳条把隐藏的图标集中在一条浮动栏里；在菜单栏中展开会让它们临时回到原位。",
                                 "The strip gathers hidden icons; Show in bar puts them back for a while."))
                 }
-                Toggle(isOn: model.boolBinding("keepShelfOpen")) {
+                Toggle(isOn: model.boolBinding(.keepShelfOpen)) {
                     Text(L10n.t("始终显示收纳条", "Keep the strip open"))
                     Text(L10n.t("点击别处时不自动关闭", "Don't close it when clicking elsewhere"))
                 }
                 Toggle(L10n.t("鼠标悬停 0.5 秒后展开", "Open on hover after 0.5 s"),
-                       isOn: model.boolBinding("hoverExpand"))
+                       isOn: model.boolBinding(.hoverExpand))
                 Toggle(L10n.t("点击菜单栏空白处展开", "Open when clicking empty menu-bar space"),
-                       isOn: model.boolBinding("blankClick"))
+                       isOn: model.boolBinding(.blankClick))
+                Toggle(isOn: model.boolBinding(.notchOverflow, default: true)) {
+                    Text(L10n.t("放不下的图标放进收纳条", "Put icons that don't fit in the strip"))
+                    Text(model.hasNotch
+                         ? L10n.t("菜单栏满了时，macOS 会把放不下的图标收进刘海旁的 «；它们会出现在收纳条里，有空间时自动回到菜单栏。",
+                                  "When the bar is full, macOS moves icons that don't fit into the « beside the notch; they show up in the strip and return once there is room.")
+                         : L10n.t("菜单栏满了时，macOS 会把放不下的图标收进 «；它们会出现在收纳条里，有空间时自动回到菜单栏。",
+                                  "When the bar is full, macOS moves icons that don't fit into a «; they show up in the strip and return once there is room."))
+                }
                 LabeledContent {
                     HStack(spacing: 10) {
                         Slider(value: Binding(
-                            get: { Double(model.value("revealSeconds", 20)) },
-                            set: { model.set("revealSeconds", Int($0.rounded())) }), in: 5...60)
+                            get: { Double(model.value(.revealSeconds, 20)) },
+                            set: { model.set(.revealSeconds, Int($0.rounded())) }), in: 5...60)
                             .frame(width: 160)
-                        Text(L10n.t("\(model.value("revealSeconds", 20)) 秒", "\(model.value("revealSeconds", 20)) s"))
+                        Text(L10n.t("\(model.value(.revealSeconds, 20)) 秒", "\(model.value(.revealSeconds, 20)) s"))
                             .monospacedDigit()
                             .frame(minWidth: 40, alignment: .trailing)
                     }
@@ -345,6 +387,26 @@ struct GeneralPane: View {
 
             Section {
                 LabeledContent {
+                    HStack(spacing: 8) {
+                        Button(L10n.t("导出…", "Export…")) { model.send(.exportConfig) }
+                        Button(L10n.t("导入…", "Import…")) { model.send(.importConfig) }
+                    }
+                } label: {
+                    Text(L10n.t("收纳配置", "Layout file"))
+                    Text(L10n.t("每个图标的显示方式、顺序和所有选项，存为一个 JSON 文件", "Each icon's state, the order and all options, as one JSON file"))
+                }
+                LabeledContent {
+                    Button(L10n.t("打开", "Open")) { model.send(.showGuide) }
+                } label: {
+                    Text(L10n.t("使用引导", "Getting started"))
+                    Text(L10n.t("授权与基本用法", "Permission and the basics"))
+                }
+            } header: {
+                Text(L10n.t("配置", "Configuration"))
+            }
+
+            Section {
+                LabeledContent {
                     Button(L10n.t("刷新", "Refresh")) { model.send(.refresh) }
                         .settingsFrame("refresh", model)
                 } label: {
@@ -360,6 +422,37 @@ struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Shows the shortcut; click it, then press the new combination. Esc
+/// cancels, ⌫ clears. The recording itself runs in `BarSettings`.
+struct HotKeyField: View {
+    let model: SettingsModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.send(.recordHotKey(!model.recordingHotKey))
+            } label: {
+                Text(model.recordingHotKey ? L10n.t("按下新的快捷键…", "Press the new shortcut…") : model.hotKeyDisplay)
+                    .font(.system(size: 12, weight: .medium))
+                    .monospacedDigit()
+                    .frame(minWidth: 120)
+            }
+            .help(L10n.t("点一下，然后按下新的组合键（需包含 ⌘、⌃ 或 ⌥）；Esc 取消，⌫ 清除",
+                         "Click, then press the new combination (with ⌘, ⌃ or ⌥); Esc cancels, ⌫ clears"))
+            .accessibilityLabel(L10n.t("快捷键：\(model.hotKeyDisplay)", "Shortcut: \(model.hotKeyDisplay)"))
+            Button {
+                model.send(.clearHotKey)
+            } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.hasHotKey || model.recordingHotKey)
+            .help(L10n.t("关闭快捷键", "Turn the shortcut off"))
+            .accessibilityLabel(L10n.t("关闭快捷键", "Turn the shortcut off"))
+        }
     }
 }
 
@@ -424,8 +517,8 @@ struct LayoutPane: View {
                     SegmentedButtons(options: [L10n.t("默认", "Default"), L10n.t("较小", "Smaller"),
                                                L10n.t("小", "Small"), L10n.t("无", "None")],
                                      selection: Binding(
-                                        get: { model.value("iconSpacing") },
-                                        set: { model.options["iconSpacing"] = $0; model.send(.spacing($0)) }),
+                                        get: { model.value(.iconSpacing) },
+                                        set: { model.options[.iconSpacing] = $0; model.send(.spacing($0)) }),
                                      width: 252)
                 } label: {
                     Text(L10n.t("图标间隙", "Icon spacing"))
@@ -443,7 +536,8 @@ struct LayoutPane: View {
 struct LayoutRow: View {
     let entry: BarEntry
     let model: SettingsModel
-    @State private var targeted = false
+
+    private var targeted: Bool { model.dropTarget == entry.key }
 
     var body: some View {
         LabeledContent {
@@ -479,7 +573,9 @@ struct LayoutRow: View {
         .movable(!entry.pinned, key: entry.key) { LayoutDragPreview(entry: entry) }
         .dropDestination(for: String.self) { keys, _ in
             model.drop(keys.first, on: entry.key)
-        } isTargeted: { targeted = $0 }
+        } isTargeted: { inside in
+            if inside { model.dropTarget = entry.key } else if model.dropTarget == entry.key { model.dropTarget = nil }
+        }
         .help(entry.pinned
               ? L10n.t("位置由 macOS 固定，不能移动；仍然可以隐藏", "macOS fixes this item's position; it can still be hidden")
               : "")
@@ -604,7 +700,7 @@ struct AppearancePane: View {
             Section {
                 LabeledContent(L10n.t("外观", "Appearance")) {
                     SegmentedButtons(options: AppearanceMode.allCases.map(\.title),
-                                     selection: model.intBinding("appearanceMode"), width: 252)
+                                     selection: model.intBinding(.appearanceMode), width: 252)
                 }
             }
 
@@ -621,7 +717,7 @@ struct AppearancePane: View {
                     Spacer()
                     HStack(alignment: .top, spacing: 8) {
                         ForEach(ThemeColor.allCases, id: \.self) { theme in
-                            Button { model.set("themeColor", theme.rawValue) } label: {
+                            Button { model.set(.themeColor, theme.rawValue) } label: {
                                 ThemeSwatch(theme: theme, opacity: CGFloat(model.stripOpacity) / 100,
                                             selected: theme == model.theme)
                             }
@@ -634,13 +730,13 @@ struct AppearancePane: View {
                 }
                 LabeledContent(L10n.t("应用到", "Apply to")) {
                     SegmentedButtons(options: ThemeScope.allCases.map(\.title),
-                                     selection: model.intBinding("themeScope"), width: 300)
+                                     selection: model.intBinding(.themeScope), width: 300)
                 }
                 LabeledContent {
                     HStack(spacing: 10) {
                         Slider(value: Binding(
                             get: { Double(model.stripOpacity) },
-                            set: { model.set("stripOpacity", Int($0.rounded())) }),
+                            set: { model.set(.stripOpacity, Int($0.rounded())) }),
                                in: Double(stripOpacityRange.lowerBound)...Double(stripOpacityRange.upperBound))
                             .frame(width: 160)
                         Text("\(model.stripOpacity)%")
@@ -670,8 +766,8 @@ struct AppearancePane: View {
                     Spacer()
                     HStack(spacing: 10) {
                         ForEach(ControlIcon.symbols.indices, id: \.self) { index in
-                            IconTile(selected: model.value("controlIcon") == index) {
-                                model.set("controlIcon", index)
+                            IconTile(selected: model.value(.controlIcon) == index) {
+                                model.set(.controlIcon, index)
                             } content: {
                                 Image(systemName: ControlIcon.symbols[index])
                             }
@@ -696,11 +792,11 @@ struct AppearancePane: View {
 
     private var customTile: some View {
         let customIndex = ControlIcon.symbols.count
-        return IconTile(selected: model.value("controlIcon") == customIndex) {
+        return IconTile(selected: model.value(.controlIcon) == customIndex) {
             if model.customIcon == nil {
                 model.send(.chooseCustomIcon)
             } else {
-                model.set("controlIcon", customIndex)
+                model.set(.controlIcon, customIndex)
             }
         } content: {
             if let image = model.customIcon {
@@ -808,8 +904,14 @@ extension View {
         if enabled { draggable(key, preview: preview) } else { self }
     }
 
-    /// Records the control's frame so self-tests can click it.
+    /// Records the control's frame so self-tests can click it. Release
+    /// builds skip the geometry tracking.
+    @ViewBuilder
     func settingsFrame(_ key: String, _ model: SettingsModel) -> some View {
+        #if YOUNGBAR_TESTHOOKS
         onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.frames[key] = $0 }
+        #else
+        self
+        #endif
     }
 }

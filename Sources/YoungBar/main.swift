@@ -95,6 +95,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var guideModel: GuideModel?
     var guideTimer: Timer?
     var guideCloseObserver: NSObjectProtocol?
+    var updateWindow: NSWindow?
+    var updateModel: UpdateModel?
+    var updateTask: Task<Void, Never>?
+    var pendingRelease: ReleaseInfo?
     /// After an item is opened from the strip, the strip stays where it was
     /// (no re-centring on the control as the revealed item shifts it) until
     /// the strip closes.
@@ -151,6 +155,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         registerHotKey()
         refreshLoginItemIfMoved()
+        // After an update, say so once in Settings.
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        if let last = UserDefaults.standard.string(forKey: "lastLaunchedVersion"), last != version {
+            feedback = L10n.t("已更新到 \(version)", "Updated to \(version)")
+        }
+        UserDefaults.standard.set(version, forKey: "lastLaunchedVersion")
         if needsGuide {
             showGuide()
         } else {
@@ -493,7 +503,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.t("打开设置窗口", "Open Settings"), action: #selector(showWindow), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("关于 YoungBar", "About YoungBar"), action: #selector(showAbout), keyEquivalent: "")
-        menu.addItem(withTitle: L10n.t("检查更新…", "Check for Updates…"), action: #selector(openReleases), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("退出 YoungBar", "Quit YoungBar"), action: #selector(quit), keyEquivalent: "")
         for item in menu.items where item.action != nil && item.target == nil { item.target = self }
         if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
@@ -1066,6 +1076,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             controller.onExport = { [weak self] in self?.exportConfiguration() }
             controller.onImport = { [weak self] in self?.importConfiguration() }
             controller.onGuide = { [weak self] in self?.showGuide() }
+            controller.onCheckUpdates = { [weak self] in self?.checkForUpdates() }
             settings = controller
         }
         renderWindow(force: true)
@@ -1420,11 +1431,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     @objc func refreshClicked() {
         Task { await refresh(); renderWindow(force: true) }
-    }
-
-    /// Updates are GitHub releases; YoungBar itself never goes online.
-    @objc func openReleases() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/51younglowkey/youngbar/releases/latest")!)
     }
 
     @objc func quit() {

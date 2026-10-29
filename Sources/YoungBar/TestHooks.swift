@@ -19,6 +19,9 @@ extension BarApp {
     /// Runs the opt-in checks named by environment variables, once, after
     /// launch has finished its first refresh.
     func runLaunchHooks() async {
+        if ProcessInfo.processInfo.environment["YOUNGBAR_UPDATETEST"] == "1" {
+            await runUpdateTest()
+        }
         if let page = ProcessInfo.processInfo.environment["YOUNGBAR_SHOWSETTINGS"] {
             showWindow()
             settings?.select(SettingsPage(rawValue: page) ?? .general)
@@ -1402,6 +1405,43 @@ extension BarApp {
         registerHotKey()
         feedback = ""
         result["restoredDisplay"] = hotKeyDisplay
+    }
+
+    /// Opt-in (`YOUNGBAR_UPDATETEST=1`): checks GitHub, records what the
+    /// updater found and the window number (for `screencapture -l`), checks
+    /// `YOUNGBAR_SIGCHECK_PATH` against this app's signature if given, and
+    /// with `YOUNGBAR_UPDATE_INSTALL=1` installs (YoungBar quits and the
+    /// swap script reopens the new version). Pair with
+    /// `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.0` to update to the real release.
+    func runUpdateTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "current": currentVersion]
+        checkForUpdates()
+        for _ in 0..<100 where updateModel?.state == .checking { try? await Task.sleep(for: .milliseconds(200)) }
+        try? await Task.sleep(for: .milliseconds(500))
+        switch updateModel?.state {
+        case .available(let version, _): result["state"] = "available"; result["offered"] = version
+        case .upToDate(let version): result["state"] = "upToDate"; result["offered"] = version
+        case .failed(let message): result["state"] = "failed"; result["message"] = message
+        default: result["state"] = "other"
+        }
+        result["window"] = updateWindow?.windowNumber ?? 0
+        if let path = ProcessInfo.processInfo.environment["YOUNGBAR_SIGCHECK_PATH"] {
+            result["sigcheckPath"] = path
+            result["sigcheckAccepted"] = Self.signedLikeThisApp(URL(fileURLWithPath: path))
+        }
+        result["selfAccepted"] = Self.signedLikeThisApp(Bundle.main.bundleURL)
+        writeJSON(result, name: "updatetest.json")
+        try? await Task.sleep(for: .seconds(3))
+        guard ProcessInfo.processInfo.environment["YOUNGBAR_UPDATE_INSTALL"] == "1",
+              result["state"] as? String == "available" else { return }
+        installUpdate()
+        for _ in 0..<150 {
+            try? await Task.sleep(for: .milliseconds(200))
+            if case .failed(let message) = updateModel?.state {
+                writeJSON(["installFailed": message], name: "updateinstall.json")
+                return
+            }
+        }
     }
 }
 #endif

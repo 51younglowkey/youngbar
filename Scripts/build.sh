@@ -6,7 +6,13 @@ cd "$(dirname "$0")/.."
 # --disable-sandbox: SwiftPM's own sandbox cannot nest inside a host sandbox
 # (e.g. DSH). The package has no build plugins, so manifest sandboxing adds
 # nothing here.
-swift build -c release --product YoungBar --disable-sandbox
+# TESTHOOKS=1 compiles the live self-tests (Sources/YoungBar/TestHooks.swift)
+# in; release packages never set it.
+if [ "${TESTHOOKS:-0}" = "1" ]; then
+    swift build -c release --product YoungBar --disable-sandbox -Xswiftc -DYOUNGBAR_TESTHOOKS
+else
+    swift build -c release --product YoungBar --disable-sandbox
+fi
 app='build/YoungBar.app'
 # Assemble and sign a fresh bundle, then swap it in. Overwriting the
 # executable of a running YoungBar in place gets it killed with

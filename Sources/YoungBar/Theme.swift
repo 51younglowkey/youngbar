@@ -91,13 +91,13 @@ enum ThemeScope: Int, CaseIterable {
 let stripOpacityRange = 30...100
 
 func stripOpacityPercent(_ options: [String: Int]) -> Int {
-    if let percent = options["stripOpacity"] {
+    if let percent = options[.stripOpacity] {
         return min(max(percent, stripOpacityRange.lowerBound), stripOpacityRange.upperBound)
     }
-    return [100, 72, 55][min(max(options["stripStyle"] ?? 0, 0), 2)]
+    return [100, 72, 55][min(max(options[.stripStyle] ?? 0, 0), 2)]
 }
 
-/// Tints a transparent menu-bar crop (white symbols) to black for light strips.
+/// Recolours a symbol image (drawn white) for the strip preview.
 func tintedImage(_ image: NSImage, color: NSColor) -> NSImage {
     let result = NSImage(size: image.size)
     result.lockFocus()
@@ -108,7 +108,18 @@ func tintedImage(_ image: NSImage, color: NSColor) -> NSImage {
     return result
 }
 
+@MainActor private var themeIconCache: [ThemeColor: NSImage] = [:]
+
+@MainActor
 func themeIcon(_ color: ThemeColor) -> NSImage? {
+    if let cached = themeIconCache[color] { return cached }
+    let image = loadThemeIcon(color)
+    themeIconCache[color] = image
+    return image
+}
+
+@MainActor
+private func loadThemeIcon(_ color: ThemeColor) -> NSImage? {
     if let name = color.iconResource,
        let url = Bundle.main.url(forResource: name, withExtension: "jpg") {
         return NSImage(contentsOf: url)

@@ -16,12 +16,14 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 
 ## Install
 
-1. Download `YoungBar-0.1.0.zip` from [Releases](../../releases).
+1. Download the latest `YoungBar-<version>.zip` from [Releases](../../releases/latest).
 2. Unzip it and move `YoungBar.app` into `/Applications`.
 3. First launch: right-click the app → **Open**.
-4. Allow Accessibility when prompted. Enable *Open at login* in Settings if you want it at login.
+4. A short guide asks for Accessibility on first launch. Enable *Open at login* in Settings if you want it at login.
 
 YoungBar lives in the menu bar (•••); it has no Dock icon.
+
+**Updating**: run the install command below again (it always fetches the latest release and quits the running copy properly first), or download the new zip. *Check for Updates…* in the ••• menu opens the Releases page; YoungBar itself never goes online.
 
 ### Install with an agent
 
@@ -29,7 +31,7 @@ Send this to ChatGPT, Doubao, Claude, DeepSeek (DSH), or any other agent:
 
 > Install YoungBar for me: run `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh`
 
-Or run the command directly:
+Or run the command directly (it installs to `/Applications`, or `~/Applications` if that isn't writable):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
@@ -41,26 +43,32 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything.
 - **Open in place**: clicking a third-party item in the strip presses it through Accessibility while it stays hidden, so its menu or panel opens beside the strip without the bar shifting or the pointer moving. System items are revealed and clicked with the pointer hidden.
 - **Reorder**: ⌘-drag in the real menu bar and drag a row in the Menu Bar page; right-click a row for left/right moves.
-- **Global hotkey**: ⌃⌥B toggles the strip without the mouse.
+- **Keyboard first**: ⌃⌥B (or your own shortcut, set in General) opens the strip with the first item selected. Type to filter by name — English names and bundle ids match too, so `wifi` or `wechat` work in either language — then ← → to choose, Return to open, Esc to clear and close.
+- **Icons that don't fit**: when the bar is full, macOS 27 moves icons into a « beside the notch. YoungBar lists those in the strip too, and they leave it by themselves once there is room. The ••• control stays visible instead of following them under the notch.
 - **Menu Bar page**: every item in menu-bar order with Shown / Hidden / Always Hidden segmented choices; Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
 - **Appearance**: system / light / dark; blue, pink and yellow palettes with matched OKLCH lightness/saturation, plus a neutral clear one; a theme-tinted glass window with the theme character in the sidebar; three-way scope and one strip opacity slider (30–100%).
 - **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or a 36×36 PNG.
 - **Settings entry from the strip**: a pinned gear at the right edge.
+- **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
+- **First-run guide**: one permission, then where things are.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no network, no screen capture.
+- **Local only**: no telemetry, no network, no screen capture. About 0.3% CPU at rest.
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 
 ## Build from source
 
-Building from source needs macOS 27 and the Swift 6.3 toolchain.
+Building from source needs macOS 27 and the Command Line Tools (Swift 6.4); Xcode is not required.
 
 ```sh
 sh Scripts/build.sh
 open build/YoungBar.app
+swift test --disable-sandbox   # unit tests
 ```
+
+`TESTHOOKS=1 sh Scripts/build.sh` builds a variant with the live self-tests (they drive the real menu bar; see `AGENTS.md`). Release packages never include them.
 
 `Scripts/build.sh` builds a release executable, assembles `build/YoungBar.app`, installs the icon, and signs with a stable local certificate if one is configured (otherwise ad-hoc). See [docs/SIGNING.md](docs/SIGNING.md), [docs/INSTALL.md](docs/INSTALL.md) and [docs/RELEASING.md](docs/RELEASING.md).
 
@@ -88,14 +96,13 @@ YoungBar does **not** capture the screen and does **not** need Screen & System A
 
 The current verification matrix is in [docs/STATUS.md](docs/STATUS.md); the iBar Pro 1.4.6 comparison is in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
 
-Known gaps: multi-display, configurable hotkey, keyboard navigation, drag-reordering inside the strip, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
+Known gaps: multi-display is handled in code but untested (no second display available), drag-reordering inside the strip, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
 
 ## Roadmap
 
-- Configurable hotkey, keyboard navigation (arrows / Enter / Esc), layout search.
-- Profiles with export/import, per-app rules.
-- Multi-display.
-- Notarized releases, auto-update.
+- Multi-display verification.
+- Profiles and per-app or per-situation rules (on battery, external display).
+- Drag to reorder inside the strip.
 
 ## License and credits
 

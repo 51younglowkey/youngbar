@@ -15,9 +15,13 @@ let package = Package(
         .executableTarget(
             name: "YoungBar",
             dependencies: [
+                "YoungBarCore",
                 .product(name: "PelmetEngine", package: "PelmetEngine"),
                 .product(name: "PelmetCore", package: "PelmetCore"),
             ]
         ),
+        // Pure logic with no AppKit state, so it can be unit tested.
+        .target(name: "YoungBarCore"),
+        .testTarget(name: "YoungBarCoreTests", dependencies: ["YoungBarCore"]),
     ]
 )

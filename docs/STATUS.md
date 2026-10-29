@@ -3,7 +3,7 @@
 > 只写**当前**状态和它的证据。0.1.0 及之前的阶段记录（截图缓存、旧 AppKit 设置窗口等）
 > 已原样移到 [`JOURNAL.md`](JOURNAL.md) 附录。
 >
-> 最后核对：**2026-10-29 21:00 +00:00**，版本 **0.1.1 (2)**，MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
+> 最后核对：**2026-10-29 21:20 +00:00**，版本 **0.1.2 (3)**（未发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 
 ## 1. 构建
 
@@ -34,6 +34,19 @@
 | 测试后复原 | ✅ `itemModes`、`hiddenBundles` 与测试前备份相同；`barOptions` 只多了 `onboarded:1` | `defaults export` 前后对比 |
 
 ![通用（0.1.1）](images/general-0.1.1.png)
+
+## 2.1 应用内更新（0.1.2，未发布）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 已是最新 | ✅ 当前 0.1.1 对线上 0.1.1：显示「已是最新版本」 | `updatetest.json`：`state:upToDate` |
+| 发现新版本 | ✅ 测试版假装 0.1.0：找到线上 0.1.1，显示更新说明 | `state:available`、`offered:0.1.1`；![更新](images/update-available.png) |
+| 签名检查 | ✅ 本 app 通过；同一份 app 用 ad-hoc 重签后被拒 | `selfAccepted:true`、`sigcheckAccepted:false` |
+| 端到端安装 | ✅ 下载 → SHA-256 → 解压 → 版本/签名检查 → 正常退出 → 脚本换 bundle → 重新打开；新进程 PID 不同，`build/YoungBar.app` 变成 GitHub 上的 0.1.1 发布包 | `update.log`：`installed 0.1.1 at …/build/YoungBar.app`；`strings` 无测试钩子 |
+| 升级后权限 | ✅ 新版本照常隐藏图标（辅助功能授权保留） | 升级后菜单栏截图只剩常显项 |
+| 更正 | 第一次端到端时卡在「正在安装」：在并发任务里直接调 `NSApp.terminate` 与 `applicationShouldTerminate` 的异步回复互相等待（`sample` 显示主线程停在 `-[NSApplication _shouldTerminate]` 的嵌套事件循环）。改为 run loop 上的 `perform` 后通过 | `sample` 输出；第二次 `update.log` |
+
+边界：只测了 `build/` 下、目录可写的情况；`/Applications` 里由非管理员用户运行（目录不可写）时会提示去 GitHub 手动下载，没有实测。下载中途取消没有实测。
 
 ## 3. 验证边界（不许含糊）
 

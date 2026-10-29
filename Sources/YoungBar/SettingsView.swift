@@ -51,6 +51,7 @@ enum SettingsAction {
     case exportConfig
     case importConfig
     case showGuide
+    case checkUpdates
 }
 
 @MainActor
@@ -301,6 +302,10 @@ struct SidebarIcon: View {
 struct GeneralPane: View {
     @Bindable var model: SettingsModel
 
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
     var body: some View {
         Form {
             Section {
@@ -403,6 +408,18 @@ struct GeneralPane: View {
                 }
             } header: {
                 Text(L10n.t("配置", "Configuration"))
+            }
+
+            Section {
+                LabeledContent {
+                    Button(L10n.t("检查更新…", "Check for Updates…")) { model.send(.checkUpdates) }
+                } label: {
+                    Text(L10n.t("版本 \(Self.version)", "Version \(Self.version)"))
+                    Text(L10n.t("有新版本时直接下载安装。只有点这里时才会访问 GitHub。",
+                                "Downloads and installs a newer version. YoungBar goes online only when you click this."))
+                }
+            } header: {
+                Text(L10n.t("更新", "Updates"))
             }
 
             Section {

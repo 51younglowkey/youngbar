@@ -23,7 +23,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 
 YoungBar lives in the menu bar (•••); it has no Dock icon.
 
-**Updating**: run the install command below again (it always fetches the latest release and quits the running copy properly first), or download the new zip. *Check for Updates…* in the ••• menu opens the Releases page; YoungBar itself never goes online.
+**Updating**: choose *Check for Updates…* in the ••• menu or in General. When there is a newer version you see its notes, and *Install and Relaunch* downloads, verifies and swaps it in place (from 0.1.2 on). Running the install command again, or downloading the zip, works too.
 
 ### Install with an agent
 
@@ -52,9 +52,10 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
 - **First-run guide**: one permission, then where things are.
+- **In-app updates**: checks GitHub for the latest release, then downloads, installs and relaunches in one click. The SHA-256 and the signing certificate (it must be the same as this app's) are checked first; nothing is installed otherwise.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no network, no screen capture. About 0.3% CPU at rest.
+- **Local only**: no telemetry, no screen capture; YoungBar goes online only when you click *Check for Updates*. About 0.3% CPU at rest.
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 

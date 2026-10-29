@@ -38,8 +38,14 @@ Create a GitHub release from the tag. Attach:
 - `YoungBar-<version>.zip.sha256` (the install script checks it)
 - GitHub's source archive link for the same tag
 
-The install script resolves `/releases/latest`, so the newest release must
-not be marked as a pre-release.
+The install script and the in-app updater both use the latest release, so
+the newest release must not be a pre-release or draft. The updater also needs:
+
+- the asset names exactly `YoungBar-<version>.zip` and `.zip.sha256`, and the
+  tag `v<version>` matching `CFBundleShortVersionString` inside the zip;
+- the app signed with the same **YoungBar Local Signing** certificate as
+  every earlier release. A release signed with anything else is refused by
+  the updaters already out there (by design), so keep that certificate.
 
 Release notes must include:
 

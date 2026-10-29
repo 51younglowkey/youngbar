@@ -35,6 +35,7 @@ final class BarSettings: NSObject {
     var onExport: (() -> Void)?
     var onImport: (() -> Void)?
     var onGuide: (() -> Void)?
+    var onCheckUpdates: (() -> Void)?
     private var keyMonitor: Any?
     private var resignObserver: NSObjectProtocol?
 
@@ -122,6 +123,7 @@ final class BarSettings: NSObject {
         case .exportConfig: onExport?()
         case .importConfig: onImport?()
         case .showGuide: onGuide?()
+        case .checkUpdates: onCheckUpdates?()
         }
     }
 

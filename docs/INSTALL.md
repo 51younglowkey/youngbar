@@ -40,10 +40,15 @@ remove the old YoungBar row and add it again.
 
 ## 4. Updates
 
-There is no auto-updater: YoungBar never goes online. *Check for Updates…* in
-the ••• menu opens the Releases page. To update, run the install script again
-(it quits the running copy normally first, so hidden icons are shown before
-the swap) or replace the app by hand. Releases are signed with the same local
+From 0.1.2, *Check for Updates…* (••• menu or Settings → General) asks GitHub
+for the latest release and, if it is newer, offers *Install and Relaunch*: it
+downloads the zip, checks its SHA-256 and that the new app is signed with the
+same certificate as the installed one, quits normally (hidden icons come back
+first), swaps the bundle and reopens it. A log is written to
+`~/Library/Application Support/YoungBar/update.log`. Nothing is checked
+automatically. If YoungBar's folder isn't writable, or you built it yourself
+(ad-hoc signed), it sends you to the Releases page instead. 0.1.1 and older
+must be updated once by hand or with the install script. Releases are signed with the same local
 certificate, so the Accessibility grant normally survives; if it doesn't,
 remove the old entry and re-add the new one.
 

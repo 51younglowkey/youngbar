@@ -5,8 +5,13 @@ macOS will warn on first launch. This is expected for a small open-source app.
 
 ## 1. Download
 
-Download `YoungBar-<version>.zip` from the GitHub Release, unzip it, and move
-`YoungBar.app` to `/Applications`.
+Download `YoungBar-<version>.zip` from the latest GitHub Release, unzip it,
+and move `YoungBar.app` to `/Applications`. Or run the install script, which
+always fetches the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
+```
 
 ## 2. First launch
 
@@ -35,8 +40,11 @@ remove the old YoungBar row and add it again.
 
 ## 4. Updates
 
-There is no auto-updater in 0.1.x. Replace the app manually from the latest
-Release. If the signing identity changed, macOS may ask for permissions again;
+There is no auto-updater: YoungBar never goes online. *Check for Updates…* in
+the ••• menu opens the Releases page. To update, run the install script again
+(it quits the running copy normally first, so hidden icons are shown before
+the swap) or replace the app by hand. Releases are signed with the same local
+certificate, so the Accessibility grant normally survives; if it doesn't,
 remove the old entry and re-add the new one.
 
 ## 5. Uninstall

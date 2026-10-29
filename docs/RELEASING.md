@@ -3,9 +3,14 @@
 ## 1. Before tagging
 
 - [ ] Update `CFBundleShortVersionString` / `CFBundleVersion` in `Info.plist`
-- [ ] Run `make verify`
-- [ ] Run the local permission smoke tests (`YOUNGBAR_SELFTEST=1`,
-      `YOUNGBAR_INTERACTIONTEST=1`, `YOUNGBAR_RECOVERY...`) on a real Mac
+- [ ] Run `make verify` and `swift test --disable-sandbox`
+- [ ] Build the test variant (`TESTHOOKS=1 sh Scripts/build.sh`) and run the
+      live checks on a real Mac (`YOUNGBAR_SELFTEST=1`, `YOUNGBAR_KEYBOARDTEST=1`,
+      `YOUNGBAR_OVERFLOWTEST=1`, `YOUNGBAR_CONFIGTEST=1`, …); back up
+      `defaults export studio.wuyiyang.youngbar` first and compare after
+- [ ] `make package` (always builds without test hooks); check
+      `strings build/YoungBar.app/Contents/MacOS/YoungBar | grep YOUNGBAR_` shows
+      no `*TEST` names
 - [ ] Confirm `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `docs/LICENSING.md`
       are current
 - [ ] Confirm theme artwork is cleared for public distribution (currently
@@ -23,15 +28,18 @@ The script copies `LICENSE` and `THIRD_PARTY_NOTICES.md` into
 ## 3. Tag and source
 
 ```sh
-git tag -s v0.1.0 -m "YoungBar 0.1.0"
-git push origin v0.1.0
+git tag -a v<version> -m "YoungBar <version>"
+git push origin v<version>
 ```
 
 Create a GitHub release from the tag. Attach:
 
-- `YoungBar-0.1.0.zip` (the app)
-- `YoungBar-0.1.0-source.zip` (or GitHub's source archive link)
-- `SHA256SUMS`
+- `YoungBar-<version>.zip` (the app)
+- `YoungBar-<version>.zip.sha256` (the install script checks it)
+- GitHub's source archive link for the same tag
+
+The install script resolves `/releases/latest`, so the newest release must
+not be marked as a pre-release.
 
 Release notes must include:
 

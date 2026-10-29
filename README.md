@@ -16,12 +16,14 @@
 
 ## 安装
 
-1. 从 [Releases](../../releases) 下载 `YoungBar-0.1.0.zip`。
+1. 从 [Releases](../../releases/latest) 下载最新的 `YoungBar-<版本>.zip`。
 2. 解压，把 `YoungBar.app` 放进 `/Applications`。
 3. 第一次打开：右键 app → **打开**。
-4. 按提示允许辅助功能；需要开机启动就在设置里打开「登录时打开」。
+4. 第一次打开会有一个简短引导，按提示允许辅助功能；需要开机启动就在设置里打开「登录时打开」。
 
 安装后入口在菜单栏 •••，没有 Dock 图标。
+
+**升级**：再运行一次下面的安装命令（总是下载最新版，并先正常退出正在运行的 YoungBar），或手动下载新的 zip。••• 菜单里的「检查更新…」会打开 Releases 页面；YoungBar 本身不联网。
 
 ### 用 Agent 安装
 
@@ -29,7 +31,7 @@
 
 > 帮我安装 YoungBar：运行 `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh`
 
-也可以直接复制命令：
+也可以直接复制命令（装到 `/Applications`，没有写权限时装到 `~/Applications`）：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
@@ -41,26 +43,32 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **即时收纳条**：每个隐藏项显示应用自己的图标（系统项用 SF Symbol）；打开收纳条不会临时显示任何图标。
 - **原地打开**：点收纳条里的第三方项时，在隐藏状态下直接 AXPress，不显示图标、不动鼠标，菜单或面板就在收纳条旁打开。系统项没有 AXPress，才短暂显示后点击，点击时隐藏光标。
 - **排序**：在真实菜单栏里 ⌘ 拖动，或在「菜单栏」页拖动整行；右键可以左移/右移。
-- **全局快捷键**：⌃⌥B 打开/收起收纳条。
+- **键盘优先**：⌃⌥B（可在「通用」里改成你自己的快捷键）打开收纳条并选中第一项；直接输入名称筛选（英文名和 bundle id 也能匹配，`wifi`、`wechat` 中英文界面都能搜到），← → 选择，回车打开，Esc 先清空再关闭。
+- **放不下的图标**：菜单栏满了时，macOS 27 会把放不下的图标收进刘海旁的 «。YoungBar 把它们也列进收纳条，有空间时自动回到菜单栏；••• 不会再跟着跑到刘海下面。
 - **菜单栏页**：按菜单栏顺序列出每一项，用「显示 / 隐藏 / 始终隐藏」分段按钮选择；日期与控制中心由 macOS 固定位置，但仍可隐藏。
 - **设置窗口**：System Settings 风格的侧栏 + 分组表单（SwiftUI 内容，AppKit 外壳）；菜单栏逻辑仍在 AppKit。
 - **外观**：跟随系统 / 浅色 / 深色；蓝 / 粉 / 黄使用 OKLCH 同亮度同彩度，另有中性透明；主题色玻璃窗口、侧栏角色图、三档应用范围和 30–100% 收纳条不透明度。
 - **自定义菜单栏按钮**：省略号、爱心、星形、闪光、网格，或你自己的 36×36 PNG。
 - **收纳条设置入口**：右侧固定齿轮。
+- **配置文件**：把每个图标的状态、顺序和所有选项导出成一个 JSON，换机或重装时导入。
+- **首次启动引导**：一个权限，加上基本用法。
 - **崩溃恢复**：正常退出前先显示所有隐藏项；异常退出后，下次启动会先全部显示再套用规则。`--reveal-all` 是救援参数。
 - **中英双语**：在「通用」里切换。
-- **纯本地**：没有遥测、没有网络、不截屏。
+- **纯本地**：没有遥测、没有网络、不截屏。空闲时 CPU 约 0.3%。
 
 关于 IP、许可证、私有 API 和分发，见 [docs/FAQ.md](docs/FAQ.md)。
 
 ## 从源码构建
 
-需要 macOS 27 和 Swift 6.3 工具链。
+需要 macOS 27 和命令行工具（Swift 6.4），**不需要 Xcode**。
 
 ```sh
 sh Scripts/build.sh
 open build/YoungBar.app
+swift test --disable-sandbox   # 单元测试
 ```
+
+`TESTHOOKS=1 sh Scripts/build.sh` 会编入真机自检（会操作真实菜单栏，见 `AGENTS.md`）；发布包永远不带。
 
 `Scripts/build.sh` 会编译 release、组装 `build/YoungBar.app`、装图标，并在配置了本地证书时用证书签名（否则 ad-hoc）。详见 [docs/SIGNING.md](docs/SIGNING.md)、[docs/INSTALL.md](docs/INSTALL.md) 和 [docs/RELEASING.md](docs/RELEASING.md)。
 
@@ -88,14 +96,13 @@ YoungBar **不截屏**，**不需要屏幕录制**。如果重建后 macOS 不�
 
 当前验证矩阵在 [docs/STATUS.md](docs/STATUS.md)；iBar Pro 1.4.6 的对照在 [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md)。
 
-已知缺口：多显示器、可配置快捷键、键盘导航、收纳条内拖拽排序，以及 SwiftUI 设置的真实触控板手感。登录项已注册，但还需要真正登出/重启验证一次。
+已知缺口：多显示器已在代码里处理但没有验证（手头没有第二块屏）、收纳条内拖拽排序、SwiftUI 设置的真实触控板手感。登录项已注册，但还需要真正登出/重启验证一次。
 
 ## 路线图
 
-- 可配置快捷键、键盘导航（方向键 / Enter / Esc）、布局搜索。
-- 配置导入导出、按应用规则。
-- 多显示器。
-- 公证发布、自动更新。
+- 验证多显示器。
+- 多套配置、按场景切换（用电池时、接外接屏时）。
+- 在收纳条里拖动排序。
 
 ## 许可证与致谢
 

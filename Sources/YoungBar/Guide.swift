@@ -54,8 +54,8 @@ struct GuideView: View {
                     .disabled(!model.axTrusted)
             }
             GuideStep(number: 3, title: L10n.t("打开收纳条", "Open the strip"),
-                      detail: L10n.t("点菜单栏里的 •••，或按 \(model.hotKey)。打开后直接输入名称搜索，← → 选择，回车打开。",
-                                     "Click ••• in the menu bar or press \(model.hotKey). Then type to search, ← → to choose, Return to open.")) {
+                      detail: L10n.t("点菜单栏里的 •••，或按 \(model.hotKey)。打开后按 1–9 直接打开对应图标。",
+                                     "Click ••• in the menu bar or press \(model.hotKey). Then press 1–9 to open that icon.")) {
                 EmptyView()
             }
             HStack {

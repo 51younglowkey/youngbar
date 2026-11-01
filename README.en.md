@@ -42,8 +42,9 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Three states per item**: Visible, Hidden, Always Hidden (⌥-click to include Always Hidden in the strip).
 - **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything.
 - **Open in place**: clicking a third-party item in the strip presses it through Accessibility while it stays hidden, so its menu or panel opens beside the strip without the bar shifting or the pointer moving. System items are revealed and clicked with the pointer hidden.
-- **Reorder**: ⌘-drag in the real menu bar and drag a row in the Menu Bar page; right-click a row for left/right moves.
-- **Keyboard first**: ⌃⌥B (or your own shortcut, set in General) opens the strip with the first item selected. Type to filter by name — English names and bundle ids match too, so `wifi` or `wechat` work in either language — then ← → to choose, Return to open, Esc to clear and close.
+- **Reorder**: ⌘-drag in the real menu bar and drag a row in the Menu Bar page; right-click a row for left/right moves. Icons in the strip can be dragged sideways too, without the bar flickering.
+- **Keyboard first**: press ⌘ twice to open the strip (change it in General to a key combination, or ⌥ / ⌃ pressed twice). The icons are numbered 1–9: press a number to open one, or ← → and Return; Esc closes.
+- **New icons to the strip** (optional): an app's icon that appears in the bar for the first time goes straight to the strip; system icons are left alone.
 - **Icons that don't fit**: when the bar is full, macOS 27 moves icons into a « beside the notch. YoungBar lists those in the strip too, and they leave it by themselves once there is room. The ••• control stays visible instead of following them under the notch.
 - **Menu Bar page**: every item in menu-bar order with Shown / Hidden / Always Hidden segmented choices; Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
@@ -52,10 +53,10 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
 - **First-run guide**: one permission, then where things are.
-- **In-app updates**: checks GitHub for the latest release, then downloads, installs and relaunches in one click. The SHA-256 and the signing certificate (it must be the same as this app's) are checked first; nothing is installed otherwise.
+- **In-app updates**: asks GitHub once a day (can be turned off); a newer version puts a dot on •••, and the first line of its menu downloads it, checks the SHA-256 and the signing certificate (it must be the same as this app's) and relaunches. Nothing installs by itself.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no screen capture; YoungBar goes online only when you click *Check for Updates*. About 0.3% CPU at rest.
+- **Local only**: no telemetry, no screen capture; the only network use is the update check (once a day, can be turned off in General). About 0.3% CPU at rest.
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 

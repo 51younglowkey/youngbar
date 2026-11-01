@@ -37,8 +37,9 @@ macOS 27 的界面叫「设备控制与数据访问」，不是旧的「辅助�
 ```
 Sources/YoungBar/
   main.swift            AppDelegate、刷新节奏、控制条、收纳条、菜单、排序（~1400 行）
-  ShelfKeyboard.swift   收纳条键盘导航与搜索（ShelfPanel，非激活面板也能拿键盘焦点）
-  HotKey.swift          可自定义的 Carbon 全局快捷键
+  ShelfKeyboard.swift   收纳条键盘导航、数字键 1–9（ShelfPanel，非激活面板也能拿键盘焦点；没有搜索）
+  ShelfReorder.swift    收纳条里拖动排序（只改保存的顺序，不 reveal、不拖真实菜单栏）
+  HotKey.swift          全局快捷键：组合键走 Carbon；默认「连按两下 ⌘」用全局/本地事件监视器（YoungBarCore 的 DoubleTapDetector）
   NotchOverflow.swift   被 macOS « 收走 / 被刘海挡住的图标；显示器变化时重装控件
   ConfigTransfer.swift  配置导入导出
   Guide.swift           首次启动引导
@@ -55,7 +56,7 @@ Vendor/
   PelmetEngine          隐藏/展开/排序、MenuBarClientCore 评估接口
 ```
 
-- 更新器（`Updater.swift`）：只在用户点「检查更新」时联网；下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
+- 更新器（`Updater.swift`）：启动 10 秒后、之后每天一次后台查 GitHub（`autoUpdateCheck`，默认开，可关）；有新版本只在控件上加圆点、菜单第一行加「有新版本」，**不自动安装**。点「检查更新」时立即查。安装：下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
 - 刷新：每次刷新是一次完整 AX 遍历，耗 CPU。收纳条/设置打开或有定时展开时 1 秒一次，空闲 4 秒一次；应用启动退出、唤醒、显示器变化立即刷新。设置窗口不可见时不要重建它的模型。
 - 溢出：macOS 27 菜单栏满时在左端（刘海右侧）放一个 «，放不下的项 AX 位置互相重叠地堆在那里。判断规则在 `YoungBarCore/Overflow.swift`（与 Pelmet `PlacementGeometry.overflowTrapped` 相同）。
 
@@ -70,7 +71,8 @@ Vendor/
 - 自检开关（环境变量）：`YOUNGBAR_SELFTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_ORDERTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_HOTKEYTEST`、`YOUNGBAR_PINNEDTEST`、`YOUNGBAR_GEARTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_ABOUTTEST`、`YOUNGBAR_CONCEALTEST`。
 - `YOUNGBAR_NOASSERTIONTEST`：没有要隐藏的项时的菜单栏（引擎撤掉断言，macOS 会绘制原生状态项），检查不会多出一个 •••；`YOUNGBAR_NOASSERTION_HOLD=秒` 保持以便截图。
 - 0.1.2 新增：`YOUNGBAR_UPDATETEST`（查 GitHub、记录结果和窗口号；`YOUNGBAR_SIGCHECK_PATH` 检查某个 app 是否与本 app 同证书；`YOUNGBAR_UPDATE_INSTALL=1` 真的安装）。配合 `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.0`（仅测试版）可以端到端升级到线上最新版：它会**替换正在运行的 bundle**（`build/YoungBar.app`），测完要重新 `sh Scripts/build.sh`。
-- 0.1.1 新增：`YOUNGBAR_KEYBOARDTEST`（快捷键打开、方向键、搜索、Esc、自定义快捷键并恢复）、`YOUNGBAR_HOTKEYPROBE`（多组快捷键各按一次）、`YOUNGBAR_OVERFLOWTEST`（临时显示全部隐藏项制造拥挤，记录被 « 收走的项，恢复模式和顺序；`YOUNGBAR_OVERFLOW_HOLD=秒` 保持拥挤状态以便截图）、`YOUNGBAR_CONFIGTEST`（导出→改→导入）、`YOUNGBAR_SHOWGUIDE` / `YOUNGBAR_SHOWSETTINGS=general|layout|appearance`（打开窗口并把 windowNumber 写进 JSON，配合 `screencapture -l <id>` 截真实窗口）。
+- 0.1.4 新增：`YOUNGBAR_AUTOUPDATETEST`（配合 `YOUNGBAR_UPDATE_PRETEND_VERSION`：后台检查→圆点、菜单行、不弹窗；关掉选项后清除；`YOUNGBAR_AUTOUPDATE_HOLD=秒`）、`YOUNGBAR_SHELFDRAGTEST`（真实鼠标在收纳条里拖动排序，检查保存顺序、没有 reveal，结束恢复顺序）、`YOUNGBAR_AUTOHIDETEST`（把一个显示中的应用图标当成新图标，检查自动收纳，结束恢复）。`YOUNGBAR_KEYBOARDTEST` 改为真实按键连按两下 ⌘、⌘⇧ / 慢按不触发、数字键、自定义快捷键并恢复；`YOUNGBAR_KEYBOARD_DIGIT=1` 时还会用数字键真的点开一个第三方项的菜单再 Esc。
+- 0.1.1 新增：`YOUNGBAR_KEYBOARDTEST`（快捷键打开、方向键、Esc、自定义快捷键并恢复）、`YOUNGBAR_HOTKEYPROBE`（多组快捷键各按一次）、`YOUNGBAR_OVERFLOWTEST`（临时显示全部隐藏项制造拥挤，记录被 « 收走的项，恢复模式和顺序；`YOUNGBAR_OVERFLOW_HOLD=秒` 保持拥挤状态以便截图）、`YOUNGBAR_CONFIGTEST`（导出→改→导入）、`YOUNGBAR_SHOWGUIDE` / `YOUNGBAR_SHOWSETTINGS=general|layout|appearance`（打开窗口并把 windowNumber 写进 JSON，配合 `screencapture -l <id>` 截真实窗口）。
 - 本机 shell 可以直接 `screencapture -x -R 700,0,1100,38` 截菜单栏；`cacheDisplay` 的离屏渲染没有窗口背景，深色模式下文字会看不见，不能当外观证据。
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。
 - 构建时可以不退出正在运行的 YoungBar：`build.sh` 会整包替换，不再原地覆盖可执行文件。

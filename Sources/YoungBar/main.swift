@@ -14,6 +14,30 @@ import YoungBarCore
 final class BarControlButton: NSButton {
     var rightClick: (() -> Void)?
     var hover: ((Bool) -> Void)?
+    /// A dot at the top right: a newer version is out.
+    var badgeColor: NSColor? {
+        didSet {
+            badge.isHidden = badgeColor == nil
+            badge.layer?.backgroundColor = badgeColor?.cgColor
+            needsLayout = true
+        }
+    }
+    private let badge: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 3
+        view.isHidden = true
+        return view
+    }()
+
+    override func layout() {
+        super.layout()
+        if badge.superview == nil { addSubview(badge) }
+        let size: CGFloat = 6
+        let top: CGFloat = 3
+        badge.frame = NSRect(x: bounds.midX + 5, y: isFlipped ? top : bounds.height - top - size,
+                             width: size, height: size)
+    }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
@@ -80,12 +104,17 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Presses delivered by Carbon; read by the self-tests.
     var hotKeyPressCount = 0
     var hotKeyHandler: EventHandlerRef?
+    /// A double-tap shortcut is watched for, not registered: every modifier
+    /// change and key press goes through this.
+    var doubleTapDetector = DoubleTapDetector(target: nil)
+    var doubleTapMonitors: [Any] = []
     var shelfState: String?
     /// Typed into the open strip: filters it to matching items.
-    var shelfQuery = ""
     /// Keyboard selection in the strip, an index into `shelfButtons`.
     var shelfSelection: Int?
-    var shelfButtons: [BarControlButton] = []
+    /// Opened from the keyboard: the first nine icons show their number.
+    var shelfNumbered = false
+    var shelfButtons: [NSButton] = []
     var shelfIconColor: NSColor = .white
     /// Items set to Show that sit under the notch, so nobody sees them.
     var overflowKeys: Set<String> = []
@@ -99,6 +128,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var updateModel: UpdateModel?
     var updateTask: Task<Void, Never>?
     var pendingRelease: ReleaseInfo?
+    /// A newer release found by the daily check: a dot on the control and
+    /// a line at the top of its menu until it is installed.
+    var availableUpdate: ReleaseInfo?
+    var autoUpdateTask: Task<Void, Never>?
+    var lastAutoUpdateCheck: Date?
     /// After an item is opened from the strip, the strip stays where it was
     /// (no re-centring on the control as the revealed item shifts it) until
     /// the strip closes.
@@ -160,6 +194,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         registerHotKey()
         refreshLoginItemIfMoved()
+        startAutoUpdateChecks()
         // After an update, say so once in Settings.
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         if let last = UserDefaults.standard.string(forKey: "lastLaunchedVersion"), last != version {
@@ -266,6 +301,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let mode = AppearanceMode(rawValue: options[.appearanceMode] ?? 0) ?? .system
         NSApp.appearance = mode.appearance
         NSApp.applicationIconImage = themeIcon(themeColor)
+        applyUpdateBadge()
     }
 
     /// Every AX walk of the menu bar costs CPU, so walks follow what the
@@ -376,6 +412,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
         presentKeys = present
 
         var orderChanged = false
+        // Nothing is "new" on the very first run: every icon is.
+        let knewItems = !savedOrder.isEmpty
+        var newlyHidden: [String] = []
         let deduped = LayoutOrder.unique(savedOrder)
         if deduped.count != savedOrder.count {
             savedOrder = deduped
@@ -390,6 +429,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 let known = catalog.compactMapValues { $0.frame?.minX }
                 savedOrder.insert(key, at: LayoutOrder.insertionIndex(forMinX: frame.minX, in: savedOrder, minX: known))
                 orderChanged = true
+                if knewItems, shouldAutoHide(item) { newlyHidden.append(key) }
             }
             if let bundle = item.id.bundleID, bundle != PelmetBundle.agentID {
                 knownBundles[bundle] = item.appName ?? appName(for: bundle)
@@ -413,6 +453,32 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let finalOrder = LayoutOrder.unique(savedOrder)
         if finalOrder != savedOrder { savedOrder = finalOrder; orderChanged = true }
         if orderChanged { UserDefaults.standard.set(savedOrder, forKey: "itemOrder") }
+        if !newlyHidden.isEmpty { autoHide(newlyHidden) }
+    }
+
+    /// An app's icon the user has never had in the bar. Apple's own items
+    /// (system extras, the clock, Control Center) never count.
+    func shouldAutoHide(_ item: ObservedItem) -> Bool {
+        guard options[.autoHideNew] == 1, modes[item.id.sectionKey.rawValue] == nil,
+              let bundle = item.id.bundleID, !bundle.hasPrefix("com.apple."),
+              MenuBarPolicy.systemItem(for: item.id) == nil else { return false }
+        return true
+    }
+
+    func autoHide(_ keys: [String]) {
+        guard !busy else { return }
+        for key in keys { modes[key] = 1 }
+        UserDefaults.standard.set(modes, forKey: "itemModes")
+        UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
+        let names = keys.map { name(for: $0) }.joined(separator: L10n.t("、", ", "))
+        feedback = L10n.t("新图标已放进收纳条：\(names)", "New icons moved to the strip: \(names)")
+        shelfState = nil
+        busy = true
+        Task {
+            await engine.setModel(currentModel())
+            busy = false
+            renderWindow()
+        }
     }
 
     /// The table is the user's ordering model, but it must not drift from the
@@ -473,7 +539,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func showConfigurationMenu() {
+        let menu = configurationMenu()
+        if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
+            NSMenu.popUpContextMenu(menu, with: event, for: button)
+        }
+    }
+
+    func configurationMenu() -> NSMenu {
         let menu = NSMenu(title: "YoungBar")
+        if let release = availableUpdate {
+            let item = NSMenuItem(title: L10n.t("有新版本 \(release.version)，点此更新…", "YoungBar \(release.version) is available; update…"),
+                                  action: #selector(checkForUpdates), keyEquivalent: "")
+            item.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
         if !AXIsProcessTrusted() {
             menu.addItem(withTitle: L10n.t("开启辅助功能权限…", "Open Accessibility…"), action: #selector(requestAccessibility), keyEquivalent: "")
         } else if !AssessmentMode.isAvailable {
@@ -511,9 +591,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: L10n.t("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("退出 YoungBar", "Quit YoungBar"), action: #selector(quit), keyEquivalent: "")
         for item in menu.items where item.action != nil && item.target == nil { item.target = self }
-        if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
-            NSMenu.popUpContextMenu(menu, with: event, for: button)
-        }
+        return menu
     }
 
     func installControlPanelWhenReady() async {
@@ -586,6 +664,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         panel.makeKeyAndOrderFront(nil)
         controlPanel = panel
         controlButton = control
+        applyUpdateBadge()
     }
 
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
@@ -647,8 +726,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         expanded = true
         shelfAnchored = false
-        shelfQuery = ""
         shelfSelection = selectFirst ? 0 : nil
+        shelfNumbered = selectFirst
         shelfState = nil
         // Above the menu bar while browsing; lowered while an item's own menu
         // or panel is open so that opens on top of the strip.
@@ -672,13 +751,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func closeShelf() {
         expanded = false
         shelfAnchored = false
-        shelfQuery = ""
         shelfSelection = nil
+        shelfNumbered = false
         shelfPanel?.orderOut(nil)
     }
 
     func shelfKeys() -> [String] {
-        if !shelfQuery.isEmpty { return searchShelf(shelfQuery) }
         return orderedKeys().filter {
             (modes[$0] ?? 0) == 1 || (includeAlwaysHidden && modes[$0] == 2) || overflowKeys.contains($0)
         }
@@ -687,7 +765,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func populateShelf() {
         guard let shelfPanel else { return }
         let keys = shelfKeys()
-        let state = shelfQuery + "#" + keys.joined(separator: "|")
+        let state = (shelfNumbered ? "#" : "") + keys.joined(separator: "|")
         guard state != shelfState || shelfPanel.contentView == nil else { return }
         shelfState = state
         // Each item shows its app's own icon (or the system symbol): sharp at
@@ -696,20 +774,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let itemContentWidth = widths.reduce(16, +)
         let screenWidth = (controlPanel?.screen ?? NSScreen.screens.first)?.frame.width ?? 800
         let gearWidth: CGFloat = 38
-        let queryText = NSMutableAttributedString()
-        if let glass = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil) {
-            let attachment = NSTextAttachment()
-            attachment.image = glass.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-            queryText.append(NSAttributedString(attachment: attachment))
-            queryText.append(NSAttributedString(string: " "))
-        }
-        queryText.append(NSAttributedString(string: shelfQuery))
-        queryText.addAttribute(.font, value: NSFont.systemFont(ofSize: 13, weight: .medium),
-                               range: NSRange(location: 0, length: queryText.length))
-        let queryLabel = NSTextField(labelWithAttributedString: queryText)
-        queryLabel.lineBreakMode = .byTruncatingHead
-        let queryWidth: CGFloat = shelfQuery.isEmpty ? 0 : min(140, queryLabel.intrinsicContentSize.width + 16)
-        let width = min(max(keys.isEmpty ? 150 : 100, queryWidth + itemContentWidth + gearWidth), screenWidth - 24)
+        let width = min(max(keys.isEmpty ? 150 : 100, itemContentWidth + gearWidth), screenWidth - 24)
         let height: CGFloat = 40
         shelfPanel.setContentSize(NSSize(width: width, height: height))
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -736,31 +801,22 @@ final class BarApp: NSObject, NSApplicationDelegate {
             : (themeForStrip?.strip ?? .clear).withAlphaComponent(stripOpacity)).cgColor
         effect.addSubview(tint)
         let background: NSView = effect
-        let itemArea = width - gearWidth - queryWidth
+        let itemArea = width - gearWidth
         shelfButtons = []
-        if queryWidth > 0 {
-            queryText.addAttribute(.foregroundColor, value: iconColor, range: NSRange(location: 0, length: queryText.length))
-            queryLabel.attributedStringValue = queryText
-            queryLabel.frame = NSRect(x: 10, y: 11, width: queryWidth - 12, height: 18)
-            queryLabel.setAccessibilityLabel(L10n.t("搜索：\(shelfQuery)", "Search: \(shelfQuery)"))
-            background.addSubview(queryLabel)
-        }
         if keys.isEmpty {
-            let label = NSTextField(labelWithString: shelfQuery.isEmpty
-                                    ? L10n.t("没有收纳项目", "No concealed items")
-                                    : L10n.t("没有匹配的项目", "No matches"))
-            label.textColor = iconColor.withAlphaComponent(shelfQuery.isEmpty ? 1 : 0.7); label.alignment = .center
-            label.frame = NSRect(x: queryWidth + 8, y: 11, width: itemArea - 16, height: 18)
+            let label = NSTextField(labelWithString: L10n.t("没有收纳项目", "No concealed items"))
+            label.textColor = iconColor; label.alignment = .center
+            label.frame = NSRect(x: 8, y: 11, width: itemArea - 16, height: 18)
             background.addSubview(label)
         } else {
-            let scroll = NSScrollView(frame: NSRect(x: queryWidth, y: 0, width: itemArea, height: height))
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: itemArea, height: height))
             scroll.drawsBackground = false; scroll.borderType = .noBorder
             scroll.hasHorizontalScroller = itemContentWidth > itemArea
             scroll.scrollerStyle = .overlay
             let document = NSView(frame: NSRect(x: 0, y: 0, width: max(itemContentWidth, itemArea), height: height))
             var x: CGFloat = 8
             for (index, key) in keys.enumerated() {
-                let button = BarControlButton(frame: NSRect(x: x, y: 2, width: widths[index], height: 36))
+                let button = ShelfItemButton(frame: NSRect(x: x, y: 2, width: widths[index], height: 36))
                 button.title = ""; button.isBordered = false
                 button.imagePosition = .imageOnly; button.imageScaling = .scaleProportionallyDown
                 button.identifier = .init(key); button.target = self; button.action = #selector(pressShelfItem(_:))
@@ -769,21 +825,38 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 image?.size = NSSize(width: 22, height: 22)
                 button.image = image
                 let outOfSight = overflowKeys.contains(key) && (modes[key] ?? 0) == 0
-                button.toolTip = outOfSight ? L10n.t("\(name(for: key))（菜单栏放不下）", "\(name(for: key)) (no room in the menu bar)") : name(for: key)
+                var tip = outOfSight ? L10n.t("\(name(for: key))（菜单栏放不下）", "\(name(for: key)) (no room in the menu bar)") : name(for: key)
+                if index < 9 { tip += L10n.t("　键盘：\(index + 1)", "  Key: \(index + 1)") }
+                button.toolTip = tip
                 button.contentTintColor = iconColor
                 button.setAccessibilityLabel(name(for: key))
-                document.addSubview(button); x += widths[index]
+                // Only hidden icons reorder: a covered one keeps the bar's order.
+                if (modes[key] ?? 0) > 0 {
+                    button.dragMoved = { [weak self] button, dx in self?.shelfDragMoved(button, by: dx) }
+                    button.dragEnded = { [weak self] button in self?.shelfDragEnded(button) }
+                }
+                if shelfNumbered && index < 9 {
+                    let number = NSTextField(labelWithString: "\(index + 1)")
+                    number.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+                    number.textColor = iconColor.withAlphaComponent(0.75)
+                    number.alignment = .right
+                    number.frame = NSRect(x: widths[index] - 13, y: button.isFlipped ? 24 : 0, width: 10, height: 12)
+                    number.setAccessibilityElement(false)
+                    button.addSubview(number)
+                }
+                document.addSubview(button)
+                x += widths[index]
                 shelfButtons.append(button)
             }
             scroll.documentView = document; background.addSubview(scroll)
         }
 
-        let divider = NSView(frame: NSRect(x: queryWidth + itemArea, y: 8, width: 1, height: 24))
+        let divider = NSView(frame: NSRect(x: itemArea, y: 8, width: 1, height: 24))
         divider.wantsLayer = true
         divider.layer?.backgroundColor = iconColor.withAlphaComponent(0.18).cgColor
         background.addSubview(divider)
 
-        let gear = BarControlButton(frame: NSRect(x: queryWidth + itemArea + 5, y: 6, width: 28, height: 28))
+        let gear = BarControlButton(frame: NSRect(x: itemArea + 5, y: 6, width: 28, height: 28))
         gear.title = ""
         gear.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: L10n.t("设置", "Settings"))
         gear.imagePosition = .imageOnly
@@ -1047,6 +1120,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     statusItem?.button?.toolTip = L10n.t(
                         "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                         "YoungBar: click to show concealed icons; right-click to choose apps")
+                    applyUpdateBadge()
                     renderWindow(force: true)
                     settings?.languageChanged()
                     return
@@ -1071,6 +1145,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     shelfState = nil
                     Task { await refresh() }
                 }
+                if key == .autoUpdateCheck { startAutoUpdateChecks() }
                 renderWindow()
             }
             controller.onRefresh = { [weak self] in self?.refreshClicked() }

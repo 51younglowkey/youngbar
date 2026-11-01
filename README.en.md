@@ -23,7 +23,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 
 YoungBar lives in the menu bar (•••); it has no Dock icon.
 
-**Updating**: choose *Check for Updates…* in the ••• menu or in General. When there is a newer version you see its notes, and *Install and Relaunch* downloads, verifies and swaps it in place (from 0.1.2 on). Running the install command again, or downloading the zip, works too.
+**Updating**: YoungBar checks once a day (from 0.1.4); a newer version puts a dot on •••, and the first line of its right-click menu shows the notes with *Install and Relaunch*, which downloads, verifies and swaps it in place. *Check for Updates…* works any time. Running the install command again, or downloading the zip, works too.
 
 ### Install with an agent
 

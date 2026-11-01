@@ -690,15 +690,17 @@ extension BarApp {
         writeJSON(result, name: "pinnedtest.json")
     }
 
-    /// Opt-in (`YOUNGBAR_HOTKEYTEST=1`): posts the real ⌃⌥B chord and checks
-    /// that the strip opens and closes without the mouse.
+    /// Opt-in (`YOUNGBAR_HOTKEYTEST=1`): presses the saved shortcut for real
+    /// (⌘⌘ by default) and checks that the strip opens and closes without the
+    /// mouse.
     func runHotKeyTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        result["shortcut"] = hotKeyDisplay
         closeShelf()
-        postHotKey()
+        await postHotKey()
         try? await Task.sleep(for: .milliseconds(700))
         result["opened"] = expanded
-        postHotKey()
+        await postHotKey()
         try? await Task.sleep(for: .milliseconds(700))
         result["closed"] = !expanded
         result["passed"] = (result["opened"] as? Bool == true) && (result["closed"] as? Bool == true)
@@ -706,12 +708,18 @@ extension BarApp {
         writeJSON(result, name: "hotkeytest.json")
     }
 
-    func postHotKey() {
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
-        for down in [true, false] {
-            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 11, keyDown: down) else { continue }
-            event.flags = [.maskControl, .maskAlternate]
-            event.post(tap: .cghidEventTap)
+    func postHotKey() async {
+        guard let hotKey else { return }
+        var flags: CGEventFlags = []
+        if hotKey.modifiers & HotKeyCombo.command != 0 { flags.insert(.maskCommand) }
+        if hotKey.modifiers & HotKeyCombo.option != 0 { flags.insert(.maskAlternate) }
+        if hotKey.modifiers & HotKeyCombo.control != 0 { flags.insert(.maskControl) }
+        if hotKey.modifiers & HotKeyCombo.shift != 0 { flags.insert(.maskShift) }
+        if hotKey.isDoubleTap {
+            let key = flags.contains(.maskCommand) ? kVK_Command : flags.contains(.maskAlternate) ? kVK_Option : kVK_Control
+            await postModifiers([(key, flags), (key, flags)])
+        } else {
+            postChord(Int(hotKey.keyCode), flags)
         }
     }
 
@@ -1006,13 +1014,16 @@ extension BarApp {
         closeShelf()
         let before = await engine.freshSnapshot()
         let visibleBefore = before.items.filter { $0.frame != nil }.count
+        // Only what opening reveals: an earlier test's item may still be
+        // out for its own 20 s.
+        let revealedBefore = await engine.itemsRevealedOnTheirOwn()
         let start = Date()
         toggleShelf()
         while !expanded && Date().timeIntervalSince(start) < 1.0 {
             try? await Task.sleep(for: .milliseconds(20))
         }
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        let revealed = await engine.itemsRevealedOnTheirOwn().count
+        let revealed = await engine.itemsRevealedOnTheirOwn().subtracting(revealedBefore).count
         let after = await engine.freshSnapshot()
         let visibleAfter = after.items.filter { $0.frame != nil }.count
         result["opened"] = expanded
@@ -1198,6 +1209,14 @@ extension BarApp {
         }
     }
 
+    func postCommand(down: Bool) {
+        guard let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState),
+                                  virtualKey: CGKeyCode(kVK_Command), keyDown: down) else { return }
+        event.type = .flagsChanged
+        event.flags = down ? .maskCommand : []
+        event.post(tap: .cghidEventTap)
+    }
+
     func postDoubleCommand(gap: Int = 90) async {
         await postModifiers([(kVK_Command, .maskCommand), (kVK_Command, .maskCommand)], gap: gap)
     }
@@ -1254,6 +1273,24 @@ extension BarApp {
         result["slowTapsIgnored"] = !expanded
         closeShelf()
 
+        // ⌘-click, then ⌘ alone: the click (handed to the monitor directly,
+        // so nothing is clicked for real) makes the first press not a tap.
+        try? await Task.sleep(for: .milliseconds(600))
+        postCommand(down: true)
+        try? await Task.sleep(for: .milliseconds(40))
+        if let click = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: .command,
+                                          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0,
+                                          context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+            handleDoubleTapEvent(click)
+        }
+        try? await Task.sleep(for: .milliseconds(30))
+        postCommand(down: false)
+        try? await Task.sleep(for: .milliseconds(90))
+        await postModifiers([(kVK_Command, .maskCommand)])
+        try? await Task.sleep(for: .milliseconds(600))
+        result["commandClickIgnored"] = !expanded
+        closeShelf()
+
         // A real click on the control: numbers too, and the strip takes the
         // keys (a real Esc closes it).
         try? await Task.sleep(for: .milliseconds(600))
@@ -1308,7 +1345,7 @@ extension BarApp {
         registerHotKey()
         result["restoredDisplay"] = hotKeyDisplay
         let checks = ["openedByDoubleCommand", "stripIsKey", "numbersShown", "typingIgnored", "closedByEsc",
-                      "clickOpened", "clickNumbersShown", "clickStripIsKey", "clickClosedByRealEsc",
+                      "clickOpened", "clickNumbersShown", "clickStripIsKey", "clickClosedByRealEsc", "commandClickIgnored",
                       "commandShiftIgnored", "slowTapsIgnored", "openedByCustom", "doubleCommandIgnoredAfterChange"]
         result["passed"] = checks.allSatisfy { result[$0] as? Bool == true }
             && (shown.isEmpty || (result["selectionAfterOpen"] as? Int) == 0)
@@ -1608,6 +1645,9 @@ extension BarApp {
             result["applied"] = done
             result["modesEqual"] = modes == modesBefore
             result["optionsEqual"] = options == optionsBefore
+            result["optionsDiffer"] = Set(options.keys).union(optionsBefore.keys)
+                .filter { options[$0] != optionsBefore[$0] }
+                .sorted().map { "\($0): \(optionsBefore[$0].map(String.init) ?? "nil") → \(options[$0].map(String.init) ?? "nil")" }
             result["orderEqual"] = savedOrder == orderBefore
             result["passed"] = done && modes == modesBefore && options == optionsBefore && savedOrder == orderBefore
         } catch {

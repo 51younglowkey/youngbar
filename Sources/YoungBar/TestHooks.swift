@@ -1254,6 +1254,21 @@ extension BarApp {
         result["slowTapsIgnored"] = !expanded
         closeShelf()
 
+        // A real click on the control: numbers too, and the strip takes the
+        // keys (a real Esc closes it).
+        try? await Task.sleep(for: .milliseconds(600))
+        if let control = controlPanel?.frame, let primary = NSScreen.screens.first {
+            postPlainClick(at: CGPoint(x: control.midX, y: primary.frame.maxY - control.midY))
+            try? await Task.sleep(for: .milliseconds(700))
+            result["clickOpened"] = expanded
+            result["clickNumbersShown"] = shelfNumbered
+            result["clickStripIsKey"] = shelfPanel?.isKeyWindow ?? false
+            postChord(kVK_Escape, [])
+            try? await Task.sleep(for: .milliseconds(500))
+            result["clickClosedByRealEsc"] = !expanded
+            closeShelf()
+        }
+
         if ProcessInfo.processInfo.environment["YOUNGBAR_KEYBOARD_DIGIT"] == "1" {
             try? await Task.sleep(for: .milliseconds(600))
             await postDoubleCommand()
@@ -1293,6 +1308,7 @@ extension BarApp {
         registerHotKey()
         result["restoredDisplay"] = hotKeyDisplay
         let checks = ["openedByDoubleCommand", "stripIsKey", "numbersShown", "typingIgnored", "closedByEsc",
+                      "clickOpened", "clickNumbersShown", "clickStripIsKey", "clickClosedByRealEsc",
                       "commandShiftIgnored", "slowTapsIgnored", "openedByCustom", "doubleCommandIgnoredAfterChange"]
         result["passed"] = checks.allSatisfy { result[$0] as? Bool == true }
             && (shown.isEmpty || (result["selectionAfterOpen"] as? Int) == 0)

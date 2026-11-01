@@ -23,8 +23,8 @@ enum Option: String, CaseIterable {
     case onboarded
     /// An app's icon seen for the first time goes straight to the strip.
     case autoHideNew
-    /// Numbers 1–9 under the icons when the strip opens from the keyboard
-    /// (on unless 0). The number keys work either way.
+    /// Numbers 1–9 under the strip's icons (on unless 0). The number keys
+    /// work either way.
     case shelfNumbers
 }
 

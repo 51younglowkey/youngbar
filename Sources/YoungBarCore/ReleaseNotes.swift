@@ -23,6 +23,9 @@ public enum ReleaseNotes {
     /// marker.
     public static let englishMarker = "# English"
 
+    /// The preference list `localized` reads, from a plain language choice.
+    public static func languages(english: Bool) -> [String] { [english ? "en" : "zh-Hans"] }
+
     /// The half for the reader: English unless their first preferred
     /// language is Chinese. A body without the marker is returned whole.
     public static func localized(_ markdown: String, preferredLanguages: [String]) -> String {

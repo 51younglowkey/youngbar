@@ -60,7 +60,7 @@ struct UpdateView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ScrollView {
-                    NotesView(blocks: ReleaseNotes.blocks(ReleaseNotes.localized(notes, preferredLanguages: Locale.preferredLanguages)),
+                    NotesView(blocks: ReleaseNotes.blocks(ReleaseNotes.localized(notes, preferredLanguages: ReleaseNotes.languages(english: L10n.current == .english))),
                               accent: theme == .clear ? .accentColor : Color(nsColor: theme.accent))
                         .padding(14)
                 }

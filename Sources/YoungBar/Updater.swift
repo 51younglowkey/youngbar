@@ -7,10 +7,9 @@ import Security
 import SwiftUI
 import YoungBarCore
 
-/// In-app updates from GitHub Releases. Check for Updates asks GitHub right
-/// away; unless turned off in Settings, YoungBar also asks once a day and
-/// marks the control when a newer version is out. Installing is always the
-/// user's click.
+/// In-app updates from GitHub Releases. YoungBar asks GitHub once a day
+/// and marks the control when a newer version is out; Check for Updates
+/// asks right away. Installing is always the user's click.
 ///
 /// Installing: download the zip and its .sha256, check the digest, unzip,
 /// check the new app is signed by the same certificate as this one, then
@@ -233,12 +232,6 @@ extension BarApp {
     /// hourly, so a Mac that slept through the day checks soon after waking).
     func startAutoUpdateChecks() {
         autoUpdateTask?.cancel()
-        autoUpdateTask = nil
-        guard options[.autoUpdateCheck] != 0 else {
-            availableUpdate = nil
-            applyUpdateBadge()
-            return
-        }
         autoUpdateTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
             while !Task.isCancelled {
@@ -249,7 +242,6 @@ extension BarApp {
     }
 
     func autoUpdateCheckIfDue() async {
-        guard options[.autoUpdateCheck] != 0 else { return }
         if let last = lastAutoUpdateCheck, Date().timeIntervalSince(last) < Self.autoUpdateInterval { return }
         // A check the user started owns the window and the result.
         if updateWindow?.isVisible == true { return }

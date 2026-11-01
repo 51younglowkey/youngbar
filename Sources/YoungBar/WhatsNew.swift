@@ -10,8 +10,8 @@ import YoungBarCore
 /// what changed, one page at a time; either can be skipped. Shown once
 /// after an update and from the ••• menu any time.
 ///
-/// Its text follows the system language (the changelog has a Chinese and
-/// an English half), not YoungBar's own language setting.
+/// Its text follows YoungBar's language setting, like the guide before it
+/// (the changelog has a Chinese and an English half).
 @MainActor
 @Observable
 final class UpdateIntroModel {
@@ -23,11 +23,9 @@ final class UpdateIntroModel {
     var version = ""
     var notes: [ReleaseNotes.Block] = []
     var theme: ThemeColor = .blue
-    var english = UpdateIntroModel.systemIsEnglish
+    var english = L10n.current == .english
     @ObservationIgnored var setAutoHideNew: (Bool) -> Void = { _ in }
     @ObservationIgnored var close: () -> Void = {}
-
-    static var systemIsEnglish: Bool { !(Locale.preferredLanguages.first?.hasPrefix("zh") ?? false) }
 
     func t(_ chinese: String, _ english: String) -> String { self.english ? english : chinese }
 
@@ -177,12 +175,12 @@ extension BarApp {
     var bundledReleaseNotes: [ReleaseNotes.Block]? {
         guard let url = Bundle.main.url(forResource: "ReleaseNotes", withExtension: "md"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-        let blocks = ReleaseNotes.blocks(ReleaseNotes.localized(text, preferredLanguages: Locale.preferredLanguages))
+        let blocks = ReleaseNotes.blocks(ReleaseNotes.localized(text, preferredLanguages: ReleaseNotes.languages(english: L10n.current == .english)))
         return blocks.isEmpty ? nil : blocks
     }
 
-    /// The shortcut in the tour's language (it follows the system's, not
-    /// YoungBar's setting, so `hotKeyDisplay` can't be used as is).
+    /// The shortcut in the tour's language (a parameter, so the self-test
+    /// can show both languages whatever the setting).
     func shortcutForTour(english: Bool) -> String {
         guard let hotKey else { return english ? "the shortcut (none set)" : "快捷键（未设置）" }
         if hotKey.isDoubleTap {

@@ -39,7 +39,7 @@ Sources/YoungBar/
   main.swift            AppDelegate、刷新节奏、控制条、收纳条、菜单、排序（~1400 行）
   ShelfKeyboard.swift   收纳条键盘导航、数字键 1–9（ShelfPanel，非激活面板也能拿键盘焦点；没有搜索）
   ShelfItems.swift      收纳条图标：拖动排序（只改保存的顺序，不 reveal）、右键改显示方式
-  WhatsNew.swift        更新后第一次启动：先「本次更新内容」，再一步步的新功能引导（可跳过）；跟随**系统语言**。引导页在 `UpdateIntroModel.steps` 里按版本写，没写的版本只显示更新内容
+  WhatsNew.swift        更新后第一次启动：先「本次更新内容」，再一步步的新功能引导（可跳过）；和使用引导一样跟随 **YoungBar 设置里的语言**。引导页在 `UpdateIntroModel.steps` 里按版本写，没写的版本只显示更新内容
   NotesView.swift       更新内容 / 更新窗口里的说明，按「区块 + 短句」绘制（YoungBarCore 的 ReleaseNotes.blocks）
   HotKey.swift          全局快捷键：组合键走 Carbon；默认「连按两下 ⌘」用全局/本地事件监视器（YoungBarCore 的 DoubleTapDetector）
   NotchOverflow.swift   被 macOS « 收走 / 被刘海挡住的图标；显示器变化时重装控件
@@ -88,7 +88,7 @@ Vendor/
 - **混合结构**：设置窗口内容用 SwiftUI（`Form` + `.formStyle(.grouped)`，对齐 System Settings 的间距、对齐和控件），菜单栏控件、收纳条、右键菜单和所有改菜单栏的逻辑保持 AppKit。
 - 设置页里不要再手写坐标；新选项就是 `Section` 里加一行：名称在左、控件在右、说明用第二个 `Text`。布尔值用开关。
 - **选项要少**（0.1.4 用户要求）：能定成合理默认的就不做开关。0.1.4 去掉了：点击 ••• 的方式、始终显示收纳条、点击空白处展开、放不下的图标进收纳条（固定开）、自动收起秒数（固定 20 秒）、主题应用范围（固定全部）、左键显示菜单、自动检查更新开关、刷新列表按钮；权限行只在未授权时出现。加新开关前先想能不能直接定默认。
-- **更新日志**：`docs/RELEASE-<版本>.md` 先中文、再单独一行 `# English`、再英文（GitHub 两段都显示，app 按系统语言只显示一段）。「新增 / 优化 / 移除 / 修复」每条一句话、十来个字（app 里原样显示）；开头可以有一段作者的话；「说明 / Notes / 校验」只在 GitHub 上看，app 会跳过。
+- **更新日志**：`docs/RELEASE-<版本>.md` 先中文、再单独一行 `# English`、再英文（GitHub 两段都显示，app 按 YoungBar 设置的语言只显示一段）。「新增 / 优化 / 移除 / 修复」每条一句话、十来个字（app 里原样显示）；开头可以有一段作者的话；「说明 / Notes / 校验」只在 GitHub 上看，app 会跳过。
 - **少一步点击**：两到四个选项一律用分段按钮（`.pickerStyle(.segmented)`），一下就选中；弹出菜单只留给选项多的场合（目前只有语言）。
 - **保留个性**：窗口是带主题色的玻璃（`NSGlassEffectView`，染色 10%，内容区遮罩深色 46% / 浅色 58%），侧栏是系统侧栏毛玻璃 + 8% 主题色，顶部是主题角色大图；选中色、开关、分段按钮都跟随主题色。
 - **配色规则**：蓝 / 粉 / 黄在 OKLCH 里取同一亮度和彩度，只换色相（强调色 L 0.70 C 0.13，收纳条色 L 0.55 C 0.12）。新增配色也按这个规则算，不要单独调某个颜色更亮。收纳条 = 系统毛玻璃 + 主题色 × 不透明度（`stripOpacity`，30–100）。

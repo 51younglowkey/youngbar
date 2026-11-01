@@ -50,7 +50,7 @@ final class BarSettings: NSObject {
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         super.init()
-        window.title = SettingsPage.general.title
+        window.title = SettingsPage.layout.title
         window.isReleasedWhenClosed = false
         // No toolbar: the traffic lights float on the glass and each page
         // draws its own title. `title` still names the window in Mission
@@ -180,7 +180,9 @@ final class BarSettings: NSObject {
 
     func close() { window.close() }
 
+    /// Opening (not raising an open window) starts on the Menu Bar page.
     func show() {
+        if !window.isVisible { model.page = .layout }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -188,7 +190,7 @@ final class BarSettings: NSObject {
     func select(_ page: SettingsPage) { model.page = page }
 
     /// Re-reads localized strings that live outside SwiftUI.
-    func languageChanged() { window.title = (model.page ?? .general).title }
+    func languageChanged() { window.title = (model.page ?? .layout).title }
 
     func update(entries: [BarEntry], message: String, axTrusted: Bool,
                 launchAtLogin: Bool, customIcon: NSImage?, options: [String: Int],
@@ -213,7 +215,7 @@ final class BarSettings: NSObject {
     // MARK: - Self-test support
 
     var currentEntries: [BarEntry] { model.entries }
-    var currentPage: SettingsPage { model.page ?? .general }
+    var currentPage: SettingsPage { model.page ?? .layout }
     var windowFrame: NSRect { window.frame }
     var windowTitle: String { window.title }
 

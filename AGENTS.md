@@ -47,7 +47,7 @@ Sources/YoungBar/
   Guide.swift           首次启动引导
   Preferences.swift     `Option`：barOptions 的键（磁盘上仍是 [String: Int]）
   BarSettings.swift     设置窗口的 AppKit 外壳，把 SettingsAction 转给 BarApp
-  SettingsView.swift    设置窗口内容（SwiftUI）：侧栏、通用 / 菜单栏 / 外观三页，Form .grouped
+  SettingsView.swift    设置窗口内容（SwiftUI）：侧栏、菜单栏 / 外观 / 通用三页（按使用频率排，打开时总是先显示菜单栏页；未授权时授权按钮也在菜单栏页），Form .grouped
   Theme.swift           配色、主题图（缓存）、控件图标
   Diagnostics.swift     运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）；「复制诊断信息」的纯文本报告
   TestHooks.swift       真机自检，只在 TESTHOOKS=1 构建时编译

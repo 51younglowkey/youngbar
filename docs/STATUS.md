@@ -79,6 +79,7 @@
 | 收纳条图标右键 | ✅ 菜单列出另外两种状态和「在设置中调整…」；选「始终隐藏」后该图标离开收纳条；测试后恢复 | `menuTitles`、`modeAfterMenu:2`、`leftStrip`、`restored` |
 | 数字显示开关 | ✅ 「图标下方显示数字」默认开，**点击 •••、悬停、快捷键打开都显示**；关掉后数字键照样能打开。**更正**：第一版只在快捷键打开时显示，用户点击打开看不到数字（用户报告） | `keyboardtest.json`：真实点击控件 `clickOpened`、`clickNumbersShown`、`clickStripIsKey`、真实 Esc `clickClosedByRealEsc`；![点击打开](images/strip-numbers.png) |
 | 设置精简 | ✅ 去掉：点击 ••• 方式（「在菜单栏中展开」会重影，已删除该模式）、始终显示收纳条、点击空白处展开、放不下的图标进收纳条（固定开）、自动收起秒数（固定 20 秒）、主题应用范围（固定全部）、右键菜单「左键显示菜单」、自动检查更新开关、刷新列表按钮；权限行只在未授权时显示。通用页分为：基本 / 收纳条 / 关于 | ![通用](images/general-0.1.4.png) ![外观](images/appearance-0.1.4.png) |
+| 设置页顺序 | ✅ 侧栏改为 菜单栏 / 外观 / 通用；每次打开设置先显示菜单栏页（窗口已开着时只是拿到前台，不换页）；未授权时授权按钮在菜单栏页顶部。**未授权状态没有实测**（需要撤销权限） | 从收纳条齿轮真实点开：![菜单栏页](images/menubar-page-0.1.4.png) |
 | 单元测试 | 31 passed | `swift test --disable-sandbox` |
 | 测试后复原 | ✅ 键盘测试前后 `defaults export` 只差 `sessionActive`（运行标记） | diff |
 

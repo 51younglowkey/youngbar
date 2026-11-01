@@ -1,6 +1,6 @@
 # YoungBar 0.1.4 更新日志
 
-昨天在曼彻斯特现场看了英超，曼城 0:1 输给布莱顿，有点伤心。不过没关系，回家就打开电脑，把这一版改完了。
+昨天在曼彻斯特现场看了英超，曼城 0:1 输给布莱顿，有点伤心。不过没关系，我已经更新好新的版本啦！
 
 ## 新增
 
@@ -40,7 +40,7 @@
 
 # YoungBar 0.1.4
 
-I was in Manchester yesterday watching Man City lose 0–1 to Brighton. A bit gutted — so I came home and finished this version.
+I was in Manchester yesterday watching Man City lose 0–1 to Brighton. A bit gutted — but no worries, the new version is ready!
 
 ## New
 

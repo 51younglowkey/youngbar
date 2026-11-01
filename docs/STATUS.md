@@ -61,7 +61,9 @@
 
 边界：只测了 `build/` 下、目录可写的情况；`/Applications` 里由非管理员用户运行（目录不可写）时会提示去 GitHub 手动下载，没有实测。下载中途取消没有实测。
 
-## 2.3 0.1.4 进行中（2026-11-01，Info.plist 已是 0.1.4 (5)，未发布、未打包）
+## 2.3 0.1.4（2026-11-01 已发布）
+
+> [Release v0.1.4](https://github.com/51younglowkey/youngbar/releases/tag/v0.1.4)：`YoungBar-0.1.4.zip` + `.sha256`（SHA-256 `7f6803b1…`）。端到端：测试版假装 0.1.3 → 找到 0.1.4 → 下载、校验、安装、重新打开（新 PID）；`build/YoungBar.app` 的可执行文件与发布包逐字节相同，无测试钩子，`YoungBar Local Signing` 签名；升级后菜单栏正常隐藏。证据：`updatetest.json`、`update.log`。
 
 > 本节取代第 2 节里「快捷键打开收纳条」「搜索」「自定义快捷键」三行：默认快捷键已不是 ⌃⌥B，搜索已移除。
 

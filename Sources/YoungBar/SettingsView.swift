@@ -13,8 +13,10 @@ extension BarEntry: Identifiable {
     var id: String { key }
 }
 
+/// Sidebar order is how often each page is used: the menu-bar icons first
+/// (why Settings is usually opened), General last (set once).
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, layout, appearance
+    case layout, appearance, general
 
     var id: String { rawValue }
 
@@ -56,8 +58,8 @@ enum SettingsAction {
 @MainActor
 @Observable
 final class SettingsModel {
-    var page: SettingsPage? = .general {
-        didSet { onPageChange(page ?? .general) }
+    var page: SettingsPage? = .layout {
+        didSet { onPageChange(page ?? .layout) }
     }
     var entries: [BarEntry] = []
     var options: [String: Int] = [:]
@@ -148,7 +150,7 @@ struct SettingsDetailView: View {
 
     var body: some View {
         Group {
-            switch model.page ?? .general {
+            switch model.page ?? .layout {
             case .general: GeneralPane(model: model)
             case .layout: LayoutPane(model: model)
             case .appearance: AppearancePane(model: model)
@@ -159,7 +161,7 @@ struct SettingsDetailView: View {
         // the traffic lights; content scrolling underneath is blurred
         // instead of running into the title.
         .safeAreaInset(edge: .top, spacing: 0) {
-            Text((model.page ?? .general).title)
+            Text((model.page ?? .layout).title)
                 .font(.system(size: 15, weight: .semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 30)
@@ -188,7 +190,7 @@ struct SettingsSidebar: View {
             AppIdentityHeader(theme: model.theme)
             ForEach(SettingsPage.allCases) { page in
                 SidebarRow(title: page.title, symbol: page.symbol, color: color(for: page),
-                           accent: model.accent ?? .accentColor, selected: (model.page ?? .general) == page,
+                           accent: model.accent ?? .accentColor, selected: (model.page ?? .layout) == page,
                            hovering: model.hoveredPage == page,
                            onHover: { inside in
                                if inside { model.hoveredPage = page } else if model.hoveredPage == page { model.hoveredPage = nil }
@@ -304,17 +306,6 @@ struct GeneralPane: View {
 
     var body: some View {
         Form {
-            // Only while it is missing: nothing works without it.
-            if !model.axTrusted {
-                Section {
-                    PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
-                                  detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
-                                  granted: model.axTrusted) { model.send(.permission("accessibility")) }
-                } header: {
-                    Text(L10n.t("需要授权", "Permission needed"))
-                }
-            }
-
             Section {
                 Toggle(L10n.t("登录时打开", "Open at login"), isOn: Binding(
                     get: { model.launchAtLogin },
@@ -455,11 +446,22 @@ struct LayoutPane: View {
 
     var body: some View {
         Form {
+            // The first page anyone sees: without the permission there is
+            // nothing to list, so it is granted right here.
+            if !model.axTrusted {
+                Section {
+                    PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
+                                  detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
+                                  granted: model.axTrusted) { model.send(.permission("accessibility")) }
+                } header: {
+                    Text(L10n.t("需要授权", "Permission needed"))
+                }
+            }
             Section {
                 if model.entries.isEmpty {
                     Text(model.axTrusted
                          ? L10n.t("正在读取菜单栏图标…", "Reading menu-bar items…")
-                         : L10n.t("需要辅助功能权限后才能读取菜单栏项目。", "Accessibility permission is required to read menu-bar items."))
+                         : L10n.t("授权后这里会列出菜单栏里的每个图标。", "Once allowed, every menu-bar icon is listed here."))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)

@@ -50,6 +50,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_CONFIGTEST"] == "1" {
             await runConfigTest()
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_EXTRASTEST"] == "1" {
+            await runExtrasTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_SHELFDRAGTEST"] == "1" {
             await runShelfDragTest()
         }
@@ -117,9 +120,6 @@ extension BarApp {
         }
         if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSUITEST"] == "1" {
             await runSettingsUITest()
-        }
-        if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSCLICKTEST"] == "1" {
-            await runSettingsClickTest()
         }
         if ProcessInfo.processInfo.environment["YOUNGBAR_HITTEST"] == "1" {
             showWindow()
@@ -715,10 +715,7 @@ extension BarApp {
         }
     }
 
-    /// Opt-in (`YOUNGBAR_GEARTEST=1`): opens the strip and clicks its pinned
-    /// gear with a real HID click, then checks that the settings window opened.
-    /// Opt-in (`YOUNGBAR_SETTINGSCLICKTEST=1`): real HID click on the settings
-    /// "refresh" button, then checks the button's own action counter.
+    /// An untagged HID click, like a physical one.
     func postPlainClick(at point: CGPoint) {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
         for type in [CGEventType.leftMouseDown, .leftMouseUp] {
@@ -978,35 +975,8 @@ extension BarApp {
         }.value
     }
 
-    func runSettingsClickTest() async {
-        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
-        showWindow()
-        try? await Task.sleep(for: .milliseconds(700))
-        guard let settings, let rect = settings.refreshButtonScreenRect(),
-              let screen = NSScreen.main else {
-            result["error"] = "settings button not available"
-            writeJSON(result, name: "settingsclick.json")
-            return
-        }
-        result["frame"] = NSStringFromRect(rect)
-        let before = settings.refreshClickCount
-        let point = CGPoint(x: rect.midX, y: screen.frame.maxY - rect.midY)
-        // A plain, untagged HID click behaves like a physical click; if a
-        // shield/tap is swallowing real input this one fails.
-        postPlainClick(at: point)
-        try? await Task.sleep(for: .milliseconds(700))
-        let plainAfter = settings.refreshClickCount
-        result["plainAfter"] = plainAfter
-        await ItemMover.shieldedClick(at: point)
-        try? await Task.sleep(for: .milliseconds(900))
-        let after = settings.refreshClickCount
-        result["before"] = before
-        result["after"] = after
-        result["passed"] = after > before
-        result["plainWorked"] = plainAfter > before
-        writeJSON(result, name: "settingsclick.json")
-    }
-
+    /// Opt-in (`YOUNGBAR_GEARTEST=1`): opens the strip and clicks its pinned
+    /// gear with a real HID click, then checks that the settings window opened.
     func runGearTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
         showShelf()
@@ -1386,6 +1356,51 @@ extension BarApp {
         result["overflowAfter"] = overflowKeys.sorted()
     }
 
+    /// Opt-in (`YOUNGBAR_EXTRASTEST=1`): What's New opens with the bundled
+    /// notes (no install commands in them); the diagnostics report has its
+    /// lines; a strip icon's right-click menu offers the other two states,
+    /// and choosing Always Hide takes it out of the strip (put back after).
+    /// `YOUNGBAR_EXTRAS_HOLD=<seconds>` keeps What's New up for a screenshot.
+    func runExtrasTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "extrastest.json") }
+        let notes = bundledReleaseNotes ?? []
+        let text = notes.map { "\($0)" }.joined()
+        result["notesBlocks"] = notes.count
+        result["notesHaveNoInstall"] = !text.contains("curl") && !text.contains("shasum")
+        showWhatsNew()
+        try? await Task.sleep(for: .milliseconds(600))
+        result["whatsNewShown"] = whatsNewWindow?.isVisible == true
+        result["whatsNewWindow"] = whatsNewWindow?.windowNumber ?? 0
+        if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_EXTRAS_HOLD"] ?? "") {
+            writeJSON(["window": whatsNewWindow?.windowNumber ?? 0], name: "extras-hold.json")
+            try? await Task.sleep(for: .seconds(hold))
+        }
+        whatsNewWindow?.orderOut(nil)
+
+        let report = await diagnosticsReport()
+        result["report"] = report
+        result["reportLines"] = report.split(separator: "\n").count
+
+        showShelf()
+        try? await Task.sleep(for: .milliseconds(400))
+        guard let key = shelfKeys().first(where: { modes[$0] == 1 }) else {
+            result["menuSkipped"] = "no hidden icon"
+            closeShelf()
+            return
+        }
+        let menu = shelfItemMenu(for: key)
+        result["menuTitles"] = menu.items.map(\.title)
+        guard let always = menu.items.first(where: { ($0.representedObject as? [String])?.last == "2" }) else { return }
+        shelfItemModeChosen(always)
+        for _ in 0..<40 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+        result["modeAfterMenu"] = modes[key] ?? 0
+        result["leftStrip"] = !shelfKeys().contains(key)
+        setMode(key: key, mode: 1)
+        for _ in 0..<40 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+        result["restored"] = modes[key] == 1 && shelfKeys().contains(key)
+    }
+
     /// Opt-in (`YOUNGBAR_SHELFDRAGTEST=1`): with the real mouse, drags the
     /// strip's first icon onto the last slot, checks the strip and the saved
     /// order follow and that nothing was revealed on the bar, then puts the
@@ -1570,7 +1585,7 @@ extension BarApp {
             let file = try ConfigFile.decode(Data(contentsOf: url), knownOptions: Set(Option.allCases.map(\.rawValue)))
             result["exportedModes"] = file.itemModes.count
             result["exportedOrder"] = file.itemOrder.count
-            options[.revealSeconds] = 33
+            options[.hoverExpand] = options[.hoverExpand] == 1 ? 0 : 1
             var done = false
             applyConfiguration(file) { done = true }
             for _ in 0..<40 where !done { try? await Task.sleep(for: .milliseconds(150)) }

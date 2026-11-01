@@ -21,7 +21,6 @@ struct BarEntry {
 final class BarSettings: NSObject {
     var onMode: ((String, Int) -> Void)?
     var onMove: ((String, String) -> Void)?
-    var onRefresh: (() -> Void)?
     var onOption: ((Option, Int) -> Void)?
     var onLogin: ((Bool) -> Void)?
     var onPermission: ((String) -> Void)?
@@ -45,7 +44,6 @@ final class BarSettings: NSObject {
     private let window: NSWindow
     private let model = SettingsModel()
     private let glass = NSGlassEffectView()
-    private(set) var refreshClickCount = 0
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 600),
@@ -117,9 +115,6 @@ final class BarSettings: NSObject {
         case .spacing(let level): onSpacing?(level)
         case .chooseCustomIcon: onCustomIcon?()
         case .removeCustomIcon: onRemoveCustomIcon?()
-        case .refresh:
-            refreshClickCount += 1
-            onRefresh?()
         case .recordHotKey(let start):
             if start { startRecording() } else { stopRecording() }
         case .clearHotKey: onHotKey?(nil)
@@ -211,8 +206,7 @@ final class BarSettings: NSObject {
         if model.launchAtLogin != launchAtLogin { model.launchAtLogin = launchAtLogin }
         if model.customIcon !== customIcon { model.customIcon = customIcon }
         let theme = ThemeColor(rawValue: options[.themeColor] ?? 0) ?? .blue
-        let tinted = (ThemeScope(rawValue: options[.themeScope] ?? 0) ?? .both) != .stripOnly
-        glass.tintColor = tinted && theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil
+        glass.tintColor = theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil
     }
 
     #if YOUNGBAR_TESTHOOKS
@@ -231,11 +225,6 @@ final class BarSettings: NSObject {
             ? rect
             : NSRect(x: rect.minX, y: view.bounds.height - rect.maxY, width: rect.width, height: rect.height)
         return window.convertToScreen(view.convert(local, to: nil))
-    }
-
-    func refreshButtonScreenRect() -> NSRect? {
-        guard model.page == .general else { return nil }
-        return screenRect(for: "refresh")
     }
 
     /// Diagnostic: what would receive a click on the login switch?

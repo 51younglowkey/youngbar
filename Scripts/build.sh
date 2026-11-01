@@ -27,6 +27,11 @@ cp Resources/AppIcon.icns "$staging/Contents/Resources/AppIcon.icns"
 cp -f Resources/Theme-*.jpg "$staging/Contents/Resources/"
 cp LICENSE "$staging/Contents/Resources/LICENSE"
 cp THIRD_PARTY_NOTICES.md "$staging/Contents/Resources/THIRD_PARTY_NOTICES.md"
+# This version's changelog, shown once after an update ("What's New").
+version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Info.plist)
+if [ -f "docs/RELEASE-$version.md" ]; then
+    cp "docs/RELEASE-$version.md" "$staging/Contents/Resources/ReleaseNotes.md"
+fi
 sh Scripts/sign.sh "$staging"
 rm -rf "$app.old"
 if [ -d "$app" ]; then mv "$app" "$app.old"; fi

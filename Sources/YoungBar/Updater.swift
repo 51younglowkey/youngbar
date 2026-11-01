@@ -60,13 +60,12 @@ struct UpdateView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ScrollView {
-                    Text(Self.plainNotes(notes))
-                        .font(.system(size: 12))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                    NotesView(blocks: ReleaseNotes.blocks(notes),
+                              accent: theme == .clear ? .accentColor : Color(nsColor: theme.accent))
+                        .padding(14)
                 }
-                .frame(height: 180)
-                .padding(10)
+                .defaultScrollAnchor(.top)
+                .frame(height: 200)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
                 buttons {
                     Button(L10n.t("在 GitHub 查看", "View on GitHub"), action: model.openPage)
@@ -105,22 +104,6 @@ struct UpdateView: View {
 
     private func buttons<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack { Spacer(); content() }
-    }
-
-    /// GitHub notes are Markdown; headings and code fences read fine as text
-    /// once their markers are dropped.
-    static func plainNotes(_ notes: String) -> String {
-        notes.split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { !$0.hasPrefix("```") }
-            .map { line -> String in
-                var text = String(line)
-                while text.hasPrefix("#") { text.removeFirst() }
-                return text.trimmingCharacters(in: .whitespaces)
-                    .replacingOccurrences(of: "**", with: "")
-                    .replacingOccurrences(of: "`", with: "")
-            }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

@@ -331,8 +331,8 @@ struct GeneralPane: View {
                     HotKeyField(model: model)
                 } label: {
                     Text(L10n.t("打开收纳条", "Open the strip"))
-                    Text(L10n.t("打开后直接输入名称搜索，← → 选择，回车打开，Esc 关闭",
-                                "Then type to search, ← → to choose, Return to open, Esc to close"))
+                    Text(L10n.t("打开后按 1–9 直接打开对应图标，或 ← → 选择、回车打开，Esc 关闭",
+                                "Then press 1–9 to open that icon, or ← → and Return; Esc closes"))
                 }
             } header: {
                 Text(L10n.t("快捷键", "Shortcut"))
@@ -351,6 +351,11 @@ struct GeneralPane: View {
                 Toggle(isOn: model.boolBinding(.keepShelfOpen)) {
                     Text(L10n.t("始终显示收纳条", "Keep the strip open"))
                     Text(L10n.t("点击别处时不自动关闭", "Don't close it when clicking elsewhere"))
+                }
+                Toggle(isOn: model.boolBinding(.autoHideNew)) {
+                    Text(L10n.t("新图标自动收纳", "Put new icons in the strip"))
+                    Text(L10n.t("第一次出现在菜单栏的应用图标直接放进收纳条；系统图标不受影响。",
+                                "An app's icon that appears for the first time goes straight to the strip; system icons are left alone."))
                 }
                 Toggle(L10n.t("鼠标悬停 0.5 秒后展开", "Open on hover after 0.5 s"),
                        isOn: model.boolBinding(.hoverExpand))
@@ -415,8 +420,12 @@ struct GeneralPane: View {
                     Button(L10n.t("检查更新…", "Check for Updates…")) { model.send(.checkUpdates) }
                 } label: {
                     Text(L10n.t("版本 \(Self.version)", "Version \(Self.version)"))
-                    Text(L10n.t("有新版本时直接下载安装。只有点这里时才会访问 GitHub。",
-                                "Downloads and installs a newer version. YoungBar goes online only when you click this."))
+                    Text(L10n.t("有新版本时直接下载安装。", "Downloads and installs a newer version."))
+                }
+                Toggle(isOn: model.boolBinding(.autoUpdateCheck, default: true)) {
+                    Text(L10n.t("自动检查更新", "Check for updates automatically"))
+                    Text(L10n.t("每天向 GitHub 查一次。有新版本时 ••• 上出现小圆点，右键菜单里点一下即可更新；不会自动安装。",
+                                "Asks GitHub once a day. A newer version puts a dot on •••; update from its menu. Nothing installs by itself."))
                 }
             } header: {
                 Text(L10n.t("更新", "Updates"))
@@ -452,13 +461,13 @@ struct HotKeyField: View {
             Button {
                 model.send(.recordHotKey(!model.recordingHotKey))
             } label: {
-                Text(model.recordingHotKey ? L10n.t("按下新的快捷键…", "Press the new shortcut…") : model.hotKeyDisplay)
+                Text(model.recordingHotKey ? L10n.t("按下新的快捷键，或连按两下 ⌘…", "Press a shortcut, or ⌘ twice…") : model.hotKeyDisplay)
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
                     .frame(minWidth: 120)
             }
-            .help(L10n.t("点一下，然后按下新的组合键（需包含 ⌘、⌃ 或 ⌥）；Esc 取消，⌫ 清除",
-                         "Click, then press the new combination (with ⌘, ⌃ or ⌥); Esc cancels, ⌫ clears"))
+            .help(L10n.t("点一下，然后按下新的组合键（需包含 ⌘、⌃ 或 ⌥），或连按两下 ⌘ / ⌥ / ⌃；Esc 取消，⌫ 清除",
+                         "Click, then press the new combination (with ⌘, ⌃ or ⌥), or press ⌘, ⌥ or ⌃ twice; Esc cancels, ⌫ clears"))
             .accessibilityLabel(L10n.t("快捷键：\(model.hotKeyDisplay)", "Shortcut: \(model.hotKeyDisplay)"))
             Button {
                 model.send(.clearHotKey)

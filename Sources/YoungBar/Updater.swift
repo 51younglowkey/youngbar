@@ -7,8 +7,10 @@ import Security
 import SwiftUI
 import YoungBarCore
 
-/// In-app updates from GitHub Releases. Nothing runs on its own: YoungBar
-/// goes online only when the user chooses Check for Updates.
+/// In-app updates from GitHub Releases. Check for Updates asks GitHub right
+/// away; unless turned off in Settings, YoungBar also asks once a day and
+/// marks the control when a newer version is out. Installing is always the
+/// user's click.
 ///
 /// Installing: download the zip and its .sha256, check the digest, unzip,
 /// check the new app is signed by the same certificate as this one, then
@@ -188,27 +190,88 @@ extension BarApp {
         updateTask = Task { await runUpdateCheck(model) }
     }
 
+    func fetchLatestRelease() async throws -> ReleaseInfo {
+        var request = URLRequest(url: Self.releasesAPI, timeoutInterval: 20)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("YoungBar/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw UpdateError.message(L10n.t("GitHub 暂时没有返回版本信息（\((response as? HTTPURLResponse)?.statusCode ?? 0)），请稍后再试。",
+                                             "GitHub didn't return release information (\((response as? HTTPURLResponse)?.statusCode ?? 0)). Try again later."))
+        }
+        return try ReleaseInfo.parse(data)
+    }
+
+    func isNewer(_ release: ReleaseInfo) -> Bool {
+        guard let current = AppVersion(currentVersion) else { return false }
+        return release.version > current
+    }
+
     func runUpdateCheck(_ model: UpdateModel) async {
         do {
-            var request = URLRequest(url: Self.releasesAPI, timeoutInterval: 20)
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            request.setValue("YoungBar/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                throw UpdateError.message(L10n.t("GitHub 暂时没有返回版本信息（\((response as? HTTPURLResponse)?.statusCode ?? 0)），请稍后再试。",
-                                                 "GitHub didn't return release information (\((response as? HTTPURLResponse)?.statusCode ?? 0)). Try again later."))
-            }
-            let release = try ReleaseInfo.parse(data)
-            guard let current = AppVersion(currentVersion), release.version > current else {
+            let release = try await fetchLatestRelease()
+            guard isNewer(release) else {
+                availableUpdate = nil
+                applyUpdateBadge()
                 model.state = .upToDate(currentVersion)
                 return
             }
             pendingRelease = release
+            availableUpdate = release
+            applyUpdateBadge()
             model.state = .available(release.version.description, release.notes)
         } catch is CancellationError {
         } catch let error as URLError where error.code == .cancelled {
         } catch {
             model.state = .failed(Self.describe(error))
+        }
+    }
+
+    static let autoUpdateInterval: TimeInterval = 24 * 60 * 60
+
+    /// Ten seconds after launch, then whenever a day has passed (looked at
+    /// hourly, so a Mac that slept through the day checks soon after waking).
+    func startAutoUpdateChecks() {
+        autoUpdateTask?.cancel()
+        autoUpdateTask = nil
+        guard options[.autoUpdateCheck] != 0 else {
+            availableUpdate = nil
+            applyUpdateBadge()
+            return
+        }
+        autoUpdateTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            while !Task.isCancelled {
+                await self?.autoUpdateCheckIfDue()
+                try? await Task.sleep(for: .seconds(60 * 60))
+            }
+        }
+    }
+
+    func autoUpdateCheckIfDue() async {
+        guard options[.autoUpdateCheck] != 0 else { return }
+        if let last = lastAutoUpdateCheck, Date().timeIntervalSince(last) < Self.autoUpdateInterval { return }
+        // A check the user started owns the window and the result.
+        if updateWindow?.isVisible == true { return }
+        lastAutoUpdateCheck = Date()
+        // Offline or GitHub busy: keep what we knew, try again tomorrow.
+        guard let release = try? await fetchLatestRelease() else { return }
+        availableUpdate = isNewer(release) ? release : nil
+        applyUpdateBadge()
+    }
+
+    func applyUpdateBadge() {
+        let tip = L10n.t("YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
+                         "YoungBar: click to show concealed icons; right-click to choose apps")
+        guard let control = controlButton else { return }
+        if let release = availableUpdate {
+            control.badgeColor = themeColor == .clear ? .controlAccentColor : themeColor.accent
+            control.toolTip = tip + L10n.t("\n有新版本 \(release.version)，右键菜单里更新", "\nYoungBar \(release.version) is available; update from the right-click menu")
+            control.setAccessibilityLabel(L10n.t("YoungBar，有新版本 \(release.version)", "YoungBar, \(release.version) available"))
+        } else {
+            control.badgeColor = nil
+            control.toolTip = tip
+            control.setAccessibilityLabel("YoungBar")
         }
     }
 

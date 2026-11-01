@@ -22,6 +22,10 @@ enum Option: String, CaseIterable {
     case hotKeyCode, hotKeyModifiers
     /// Set once the first-run guide has been closed.
     case onboarded
+    /// Daily check for a newer release (on unless set to 0).
+    case autoUpdateCheck
+    /// An app's icon seen for the first time goes straight to the strip.
+    case autoHideNew
 }
 
 extension Dictionary where Key == String, Value == Int {

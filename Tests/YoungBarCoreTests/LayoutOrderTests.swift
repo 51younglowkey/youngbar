@@ -89,9 +89,17 @@ import Testing
 }
 
 @Suite struct HotKeyComboTests {
-    @Test func standardIsControlOptionB() {
-        #expect(HotKeyCombo.standard.keyCode == 11)
-        #expect(HotKeyCombo.standard.display(keyName: "B") == "⌃⌥B")
+    @Test func standardIsDoubleCommand() {
+        #expect(HotKeyCombo.standard.isDoubleTap)
+        #expect(HotKeyCombo.standard.modifiers == HotKeyCombo.command)
+        #expect(HotKeyCombo.standard.isUsable)
+        #expect(HotKeyCombo.legacy.display(keyName: "B") == "⌃⌥B")
+    }
+
+    @Test func doubleTapNeedsOneModifier() {
+        #expect(!HotKeyCombo.doubleTap(HotKeyCombo.shift).isUsable)
+        #expect(!HotKeyCombo.doubleTap(HotKeyCombo.command | HotKeyCombo.option).isUsable)
+        #expect(HotKeyCombo.doubleTap(HotKeyCombo.control).isUsable)
     }
 
     @Test func symbolsFollowMenuOrder() {
@@ -107,6 +115,63 @@ import Testing
 
     @Test func strayBitsAreDropped() {
         #expect(HotKeyCombo(keyCode: 1, modifiers: HotKeyCombo.option | 0x1).modifiers == HotKeyCombo.option)
+    }
+}
+
+@Suite struct DoubleTapDetectorTests {
+    let command = HotKeyCombo.command
+
+    @Test func twoQuickTapsFire() {
+        var detector = DoubleTapDetector(target: command)
+        #expect(detector.flagsChanged(command, at: 0.00) == nil)
+        #expect(detector.flagsChanged(0, at: 0.08) == nil)
+        #expect(detector.flagsChanged(command, at: 0.20) == nil)
+        #expect(detector.flagsChanged(0, at: 0.28) == command)
+        // A third tap starts over.
+        #expect(detector.flagsChanged(command, at: 0.40) == nil)
+        #expect(detector.flagsChanged(0, at: 0.45) == nil)
+    }
+
+    @Test func aKeyInBetweenCancels() {
+        var detector = DoubleTapDetector(target: command)
+        _ = detector.flagsChanged(command, at: 0)
+        _ = detector.flagsChanged(0, at: 0.1)
+        _ = detector.flagsChanged(command, at: 0.2)
+        detector.otherKey() // ⌘C
+        #expect(detector.flagsChanged(0, at: 0.3) == nil)
+        _ = detector.flagsChanged(command, at: 0.4)
+        detector.otherKey() // ⌘V
+        #expect(detector.flagsChanged(0, at: 0.5) == nil)
+    }
+
+    @Test func slowTapsOrHeldKeyDoNotFire() {
+        var detector = DoubleTapDetector(target: command)
+        _ = detector.flagsChanged(command, at: 0)
+        _ = detector.flagsChanged(0, at: 0.1)
+        _ = detector.flagsChanged(command, at: 1.0)
+        #expect(detector.flagsChanged(0, at: 1.1) == nil)
+        _ = detector.flagsChanged(command, at: 1.2)
+        #expect(detector.flagsChanged(0, at: 2.0) == nil) // held
+    }
+
+    @Test func otherModifierJoiningCancels() {
+        var detector = DoubleTapDetector(target: command)
+        _ = detector.flagsChanged(command, at: 0)
+        _ = detector.flagsChanged(0, at: 0.1)
+        _ = detector.flagsChanged(command, at: 0.2)
+        _ = detector.flagsChanged(command | HotKeyCombo.shift, at: 0.25)
+        #expect(detector.flagsChanged(0, at: 0.3) == nil)
+    }
+
+    @Test func recordingTakesAnyModifierButNotMixed() {
+        var detector = DoubleTapDetector(target: nil)
+        let option = HotKeyCombo.option
+        _ = detector.flagsChanged(option, at: 0)
+        _ = detector.flagsChanged(0, at: 0.1)
+        _ = detector.flagsChanged(command, at: 0.2)
+        #expect(detector.flagsChanged(0, at: 0.3) == nil)
+        _ = detector.flagsChanged(command, at: 0.4)
+        #expect(detector.flagsChanged(0, at: 0.5) == command)
     }
 }
 

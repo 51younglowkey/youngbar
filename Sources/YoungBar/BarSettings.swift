@@ -37,6 +37,9 @@ final class BarSettings: NSObject {
     var onGuide: (() -> Void)?
     var onCheckUpdates: (() -> Void)?
     private var keyMonitor: Any?
+    /// While recording: a modifier pressed twice becomes a double-tap shortcut.
+    private var flagsMonitor: Any?
+    private var tapDetector = DoubleTapDetector(target: nil)
     private var resignObserver: NSObjectProtocol?
 
     private let window: NSWindow
@@ -145,6 +148,15 @@ final class BarSettings: NSObject {
             }
             return nil
         }
+        tapDetector = DoubleTapDetector(target: nil)
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self, self.model.recordingHotKey else { return event }
+            let modifiers = BarApp.carbonModifiers(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
+            if let tapped = self.tapDetector.flagsChanged(modifiers, at: event.timestamp) {
+                self.stopRecording(saving: .some(.doubleTap(tapped)))
+            }
+            return event
+        }
         // Clicking elsewhere ends recording without a change.
         resignObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
@@ -157,6 +169,8 @@ final class BarSettings: NSObject {
         guard keyMonitor != nil else { return }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        flagsMonitor = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         resignObserver = nil
         model.recordingHotKey = false

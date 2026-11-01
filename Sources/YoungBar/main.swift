@@ -215,6 +215,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
         Task {
             await installControlPanelWhenReady()
             await refresh()
+            // The first walk ran before the hidden icons left the bar, so the
+            // control was placed left of them. Look again once they are gone
+            // instead of leaving it stranded until the idle tick (≈5 s).
+            refreshSoon()
             Diagnostics.write(app: self, snapshot: nil)
             #if YOUNGBAR_TESTHOOKS
             await runLaunchHooks()

@@ -50,6 +50,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_CONFIGTEST"] == "1" {
             await runConfigTest()
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTIONTEST"] == "1" {
+            await runNoAssertionTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_TOPSHOT"] == "1" {
             try? await Task.sleep(for: .milliseconds(1800))
             await captureScreen(to: "top-full.png")
@@ -1336,6 +1339,50 @@ extension BarApp {
         result["restored"] = modes == originalModes
         result["concealedAfter"] = after.concealed.map(\.sectionKey.rawValue).sorted()
         result["overflowAfter"] = overflowKeys.sorted()
+    }
+
+    /// Opt-in (`YOUNGBAR_NOASSERTIONTEST=1`): the bar a user sees with
+    /// nothing to hide. Hands the engine an empty model for a moment (the
+    /// saved modes are not touched), so it drops the hide assertion and
+    /// macOS draws YoungBar's own status item; records where it and the
+    /// control sit. `YOUNGBAR_NOASSERTION_HOLD=<seconds>` keeps that state
+    /// up for a screenshot. Then the real model goes back.
+    func runNoAssertionTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "noassertiontest.json") }
+        func own(_ snapshot: EngineSnapshot) -> [String: Double] {
+            guard let frame = snapshot.items.first(where: { $0.id.bundleID == Bundle.main.bundleIdentifier })?.frame else { return [:] }
+            return ["x": Double(frame.minX), "width": Double(frame.width)]
+        }
+        await refresh()
+        let before = await engine.freshSnapshot()
+        result["concealedBefore"] = before.concealed.map(\.sectionKey.rawValue).sorted()
+        result["assertionBefore"] = await engine.holdsAssertion
+        result["ownItemBefore"] = own(before)
+        result["nativeTitle"] = statusItem.button?.title ?? ""
+        result["nativeHasImage"] = statusItem.button?.image != nil
+        busy = true
+        await engine.setModel(SectionModel(newItemsDestination: .visible))
+        try? await Task.sleep(for: .milliseconds(1500))
+        let bare = await engine.freshSnapshot()
+        positionControlBesideMenuIcons(in: bare)
+        result["assertionBare"] = await engine.holdsAssertion
+        result["ownItemBare"] = own(bare)
+        if let panel = controlPanel?.frame {
+            result["controlBare"] = ["x": Double(panel.minX), "width": Double(panel.width)]
+        }
+        if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTION_HOLD"] ?? "") {
+            writeJSON(["bare": true], name: "noassertion-hold.json")
+            try? await Task.sleep(for: .seconds(hold))
+        }
+        await engine.setModel(currentModel())
+        busy = false
+        try? await Task.sleep(for: .milliseconds(1500))
+        await refresh()
+        let after = await engine.freshSnapshot()
+        result["concealedAfter"] = after.concealed.map(\.sectionKey.rawValue).sorted()
+        result["assertionAfter"] = await engine.holdsAssertion
+        result["restored"] = Set(after.concealed) == Set(before.concealed)
     }
 
     /// Opt-in (`YOUNGBAR_CONFIGTEST=1`): exports the layout, changes one

@@ -35,7 +35,6 @@ extension BarApp {
 
     /// The strip's share: items set to Show that the user can't reach.
     func computeOverflow(_ hidden: Set<String>) -> Set<String> {
-        guard options[.notchOverflow] != 0 else { return [] }
         return hidden.filter { key in
             guard let item = catalog[key], (modes[key] ?? 0) == 0 else { return false }
             return item.id.bundleID != Bundle.main.bundleIdentifier

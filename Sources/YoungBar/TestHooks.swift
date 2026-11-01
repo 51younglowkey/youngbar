@@ -50,6 +50,18 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_CONFIGTEST"] == "1" {
             await runConfigTest()
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_EXTRASTEST"] == "1" {
+            await runExtrasTest()
+        }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_SHELFDRAGTEST"] == "1" {
+            await runShelfDragTest()
+        }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_AUTOHIDETEST"] == "1" {
+            await runAutoHideTest()
+        }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_AUTOUPDATETEST"] == "1" {
+            await runAutoUpdateTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTIONTEST"] == "1" {
             await runNoAssertionTest()
         }
@@ -108,9 +120,6 @@ extension BarApp {
         }
         if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSUITEST"] == "1" {
             await runSettingsUITest()
-        }
-        if ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSCLICKTEST"] == "1" {
-            await runSettingsClickTest()
         }
         if ProcessInfo.processInfo.environment["YOUNGBAR_HITTEST"] == "1" {
             showWindow()
@@ -681,15 +690,17 @@ extension BarApp {
         writeJSON(result, name: "pinnedtest.json")
     }
 
-    /// Opt-in (`YOUNGBAR_HOTKEYTEST=1`): posts the real ⌃⌥B chord and checks
-    /// that the strip opens and closes without the mouse.
+    /// Opt-in (`YOUNGBAR_HOTKEYTEST=1`): presses the saved shortcut for real
+    /// (⌘⌘ by default) and checks that the strip opens and closes without the
+    /// mouse.
     func runHotKeyTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        result["shortcut"] = hotKeyDisplay
         closeShelf()
-        postHotKey()
+        await postHotKey()
         try? await Task.sleep(for: .milliseconds(700))
         result["opened"] = expanded
-        postHotKey()
+        await postHotKey()
         try? await Task.sleep(for: .milliseconds(700))
         result["closed"] = !expanded
         result["passed"] = (result["opened"] as? Bool == true) && (result["closed"] as? Bool == true)
@@ -697,19 +708,22 @@ extension BarApp {
         writeJSON(result, name: "hotkeytest.json")
     }
 
-    func postHotKey() {
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
-        for down in [true, false] {
-            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 11, keyDown: down) else { continue }
-            event.flags = [.maskControl, .maskAlternate]
-            event.post(tap: .cghidEventTap)
+    func postHotKey() async {
+        guard let hotKey else { return }
+        var flags: CGEventFlags = []
+        if hotKey.modifiers & HotKeyCombo.command != 0 { flags.insert(.maskCommand) }
+        if hotKey.modifiers & HotKeyCombo.option != 0 { flags.insert(.maskAlternate) }
+        if hotKey.modifiers & HotKeyCombo.control != 0 { flags.insert(.maskControl) }
+        if hotKey.modifiers & HotKeyCombo.shift != 0 { flags.insert(.maskShift) }
+        if hotKey.isDoubleTap {
+            let key = flags.contains(.maskCommand) ? kVK_Command : flags.contains(.maskAlternate) ? kVK_Option : kVK_Control
+            await postModifiers([(key, flags), (key, flags)])
+        } else {
+            postChord(Int(hotKey.keyCode), flags)
         }
     }
 
-    /// Opt-in (`YOUNGBAR_GEARTEST=1`): opens the strip and clicks its pinned
-    /// gear with a real HID click, then checks that the settings window opened.
-    /// Opt-in (`YOUNGBAR_SETTINGSCLICKTEST=1`): real HID click on the settings
-    /// "refresh" button, then checks the button's own action counter.
+    /// An untagged HID click, like a physical one.
     func postPlainClick(at point: CGPoint) {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
         for type in [CGEventType.leftMouseDown, .leftMouseUp] {
@@ -969,35 +983,8 @@ extension BarApp {
         }.value
     }
 
-    func runSettingsClickTest() async {
-        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
-        showWindow()
-        try? await Task.sleep(for: .milliseconds(700))
-        guard let settings, let rect = settings.refreshButtonScreenRect(),
-              let screen = NSScreen.main else {
-            result["error"] = "settings button not available"
-            writeJSON(result, name: "settingsclick.json")
-            return
-        }
-        result["frame"] = NSStringFromRect(rect)
-        let before = settings.refreshClickCount
-        let point = CGPoint(x: rect.midX, y: screen.frame.maxY - rect.midY)
-        // A plain, untagged HID click behaves like a physical click; if a
-        // shield/tap is swallowing real input this one fails.
-        postPlainClick(at: point)
-        try? await Task.sleep(for: .milliseconds(700))
-        let plainAfter = settings.refreshClickCount
-        result["plainAfter"] = plainAfter
-        await ItemMover.shieldedClick(at: point)
-        try? await Task.sleep(for: .milliseconds(900))
-        let after = settings.refreshClickCount
-        result["before"] = before
-        result["after"] = after
-        result["passed"] = after > before
-        result["plainWorked"] = plainAfter > before
-        writeJSON(result, name: "settingsclick.json")
-    }
-
+    /// Opt-in (`YOUNGBAR_GEARTEST=1`): opens the strip and clicks its pinned
+    /// gear with a real HID click, then checks that the settings window opened.
     func runGearTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
         showShelf()
@@ -1027,13 +1014,16 @@ extension BarApp {
         closeShelf()
         let before = await engine.freshSnapshot()
         let visibleBefore = before.items.filter { $0.frame != nil }.count
+        // Only what opening reveals: an earlier test's item may still be
+        // out for its own 20 s.
+        let revealedBefore = await engine.itemsRevealedOnTheirOwn()
         let start = Date()
         toggleShelf()
         while !expanded && Date().timeIntervalSince(start) < 1.0 {
             try? await Task.sleep(for: .milliseconds(20))
         }
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        let revealed = await engine.itemsRevealedOnTheirOwn().count
+        let revealed = await engine.itemsRevealedOnTheirOwn().subtracting(revealedBefore).count
         let after = await engine.freshSnapshot()
         let visibleAfter = after.items.filter { $0.frame != nil }.count
         result["opened"] = expanded
@@ -1179,12 +1169,6 @@ extension BarApp {
         showShelf(selectFirst: true)
         moveShelfSelection(by: 1)
         save(shelfPanel?.contentView, "shelf-selected.png")
-        if let first = shelfButtons.first?.identifier?.rawValue {
-            setShelfQuery(String(name(for: first).prefix(2)).lowercased())
-            save(shelfPanel?.contentView, "shelf-search.png")
-        }
-        setShelfQuery("zzqx")
-        save(shelfPanel?.contentView, "shelf-nomatch.png")
         closeShelf()
         showGuide()
         try? await Task.sleep(for: .milliseconds(600))
@@ -1211,22 +1195,56 @@ extension BarApp {
         }
     }
 
-    /// Opt-in (`YOUNGBAR_KEYBOARDTEST=1`): the shortcut opens the strip with
-    /// key focus and the first item chosen; arrows move; typing filters; Esc
-    /// clears then closes; a custom shortcut replaces ⌃⌥B and is restored.
-    /// Only the shortcut chords are real key presses; the keys inside the
-    /// strip go straight to its handler.
+    /// Real modifier presses: `flags` held for each step, then released.
+    func postModifiers(_ steps: [(Int, CGEventFlags)], hold: Int = 40, gap: Int = 90) async {
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+        for (code, flags) in steps {
+            for down in [true, false] {
+                guard let event = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(code), keyDown: down) else { continue }
+                event.type = .flagsChanged
+                event.flags = down ? flags : []
+                event.post(tap: .cghidEventTap)
+                try? await Task.sleep(for: .milliseconds(down ? hold : gap))
+            }
+        }
+    }
+
+    func postCommand(down: Bool) {
+        guard let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState),
+                                  virtualKey: CGKeyCode(kVK_Command), keyDown: down) else { return }
+        event.type = .flagsChanged
+        event.flags = down ? .maskCommand : []
+        event.post(tap: .cghidEventTap)
+    }
+
+    func postDoubleCommand(gap: Int = 90) async {
+        await postModifiers([(kVK_Command, .maskCommand), (kVK_Command, .maskCommand)], gap: gap)
+    }
+
+    /// Opt-in (`YOUNGBAR_KEYBOARDTEST=1`): double-tapping ⌘ (real key
+    /// presses) opens the strip with key focus, the first item chosen and
+    /// numbers on the icons; ⌘ then ⌘⇧, or two slow taps, don't; arrows
+    /// move; letters change nothing (no search); a digit past the last
+    /// icon beeps; Esc closes; a custom shortcut replaces ⌘⌘ and the saved
+    /// one is restored. With `YOUNGBAR_KEYBOARD_DIGIT=1` a digit also
+    /// opens a third-party item's menu (closed again with Esc).
     func runKeyboardTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
         defer { writeJSON(result, name: "keyboardtest.json") }
+        let original = (options[.hotKeyCode], options[.hotKeyModifiers])
+        options[.hotKeyCode] = nil
+        options[.hotKeyModifiers] = nil
+        registerHotKey()
+        result["defaultDisplay"] = hotKeyDisplay
         closeShelf()
         try? await Task.sleep(for: .milliseconds(300))
-        postChord(kVK_ANSI_B, [.maskControl, .maskAlternate])
-        try? await Task.sleep(for: .milliseconds(900))
-        result["openedByShortcut"] = expanded
+        await postDoubleCommand()
+        try? await Task.sleep(for: .milliseconds(700))
+        result["openedByDoubleCommand"] = expanded
         result["stripIsKey"] = shelfPanel?.isKeyWindow ?? false
         result["frontAppStillFront"] = NSWorkspace.shared.frontmostApplication?.bundleIdentifier != Bundle.main.bundleIdentifier
         result["selectionAfterOpen"] = shelfSelection ?? -1
+        result["numbersShown"] = shelfNumbered
         let shown = shelfButtons.compactMap { $0.identifier?.rawValue }
         result["itemsShown"] = shown
         shelfKey(kVK_RightArrow)
@@ -1234,27 +1252,80 @@ extension BarApp {
         shelfKey(kVK_LeftArrow)
         shelfKey(kVK_LeftArrow)
         result["selectionAfterTwoLeft"] = shelfSelection ?? -1
-        var searchOK = false
-        if let target = shown.last {
-            let query = String(name(for: target).prefix(3)).lowercased()
-            for character in query { shelfKey(0, String(character)) }
-            let matches = shelfButtons.compactMap { $0.identifier?.rawValue }
-            result["query"] = query
-            result["matches"] = matches
-            searchOK = matches.first == target && shelfSelection == 0
-            result["searchFoundTarget"] = searchOK
-            shelfKey(kVK_Delete)
-            result["queryAfterDelete"] = shelfQuery
-        }
-        shelfKey(kVK_Escape)
         for character in "zzqx" { shelfKey(0, String(character)) }
-        result["noMatchCount"] = shelfButtons.count
-        shelfKey(kVK_Escape)
-        result["queryClearedByEsc"] = shelfQuery.isEmpty && expanded
+        let typingIgnored = shelfButtons.compactMap { $0.identifier?.rawValue } == shown && expanded
+        result["typingIgnored"] = typingIgnored
+        let selectionBefore = shelfSelection
+        if shown.count < 9, let code = Self.numberKeys.first(where: { $0.value == shown.count + 1 && $0.key < 0x40 })?.key {
+            shelfKey(code)
+            result["digitPastEndIgnored"] = expanded && shelfSelection == selectionBefore
+        }
         shelfKey(kVK_Escape)
         result["closedByEsc"] = !expanded
 
-        let original = (options[.hotKeyCode], options[.hotKeyModifiers])
+        await postModifiers([(kVK_Command, .maskCommand), (kVK_Shift, [.maskCommand, .maskShift])])
+        try? await Task.sleep(for: .milliseconds(600))
+        result["commandShiftIgnored"] = !expanded
+        closeShelf()
+        try? await Task.sleep(for: .milliseconds(600))
+        await postDoubleCommand(gap: 700)
+        try? await Task.sleep(for: .milliseconds(600))
+        result["slowTapsIgnored"] = !expanded
+        closeShelf()
+
+        // ⌘-click, then ⌘ alone: the click (handed to the monitor directly,
+        // so nothing is clicked for real) makes the first press not a tap.
+        try? await Task.sleep(for: .milliseconds(600))
+        postCommand(down: true)
+        try? await Task.sleep(for: .milliseconds(40))
+        if let click = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: .command,
+                                          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0,
+                                          context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+            handleDoubleTapEvent(click)
+        }
+        try? await Task.sleep(for: .milliseconds(30))
+        postCommand(down: false)
+        try? await Task.sleep(for: .milliseconds(90))
+        await postModifiers([(kVK_Command, .maskCommand)])
+        try? await Task.sleep(for: .milliseconds(600))
+        result["commandClickIgnored"] = !expanded
+        closeShelf()
+
+        // A real click on the control: numbers too, and the strip takes the
+        // keys (a real Esc closes it).
+        try? await Task.sleep(for: .milliseconds(600))
+        if let control = controlPanel?.frame, let primary = NSScreen.screens.first {
+            postPlainClick(at: CGPoint(x: control.midX, y: primary.frame.maxY - control.midY))
+            try? await Task.sleep(for: .milliseconds(700))
+            result["clickOpened"] = expanded
+            result["clickNumbersShown"] = shelfNumbered
+            result["clickStripIsKey"] = shelfPanel?.isKeyWindow ?? false
+            postChord(kVK_Escape, [])
+            try? await Task.sleep(for: .milliseconds(500))
+            result["clickClosedByRealEsc"] = !expanded
+            closeShelf()
+        }
+
+        if ProcessInfo.processInfo.environment["YOUNGBAR_KEYBOARD_DIGIT"] == "1" {
+            try? await Task.sleep(for: .milliseconds(600))
+            await postDoubleCommand()
+            try? await Task.sleep(for: .milliseconds(700))
+            let target = shelfButtons.firstIndex { button in
+                guard let key = button.identifier?.rawValue, let bundle = catalog[key]?.id.bundleID else { return false }
+                return !bundle.hasPrefix("com.apple.")
+            }
+            if let target, target < 9, let code = Self.numberKeys.first(where: { $0.value == target + 1 && $0.key < 0x40 })?.key {
+                result["digitTarget"] = shelfButtons[target].identifier?.rawValue ?? ""
+                shelfKey(code)
+                result["digitPressed"] = shelfAnchored && shelfSelection == target
+                try? await Task.sleep(for: .milliseconds(1200))
+                postChord(kVK_Escape, [])
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+            closeShelf()
+        }
+
+        try? await Task.sleep(for: .milliseconds(600))
         setHotKey(HotKeyCombo(keyCode: UInt32(kVK_ANSI_Y),
                               modifiers: HotKeyCombo.control | HotKeyCombo.option | HotKeyCombo.command))
         result["customDisplay"] = hotKeyDisplay
@@ -1263,26 +1334,23 @@ extension BarApp {
         try? await Task.sleep(for: .milliseconds(900))
         result["openedByCustom"] = expanded
         closeShelf()
-        try? await Task.sleep(for: .milliseconds(300))
-        postChord(kVK_ANSI_B, [.maskControl, .maskAlternate])
-        try? await Task.sleep(for: .milliseconds(900))
-        result["oldShortcutIgnored"] = !expanded
+        try? await Task.sleep(for: .milliseconds(600))
+        await postDoubleCommand()
+        try? await Task.sleep(for: .milliseconds(700))
+        result["doubleCommandIgnoredAfterChange"] = !expanded
         closeShelf()
         options[.hotKeyCode] = original.0
         options[.hotKeyModifiers] = original.1
         UserDefaults.standard.set(options, forKey: "barOptions")
         registerHotKey()
         result["restoredDisplay"] = hotKeyDisplay
-        result["passed"] = (result["openedByShortcut"] as? Bool == true)
-            && (result["stripIsKey"] as? Bool == true)
+        let checks = ["openedByDoubleCommand", "stripIsKey", "numbersShown", "typingIgnored", "closedByEsc",
+                      "clickOpened", "clickNumbersShown", "clickStripIsKey", "clickClosedByRealEsc", "commandClickIgnored",
+                      "commandShiftIgnored", "slowTapsIgnored", "openedByCustom", "doubleCommandIgnoredAfterChange"]
+        result["passed"] = checks.allSatisfy { result[$0] as? Bool == true }
             && (shown.isEmpty || (result["selectionAfterOpen"] as? Int) == 0)
-            && (shown.isEmpty || searchOK)
-            && (result["noMatchCount"] as? Int) == 0
-            && (result["queryClearedByEsc"] as? Bool == true)
-            && (result["closedByEsc"] as? Bool == true)
-            && (result["openedByCustom"] as? Bool == true)
-            && (result["oldShortcutIgnored"] as? Bool == true)
-            && hotKeyDisplay == "⌃⌥B"
+            && (result["digitPastEndIgnored"] as? Bool ?? true)
+            && (result["digitPressed"] as? Bool ?? true)
     }
 
     /// Opt-in (`YOUNGBAR_OVERFLOWTEST=1`): reads the notch geometry and the
@@ -1341,6 +1409,209 @@ extension BarApp {
         result["overflowAfter"] = overflowKeys.sorted()
     }
 
+    /// Opt-in (`YOUNGBAR_EXTRASTEST=1`): What's New opens with the bundled
+    /// notes (no install commands in them); the diagnostics report has its
+    /// lines; a strip icon's right-click menu offers the other two states,
+    /// and choosing Always Hide takes it out of the strip (put back after).
+    /// `YOUNGBAR_EXTRAS_HOLD=<seconds>` keeps What's New up for a screenshot.
+    func runExtrasTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "extrastest.json") }
+        let notes = bundledReleaseNotes ?? []
+        let text = notes.map { "\($0)" }.joined()
+        result["notesBlocks"] = notes.count
+        result["notesHaveNoInstall"] = !text.contains("curl") && !text.contains("shasum")
+        showWhatsNew()
+        try? await Task.sleep(for: .milliseconds(600))
+        result["whatsNewShown"] = whatsNewWindow?.isVisible == true
+        result["whatsNewWindow"] = whatsNewWindow?.windowNumber ?? 0
+        result["notesLanguageEnglish"] = updateIntro?.english ?? false
+        result["tourSteps"] = updateIntro?.steps.count ?? 0
+        // Every page, held for a screenshot when asked: extras-hold.json
+        // names the window and the page on screen.
+        let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_EXTRAS_HOLD"] ?? "")
+        func show(_ page: Int, _ label: String) async {
+            updateIntro?.page = page
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let hold else { return }
+            writeJSON(["window": whatsNewWindow?.windowNumber ?? 0, "page": label], name: "extras-hold.json")
+            try? await Task.sleep(for: .seconds(hold))
+        }
+        // Chinese first, whatever this Mac's language, so both halves get seen.
+        func useLanguage(english: Bool) {
+            guard let intro = updateIntro, let url = Bundle.main.url(forResource: "ReleaseNotes", withExtension: "md"),
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+            intro.english = english
+            intro.shortcut = shortcutForTour(english: english)
+            intro.notes = ReleaseNotes.blocks(ReleaseNotes.localized(text, preferredLanguages: [english ? "en" : "zh-Hans"]))
+        }
+        useLanguage(english: false)
+        let pages = 1 + (updateIntro?.steps.count ?? 0)
+        for page in 0..<pages { await show(page, "zh-\(page)") }
+        // The try-it step: a real ⌘⌘ while the tour is up.
+        updateIntro?.page = 1
+        await postDoubleCommand()
+        try? await Task.sleep(for: .milliseconds(700))
+        result["tourSawShortcut"] = updateIntro?.triedShortcut == true
+        closeShelf()
+        await show(1, "zh-1-done")
+        // The English half, as an English system would get it.
+        useLanguage(english: true)
+        result["englishNotesFirst"] = updateIntro?.notes.first.map { "\($0)" } ?? ""
+        await show(0, "en-0")
+        await show(1, "en-1")
+        if hold != nil { writeJSON(["done": true], name: "extras-hold.json") }
+        whatsNewWindow?.orderOut(nil)
+
+        let report = await diagnosticsReport()
+        result["report"] = report
+        result["reportLines"] = report.split(separator: "\n").count
+
+        showShelf()
+        try? await Task.sleep(for: .milliseconds(400))
+        guard let key = shelfKeys().first(where: { modes[$0] == 1 }) else {
+            result["menuSkipped"] = "no hidden icon"
+            closeShelf()
+            return
+        }
+        let menu = shelfItemMenu(for: key)
+        result["menuTitles"] = menu.items.map(\.title)
+        guard let always = menu.items.first(where: { ($0.representedObject as? [String])?.last == "2" }) else { return }
+        shelfItemModeChosen(always)
+        for _ in 0..<40 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+        result["modeAfterMenu"] = modes[key] ?? 0
+        result["leftStrip"] = !shelfKeys().contains(key)
+        setMode(key: key, mode: 1)
+        for _ in 0..<40 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+        result["restored"] = modes[key] == 1 && shelfKeys().contains(key)
+    }
+
+    /// Opt-in (`YOUNGBAR_SHELFDRAGTEST=1`): with the real mouse, drags the
+    /// strip's first icon onto the last slot, checks the strip and the saved
+    /// order follow and that nothing was revealed on the bar, then puts the
+    /// saved order back. Needs two hidden icons.
+    func runShelfDragTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "shelfdragtest.json") }
+        let originalOrder = savedOrder
+        let concealedBefore = await engine.freshSnapshot().concealed
+        showShelf()
+        try? await Task.sleep(for: .milliseconds(500))
+        let before = shelfButtons.compactMap { $0.identifier?.rawValue }
+        result["before"] = before
+        guard before.count >= 2, let first = shelfButtons.first, let last = shelfButtons.last,
+              let window = shelfPanel, let primary = NSScreen.screens.first else {
+            result["skipped"] = "fewer than two icons"
+            closeShelf()
+            return
+        }
+        func point(_ button: NSButton) -> CGPoint {
+            let frame = window.convertToScreen(button.convert(button.bounds, to: nil))
+            return CGPoint(x: frame.midX, y: primary.frame.maxY - frame.midY)
+        }
+        let start = point(first)
+        let end = CGPoint(x: point(last).x + 6, y: start.y)
+        let source = CGEventSource(stateID: .hidSystemState)
+        func post(_ type: CGEventType, _ at: CGPoint) {
+            CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: at, mouseButton: .left)?.post(tap: .cghidEventTap)
+        }
+        post(.mouseMoved, start)
+        try? await Task.sleep(for: .milliseconds(150))
+        post(.leftMouseDown, start)
+        try? await Task.sleep(for: .milliseconds(120))
+        for step in 1...12 {
+            let x = start.x + (end.x - start.x) * CGFloat(step) / 12
+            post(.leftMouseDragged, CGPoint(x: x, y: start.y))
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        post(.leftMouseUp, end)
+        try? await Task.sleep(for: .milliseconds(600))
+        let after = shelfButtons.compactMap { $0.identifier?.rawValue }
+        result["after"] = after
+        result["stripReordered"] = after == Array(before.dropFirst()) + [before[0]]
+        let savedHidden = savedOrder.filter { before.contains($0) }
+        result["savedOrderFollows"] = savedHidden == after
+        result["stillOpen"] = expanded
+        let concealedAfter = await engine.freshSnapshot().concealed
+        result["nothingRevealed"] = concealedAfter == concealedBefore
+        closeShelf()
+        savedOrder = originalOrder
+        UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
+        await engine.setModel(currentModel())
+        result["orderRestored"] = UserDefaults.standard.stringArray(forKey: "itemOrder") == originalOrder
+    }
+
+    /// Opt-in (`YOUNGBAR_AUTOHIDETEST=1`): makes one shown app icon look
+    /// new (forgets it, with the option on in memory), refreshes, and checks
+    /// it went to the strip and is concealed. Its mode, the saved order and
+    /// the option are put back and it shows again.
+    func runAutoHideTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "autohidetest.json") }
+        await refresh()
+        let snapshot = await engine.freshSnapshot()
+        guard let victim = snapshot.items.last(where: { item in
+            guard item.frame != nil, let bundle = item.id.bundleID else { return false }
+            return bundle != Bundle.main.bundleIdentifier && !bundle.hasPrefix("com.apple.")
+                && (modes[item.id.sectionKey.rawValue] ?? 0) == 0 && MenuBarPolicy.isSectionManageable(item.id)
+        }) else {
+            result["skipped"] = "no shown app icon"
+            return
+        }
+        let key = victim.id.sectionKey.rawValue
+        result["key"] = key
+        let original = (mode: modes[key], order: savedOrder, option: options[.autoHideNew])
+        options[.autoHideNew] = 1
+        modes[key] = nil
+        savedOrder.removeAll { $0 == key }
+        catalog[key] = nil
+        await refresh()
+        for _ in 0..<20 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+        try? await Task.sleep(for: .milliseconds(800))
+        result["modeAfter"] = modes[key] ?? 0
+        result["feedback"] = feedback
+        let hidden = await engine.freshSnapshot()
+        result["concealed"] = hidden.concealed.contains { $0.sectionKey.rawValue == key }
+        result["inStrip"] = shelfKeys().contains(key)
+        // A key the user already knows is never auto-hidden.
+        options[.autoHideNew] = original.option
+        modes[key] = original.mode
+        UserDefaults.standard.set(modes, forKey: "itemModes")
+        UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
+        savedOrder = original.order
+        UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
+        busy = true
+        await engine.setModel(currentModel())
+        busy = false
+        try? await Task.sleep(for: .milliseconds(1200))
+        await refresh()
+        let after = await engine.freshSnapshot()
+        result["shownAgain"] = after.items.contains { $0.id.sectionKey.rawValue == key && $0.frame != nil }
+            && !after.concealed.contains { $0.sectionKey.rawValue == key }
+        result["restored"] = modes[key] == original.mode && savedOrder == original.order
+    }
+
+    /// Opt-in (`YOUNGBAR_AUTOUPDATETEST=1`, usually with
+    /// `YOUNGBAR_UPDATE_PRETEND_VERSION`): runs the daily check now and
+    /// records whether the menu got its line, and that no window opened.
+    /// `YOUNGBAR_AUTOUPDATE_HOLD=<seconds>` keeps the state up a while.
+    func runAutoUpdateTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "current": currentVersion]
+        defer { writeJSON(result, name: "autoupdatetest.json") }
+        autoUpdateTask?.cancel()
+        lastAutoUpdateCheck = nil
+        await autoUpdateCheckIfDue()
+        result["found"] = availableUpdate?.version.description ?? ""
+        result["menuTop"] = configurationMenu().items.first?.title ?? ""
+        result["windowOpened"] = updateWindow?.isVisible == true
+        result["tooltip"] = controlButton?.toolTip ?? ""
+        if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_AUTOUPDATE_HOLD"] ?? "") {
+            writeJSON(["found": true], name: "autoupdate-hold.json")
+            try? await Task.sleep(for: .seconds(hold))
+        }
+        startAutoUpdateChecks()
+    }
+
     /// Opt-in (`YOUNGBAR_NOASSERTIONTEST=1`): the bar a user sees with
     /// nothing to hide. Hands the engine an empty model for a moment (the
     /// saved modes are not touched), so it drops the hide assertion and
@@ -1397,13 +1668,16 @@ extension BarApp {
             let file = try ConfigFile.decode(Data(contentsOf: url), knownOptions: Set(Option.allCases.map(\.rawValue)))
             result["exportedModes"] = file.itemModes.count
             result["exportedOrder"] = file.itemOrder.count
-            options[.revealSeconds] = 33
+            options[.hoverExpand] = options[.hoverExpand] == 1 ? 0 : 1
             var done = false
             applyConfiguration(file) { done = true }
             for _ in 0..<40 where !done { try? await Task.sleep(for: .milliseconds(150)) }
             result["applied"] = done
             result["modesEqual"] = modes == modesBefore
             result["optionsEqual"] = options == optionsBefore
+            result["optionsDiffer"] = Set(options.keys).union(optionsBefore.keys)
+                .filter { options[$0] != optionsBefore[$0] }
+                .sorted().map { "\($0): \(optionsBefore[$0].map(String.init) ?? "nil") → \(options[$0].map(String.init) ?? "nil")" }
             result["orderEqual"] = savedOrder == orderBefore
             result["passed"] = done && modes == modesBefore && options == optionsBefore && savedOrder == orderBefore
         } catch {

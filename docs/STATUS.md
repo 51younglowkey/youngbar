@@ -61,6 +61,37 @@
 
 边界：只测了 `build/` 下、目录可写的情况；`/Applications` 里由非管理员用户运行（目录不可写）时会提示去 GitHub 手动下载，没有实测。下载中途取消没有实测。
 
+## 2.3 0.1.4 进行中（2026-11-01，Info.plist 已是 0.1.4 (5)，未发布、未打包）
+
+> 本节取代第 2 节里「快捷键打开收纳条」「搜索」「自定义快捷键」三行：默认快捷键已不是 ⌃⌥B，搜索已移除。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 自动检查更新 | ✅ 启动 10 秒后、之后每天一次查 GitHub；假装 0.1.2 时找到 0.1.3：右键菜单第一行「有新版本 0.1.3，点此更新…」，控件提示文字也写明，**不弹窗、不自动安装**。始终开启，设置里没有开关。**更正**：第一版在 ••• 右上角加了圆点，用户要求去掉，只保留菜单行 | `autoupdatetest.json`：`found:0.1.3`、`menuTop`、`windowOpened:false` |
+| 默认快捷键：连按两下 ⌘ | ✅ 真实按键连按两下 ⌘ 打开收纳条（键盘焦点在收纳条，前台应用不变）；⌘ 后接 ⌘⇧、两次间隔 0.7 秒都不触发；改成 ⌃⌥⌘Y 后能打开、⌘⌘ 失效；测试后恢复 | `keyboardtest.json`：`passed:true`、`defaultDisplay:"双击 ⌘"`、`commandShiftIgnored`、`slowTapsIgnored`、`doubleCommandIgnoredAfterChange`；另一个进程发出的 ⌘⌘ 也能打开（截图） |
+| 设置里录快捷键 | 🟡 可以录组合键，或连按两下 ⌘ / ⌥ / ⌃；连按的识别逻辑有单元测试，**设置窗口里真的录一次没有实测** | `DoubleTapDetectorTests` 5 项 |
+| 去掉搜索 | ✅ 收纳条里打字不再筛选；Esc 直接关闭 | `typingIgnored:true`、`closedByEsc:true` |
+| 数字键 1–9 | ✅ 前 9 个图标标出数字；按数字直接打开（ChatGPT 菜单在收纳条旁弹出）；超过图标数的数字只响一声 | `digitPressed:true`（`digitTarget: codex`）、`digitPastEndIgnored:true`；![数字](images/strip-numbers.png) |
+| 收纳条里拖动排序 | ✅ 真实鼠标把第一个拖到最后：收纳条和保存的顺序都跟着变，菜单栏没有任何图标被显示；测试后恢复顺序 | `shelfdragtest.json`：`stripReordered`、`savedOrderFollows`、`nothingRevealed`、`orderRestored` |
+| 新图标自动收纳（默认关） | ✅ 打开选项后，把 State 当作新图标：自动设为隐藏并收进收纳条，提示「新图标已放进收纳条：State」；第一次运行（没有保存过顺序）不会触发；Apple 的图标不受影响；测试后恢复 | `autohidetest.json`：`modeAfter:1`、`concealed`、`inStrip`、`shownAgain`、`restored` |
+| 更新内容窗口 | ✅ 从 0.1.3 升到 0.1.4 后第一次启动自动弹出；按「新增 / 优化 / 移除 / 修复」分区、每条一句短话，不含安装命令和校验；••• 菜单「本次更新内容…」可再打开；新安装不弹 | 真实启动截图；`extrastest.json`：`whatsNewShown`、`notesHaveNoInstall`；![更新内容](images/whats-new-0.1.4.png) |
+| 更新后先走引导 | ✅ 模拟从 0.1.3 升级（`lastLaunchedVersion=0.1.3` 后启动）：先弹出使用引导，授权那步显示「已授权」；点「完成」（Finder 在前台时一次真实点击就生效）后接着弹出更新内容。引导第 3 步改为「或连按两下 ⌘」 | ![引导](images/guide-after-update-0.1.4.png) |
+| 旧版更新窗口 | ✅ 中英分隔改为单独一行 `# English`：0.1.2/0.1.3 的更新窗口会把发布说明原样显示，隐藏注释会露出来，标题则显示为干净的「English」 | 单元测试 `picksTheReadersLanguage` |
+| 新功能引导 | ✅ 更新内容页点「了解新功能」进入 5 页引导（连按两下 ⌘ / 数字键 / 拖动与右键 / 新图标自动收纳 / 更新提示与反馈），每页有跳过、上一步、下一步；第 1 页真的连按两下 ⌘ 后显示「成功打开了收纳条」；第 4 页的开关直接改设置 | `extrastest.json`：`tourSteps:5`、`tourSawShortcut:true`；![引导](images/update-tour-0.1.4.png) |
+| 中英文 | ✅ 更新日志一个文件两段（单独一行 `# English` 分隔；不用隐藏注释，因为 0.1.2/0.1.3 的更新窗口会把它原样显示出来），更新内容和新功能引导跟随 **YoungBar 设置里的语言**，和前面的使用引导一致。**更正**：第一版跟随系统语言，本机系统首选 en-GB 而 YoungBar 设为中文，同一次更新里使用引导是中文、更新内容是英文，用户要求统一 | 本机（YoungBar 设为中文）更新内容显示中文；单元测试 `picksTheReadersLanguage`；![英文](images/whats-new-0.1.4-en.png) |
+| 复制诊断信息 | ✅ ••• 菜单一项：复制 8 行纯文本（版本、macOS、机型、屏幕/刘海、权限与隐藏状态、快捷键、控件位置、各状态图标名单）并弹窗显示内容 | `extrastest.json`：`reportLines:8`、`report` |
+| 收纳条图标右键 | ✅ 菜单列出另外两种状态和「在设置中调整…」；选「始终隐藏」后该图标离开收纳条；测试后恢复 | `menuTitles`、`modeAfterMenu:2`、`leftStrip`、`restored` |
+| 数字显示开关 | ✅ 「图标下方显示数字」默认开，**点击 •••、悬停、快捷键打开都显示**；关掉后数字键照样能打开。**更正**：第一版只在快捷键打开时显示，用户点击打开看不到数字（用户报告） | `keyboardtest.json`：真实点击控件 `clickOpened`、`clickNumbersShown`、`clickStripIsKey`、真实 Esc `clickClosedByRealEsc`；![点击打开](images/strip-numbers.png) |
+| 设置精简 | ✅ 去掉：点击 ••• 方式（「在菜单栏中展开」会重影，已删除该模式）、始终显示收纳条、点击空白处展开、放不下的图标进收纳条（固定开）、自动收起秒数（固定 20 秒）、主题应用范围（固定全部）、右键菜单「左键显示菜单」、自动检查更新开关、刷新列表按钮；权限行只在未授权时显示。通用页分为：基本 / 收纳条 / 关于 | ![通用](images/general-0.1.4.png) ![外观](images/appearance-0.1.4.png) |
+| 设置页顺序 | ✅ 侧栏改为 菜单栏 / 外观 / 通用；每次打开设置先显示菜单栏页（窗口已开着时只是拿到前台，不换页）；未授权时授权按钮在菜单栏页顶部。**未授权状态没有实测**（需要撤销权限） | 从收纳条齿轮真实点开：![菜单栏页](images/menubar-page-0.1.4.png) |
+| 启动后 ••• 位置 | ✅ **修复**：刚启动时 ••• 被放在隐藏图标左边（x≈1099），图标约 2 秒后隐藏，但 ••• 要等下一次空闲刷新（约 6 秒）才移到旁边，这段时间点它原来的位置没反应。现在第一次隐藏后马上重新定位：约 2 秒就到位，启动 3 秒后点击能打开收纳条 | 每 0.5 秒记录控件窗口位置：修复前 6.1 秒到位，修复后 2.1 秒；启动 3 秒后真实点击截图 |
+| 全面检查（2026-11-01 05:00–05:13） | ✅ 读完整个 0.1.4 差异后修了 5 处：① ⌘ 点击两次（Finder 多选、点链接）会被当成连按两下 ⌘ → 鼠标按下和滚动也会重置；② 授权前装好的监视器收不到按键 → 授权后第一次刷新重新注册；③ 开着「悬停打开」时，悬停打开后紧接着点击会把收纳条关掉（0.1.4 之前就有）→ 悬停打开后 1.5 秒内的点击不关；④ 忙的时候出现的新图标会漏掉自动收纳 → 先保存再排队应用；⑤ 删掉搜索留下的注释和无用变量。另外：载入时丢弃已废弃选项的旧值 | 下行自检 |
+| 自检全套 | ✅ selftest、conceal、pinned、shelfopen、gear、about、hotkey（改为按当前快捷键）、keyboard（新增 ⌘ 点击不触发、真实点击打开）、extras、autohide、shelfdrag、noassertion、overflow、config、menu、order、hotkeyprobe、bulk、interaction、autoupdate、settingsui（真实鼠标）全部通过。**更正**：第一轮整批跑时 selftest / shelfopen / config / conceal 各失败过一次，单独重跑都通过：shelfopen 把前一个测试留下的 20 秒显示算了进去（已改为只算打开时新增的）；config 是旧选项键在导入后消失（已在载入时清理）；selftest、conceal 是前一个测试留下的显示项，未改代码。interaction 的 `concealedAfterTest:false` 是 0.5 秒时检查太早，随后截图确认已隐藏 | 各 `*.json`；`defaults export` 前后对比：图标模式与顺序一致，只多了 4 个显式的「显示（0）」和少了 3 个废弃选项键 |
+| 单元测试 | 31 passed | `swift test --disable-sandbox` |
+| 测试后复原 | ✅ 键盘测试前后 `defaults export` 只差 `sessionActive`（运行标记） | diff |
+
+边界：老用户如果从没改过快捷键，升级后默认从 ⌃⌥B 变成连按两下 ⌘（改过的保留）。数字键之外的拖动只在 3 个图标、收纳条不滚动时测过。自动收纳只用「假装新图标」测过，没有真的装一个新应用。去掉的选项：老用户之前存的值会被忽略（例如开过「始终显示收纳条」的人升级后不再常开）。`YOUNGBAR_SETTINGSUITEST`（真实鼠标走设置窗口）本轮没有重跑。
+
 ## 3. 验证边界（不许含糊）
 
 - **多显示器没有验证**（手头只有内建屏）。已做的只是代码层面：显示器增减时把控件放回状态项旁；

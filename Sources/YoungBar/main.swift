@@ -57,11 +57,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var refreshing = false
     var includeAlwaysHidden = false
     var feedback = ""
-    var options = UserDefaults.standard.dictionary(forKey: "barOptions") as? [String: Int] ?? [:]
+    /// Keys no version reads any more (options 0.1.4 turned into fixed
+    /// behaviour) are dropped on load, so they don't linger in exports.
+    var options: [String: Int] = {
+        let saved = UserDefaults.standard.dictionary(forKey: "barOptions") as? [String: Int] ?? [:]
+        let known = saved.filter { Option(rawValue: $0.key) != nil }
+        if known.count != saved.count { UserDefaults.standard.set(known, forKey: "barOptions") }
+        return known
+    }()
     var isHovered = false
+    /// When hovering last opened the strip: a click landing just after
+    /// (the user was reaching for •••) must not close it again.
+    var hoverOpenedAt: Date?
     var mouseMonitor: Any?
-    var currentFrames: [CGRect] = []
-    var revealSeconds: TimeInterval { TimeInterval(options[.revealSeconds] ?? 20) }
+    /// How long a system item clicked from the strip stays in the bar.
+    let revealSeconds: TimeInterval = 20
     var expanded = false
     var started = false
     var previousSessionCrashed = UserDefaults.standard.bool(forKey: "sessionActive")
@@ -80,12 +90,18 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Presses delivered by Carbon; read by the self-tests.
     var hotKeyPressCount = 0
     var hotKeyHandler: EventHandlerRef?
+    /// A double-tap shortcut is watched for, not registered: every modifier
+    /// change and key press goes through this.
+    var doubleTapDetector = DoubleTapDetector(target: nil)
+    var doubleTapMonitors: [Any] = []
+    var doubleTapNeedsTrust = false
     var shelfState: String?
-    /// Typed into the open strip: filters it to matching items.
-    var shelfQuery = ""
     /// Keyboard selection in the strip, an index into `shelfButtons`.
     var shelfSelection: Int?
-    var shelfButtons: [BarControlButton] = []
+    /// The first nine icons show their number (unless turned off), however
+    /// the strip was opened: the number keys work after a click too.
+    var shelfNumbered = false
+    var shelfButtons: [NSButton] = []
     var shelfIconColor: NSColor = .white
     /// Items set to Show that sit under the notch, so nobody sees them.
     var overflowKeys: Set<String> = []
@@ -95,10 +111,20 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var guideModel: GuideModel?
     var guideTimer: Timer?
     var guideCloseObserver: NSObjectProtocol?
+    /// Runs once when the guide is finished or closed (after an update:
+    /// What's New and the tour).
+    var afterGuide: (() -> Void)?
     var updateWindow: NSWindow?
+    var whatsNewWindow: NSWindow?
+    var updateIntro: UpdateIntroModel?
     var updateModel: UpdateModel?
     var updateTask: Task<Void, Never>?
     var pendingRelease: ReleaseInfo?
+    /// A newer release found by the daily check: a line at the top of the
+    /// control's right-click menu (and its tooltip) until it is installed.
+    var availableUpdate: ReleaseInfo?
+    var autoUpdateTask: Task<Void, Never>?
+    var lastAutoUpdateCheck: Date?
     /// After an item is opened from the strip, the strip stays where it was
     /// (no re-centring on the control as the revealed item shifts it) until
     /// the strip closes.
@@ -121,7 +147,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if let name = ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGS_PREVIEW_THEME"],
                let theme = ["blue", "pink", "yellow", "clear"].firstIndex(of: name) {
                 options[.themeColor] = theme
-                options[.themeScope] = 0
             }
             L10n.current = Language(rawValue: options[.language] ?? 0) ?? .chinese
             NSApp.setActivationPolicy(.accessory)
@@ -160,10 +185,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         registerHotKey()
         refreshLoginItemIfMoved()
-        // After an update, say so once in Settings.
+        startAutoUpdateChecks()
+        // After an update, say so once in Settings and show what changed
+        // (not on a first install: there was no earlier version).
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        var updated = false
         if let last = UserDefaults.standard.string(forKey: "lastLaunchedVersion"), last != version {
             feedback = L10n.t("已更新到 \(version)", "Updated to \(version)")
+            updated = true
         }
         UserDefaults.standard.set(version, forKey: "lastLaunchedVersion")
         if needsGuide {
@@ -175,11 +204,20 @@ final class BarApp: NSObject, NSApplicationDelegate {
         Task {
             await installControlPanelWhenReady()
             await refresh()
+            // The first walk ran before the hidden icons left the bar, so the
+            // control was placed left of them. Look again once they are gone
+            // instead of leaving it stranded until the idle tick (≈5 s).
+            refreshSoon()
             Diagnostics.write(app: self, snapshot: nil)
             #if YOUNGBAR_TESTHOOKS
             await runLaunchHooks()
             #endif
-            if options[.keepShelfOpen] == 1 { showShelf() }
+            // After an update everyone walks through the guide again (the
+            // permission step just shows it is granted), then what changed.
+            if updated && !needsGuide {
+                afterGuide = { [weak self] in self?.showWhatsNew() }
+                showGuide()
+            }
         }
     }
 
@@ -213,7 +251,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     @objc func statusClicked() {
-        if NSApp.currentEvent?.type == .rightMouseUp || options[.leftClickMenu] == 1 {
+        if NSApp.currentEvent?.type == .rightMouseUp {
             showConfigurationMenu()
             return
         }
@@ -231,22 +269,18 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         guard !busy else { return }
         if expanded {
+            if !fromKeyboard, let opened = hoverOpenedAt, Date().timeIntervalSince(opened) < 1.5 { return }
             closeShelf()
         } else {
             let event = NSApp.currentEvent
             includeAlwaysHidden = !fromKeyboard && event?.type == .leftMouseUp && event?.modifierFlags.contains(.option) == true
-            Task {
-                // The shortcut always opens the strip: that is where typing
-                // and the arrow keys work.
-                if options[.nativeExpand] == 1 && !includeAlwaysHidden && !fromKeyboard {
-                    await refresh()
-                    await revealHiddenSection()
-                } else {
-                    // The strip shows app icons; never reveal items to open it.
-                    showShelf(selectFirst: fromKeyboard)
-                    await refresh()
-                }
-            }
+            // Always the strip: it shows app icons, so nothing on the bar is
+            // revealed to open it. (Showing the hidden icons in the bar
+            // itself, the old "Show in bar" mode, flashed and doubled the
+            // bar while it reflowed; it is gone.)
+            showShelf(selectFirst: fromKeyboard)
+            if fromKeyboard, whatsNewWindow?.isVisible == true { updateIntro?.triedShortcut = true }
+            Task { await refresh() }
         }
     }
 
@@ -258,14 +292,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
         CGFloat(stripOpacityPercent(options)) / 100
     }
 
-    var themeScope: ThemeScope {
-        ThemeScope(rawValue: options[.themeScope] ?? 0) ?? .both
-    }
-
     func applyAppearance() {
         let mode = AppearanceMode(rawValue: options[.appearanceMode] ?? 0) ?? .system
         NSApp.appearance = mode.appearance
         NSApp.applicationIconImage = themeIcon(themeColor)
+        applyUpdateNotice()
     }
 
     /// Every AX walk of the menu bar costs CPU, so walks follow what the
@@ -315,6 +346,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func refresh() async {
         guard !busy, !refreshing, AXIsProcessTrusted(), AssessmentMode.isAvailable else { return }
+        if doubleTapNeedsTrust { registerHotKey() }
         refreshing = true
         lastRefreshAt = Date()
         defer { refreshing = false }
@@ -351,7 +383,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let snapshot = await engine.freshSnapshot()
         remember(snapshot)
         overflowKeys = computeOverflow(outOfSightKeys(snapshot))
-        currentFrames = snapshot.items.compactMap(\.frame)
         positionControlBesideMenuIcons(in: snapshot)
         if expanded { populateShelf() }
         // The settings model only matters while its window is on screen;
@@ -376,6 +407,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
         presentKeys = present
 
         var orderChanged = false
+        // Nothing is "new" on the very first run: every icon is.
+        let knewItems = !savedOrder.isEmpty
+        var newlyHidden: [String] = []
         let deduped = LayoutOrder.unique(savedOrder)
         if deduped.count != savedOrder.count {
             savedOrder = deduped
@@ -390,6 +424,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 let known = catalog.compactMapValues { $0.frame?.minX }
                 savedOrder.insert(key, at: LayoutOrder.insertionIndex(forMinX: frame.minX, in: savedOrder, minX: known))
                 orderChanged = true
+                if knewItems, shouldAutoHide(item) { newlyHidden.append(key) }
             }
             if let bundle = item.id.bundleID, bundle != PelmetBundle.agentID {
                 knownBundles[bundle] = item.appName ?? appName(for: bundle)
@@ -413,6 +448,34 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let finalOrder = LayoutOrder.unique(savedOrder)
         if finalOrder != savedOrder { savedOrder = finalOrder; orderChanged = true }
         if orderChanged { UserDefaults.standard.set(savedOrder, forKey: "itemOrder") }
+        if !newlyHidden.isEmpty { autoHide(newlyHidden) }
+    }
+
+    /// An app's icon the user has never had in the bar. Apple's own items
+    /// (system extras, the clock, Control Center) never count.
+    func shouldAutoHide(_ item: ObservedItem) -> Bool {
+        guard options[.autoHideNew] == 1, modes[item.id.sectionKey.rawValue] == nil,
+              let bundle = item.id.bundleID, !bundle.hasPrefix("com.apple."),
+              MenuBarPolicy.systemItem(for: item.id) == nil else { return false }
+        return true
+    }
+
+    func autoHide(_ keys: [String]) {
+        // Saved first: these keys are now known, so they are never "new"
+        // again even if the bar is busy right now.
+        for key in keys { modes[key] = 1 }
+        UserDefaults.standard.set(modes, forKey: "itemModes")
+        UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
+        let names = keys.map { name(for: $0) }.joined(separator: L10n.t("、", ", "))
+        feedback = L10n.t("新图标已放进收纳条：\(names)", "New icons moved to the strip: \(names)")
+        shelfState = nil
+        Task {
+            for _ in 0..<100 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+            busy = true
+            await engine.setModel(currentModel())
+            busy = false
+            renderWindow()
+        }
     }
 
     /// The table is the user's ordering model, but it must not drift from the
@@ -473,7 +536,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func showConfigurationMenu() {
+        let menu = configurationMenu()
+        if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
+            NSMenu.popUpContextMenu(menu, with: event, for: button)
+        }
+    }
+
+    func configurationMenu() -> NSMenu {
         let menu = NSMenu(title: "YoungBar")
+        if let release = availableUpdate {
+            let item = NSMenuItem(title: L10n.t("有新版本 \(release.version)，点此更新…", "YoungBar \(release.version) is available; update…"),
+                                  action: #selector(checkForUpdates), keyEquivalent: "")
+            item.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
         if !AXIsProcessTrusted() {
             menu.addItem(withTitle: L10n.t("开启辅助功能权限…", "Open Accessibility…"), action: #selector(requestAccessibility), keyEquivalent: "")
         } else if !AssessmentMode.isAvailable {
@@ -495,9 +572,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if knownBundles.isEmpty {
                 menu.addItem(withTitle: L10n.t("正在读取菜单栏图标…", "Reading menu-bar items…"), action: nil, keyEquivalent: "")
             }
-            let leftClick = NSMenuItem(title: L10n.t("左键点击显示菜单", "Show menu on left click"), action: #selector(toggleLeftClickMenu), keyEquivalent: "")
-            leftClick.state = options[.leftClickMenu] == 1 ? .on : .off
-            menu.addItem(leftClick)
             menu.addItem(.separator())
             menu.addItem(withTitle: L10n.t("全部隐藏（应用图标）", "Hide all (app icons)"), action: #selector(hideAllApps), keyEquivalent: "")
             menu.addItem(withTitle: L10n.t("全部显示", "Show all"), action: #selector(showAllApps), keyEquivalent: "")
@@ -508,12 +582,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.t("打开设置窗口", "Open Settings"), action: #selector(showWindow), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("关于 YoungBar", "About YoungBar"), action: #selector(showAbout), keyEquivalent: "")
+        if bundledReleaseNotes != nil {
+            menu.addItem(withTitle: L10n.t("本次更新内容…", "What's New…"), action: #selector(showWhatsNew), keyEquivalent: "")
+        }
+        menu.addItem(withTitle: L10n.t("复制诊断信息", "Copy Diagnostics"), action: #selector(copyDiagnostics), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("退出 YoungBar", "Quit YoungBar"), action: #selector(quit), keyEquivalent: "")
         for item in menu.items where item.action != nil && item.target == nil { item.target = self }
-        if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
-            NSMenu.popUpContextMenu(menu, with: event, for: button)
-        }
+        return menu
     }
 
     func installControlPanelWhenReady() async {
@@ -577,7 +653,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if entered && options[.hoverExpand] == 1 {
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
-                    if isHovered && !expanded && !busy { toggleShelf() }
+                    if isHovered && !expanded && !busy {
+                        toggleShelf()
+                        hoverOpenedAt = Date()
+                    }
                 }
             }
         }
@@ -586,6 +665,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         panel.makeKeyAndOrderFront(nil)
         controlPanel = panel
         controlButton = control
+        applyUpdateNotice()
     }
 
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
@@ -647,8 +727,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         expanded = true
         shelfAnchored = false
-        shelfQuery = ""
         shelfSelection = selectFirst ? 0 : nil
+        shelfNumbered = options[.shelfNumbers] != 0
         shelfState = nil
         // Above the menu bar while browsing; lowered while an item's own menu
         // or panel is open so that opens on top of the strip.
@@ -671,14 +751,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func closeShelf() {
         expanded = false
+        hoverOpenedAt = nil
         shelfAnchored = false
-        shelfQuery = ""
         shelfSelection = nil
+        shelfNumbered = false
         shelfPanel?.orderOut(nil)
     }
 
     func shelfKeys() -> [String] {
-        if !shelfQuery.isEmpty { return searchShelf(shelfQuery) }
         return orderedKeys().filter {
             (modes[$0] ?? 0) == 1 || (includeAlwaysHidden && modes[$0] == 2) || overflowKeys.contains($0)
         }
@@ -687,7 +767,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func populateShelf() {
         guard let shelfPanel else { return }
         let keys = shelfKeys()
-        let state = shelfQuery + "#" + keys.joined(separator: "|")
+        let state = (shelfNumbered ? "#" : "") + keys.joined(separator: "|")
         guard state != shelfState || shelfPanel.contentView == nil else { return }
         shelfState = state
         // Each item shows its app's own icon (or the system symbol): sharp at
@@ -696,25 +776,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let itemContentWidth = widths.reduce(16, +)
         let screenWidth = (controlPanel?.screen ?? NSScreen.screens.first)?.frame.width ?? 800
         let gearWidth: CGFloat = 38
-        let queryText = NSMutableAttributedString()
-        if let glass = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil) {
-            let attachment = NSTextAttachment()
-            attachment.image = glass.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-            queryText.append(NSAttributedString(attachment: attachment))
-            queryText.append(NSAttributedString(string: " "))
-        }
-        queryText.append(NSAttributedString(string: shelfQuery))
-        queryText.addAttribute(.font, value: NSFont.systemFont(ofSize: 13, weight: .medium),
-                               range: NSRange(location: 0, length: queryText.length))
-        let queryLabel = NSTextField(labelWithAttributedString: queryText)
-        queryLabel.lineBreakMode = .byTruncatingHead
-        let queryWidth: CGFloat = shelfQuery.isEmpty ? 0 : min(140, queryLabel.intrinsicContentSize.width + 16)
-        let width = min(max(keys.isEmpty ? 150 : 100, queryWidth + itemContentWidth + gearWidth), screenWidth - 24)
+        let width = min(max(keys.isEmpty ? 150 : 100, itemContentWidth + gearWidth), screenWidth - 24)
         let height: CGFloat = 40
         shelfPanel.setContentSize(NSSize(width: width, height: height))
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let themed = themeScope != .interfaceOnly
-        let themeForStrip: ThemeColor? = themed ? themeColor : nil
+        let themeForStrip: ThemeColor? = themeColor
         let systemStrip = themeForStrip == nil || themeForStrip == .clear
         let lightStrip = systemStrip ? !isDark : false
         let iconColor: NSColor = lightStrip ? .black : .white
@@ -736,31 +802,22 @@ final class BarApp: NSObject, NSApplicationDelegate {
             : (themeForStrip?.strip ?? .clear).withAlphaComponent(stripOpacity)).cgColor
         effect.addSubview(tint)
         let background: NSView = effect
-        let itemArea = width - gearWidth - queryWidth
+        let itemArea = width - gearWidth
         shelfButtons = []
-        if queryWidth > 0 {
-            queryText.addAttribute(.foregroundColor, value: iconColor, range: NSRange(location: 0, length: queryText.length))
-            queryLabel.attributedStringValue = queryText
-            queryLabel.frame = NSRect(x: 10, y: 11, width: queryWidth - 12, height: 18)
-            queryLabel.setAccessibilityLabel(L10n.t("搜索：\(shelfQuery)", "Search: \(shelfQuery)"))
-            background.addSubview(queryLabel)
-        }
         if keys.isEmpty {
-            let label = NSTextField(labelWithString: shelfQuery.isEmpty
-                                    ? L10n.t("没有收纳项目", "No concealed items")
-                                    : L10n.t("没有匹配的项目", "No matches"))
-            label.textColor = iconColor.withAlphaComponent(shelfQuery.isEmpty ? 1 : 0.7); label.alignment = .center
-            label.frame = NSRect(x: queryWidth + 8, y: 11, width: itemArea - 16, height: 18)
+            let label = NSTextField(labelWithString: L10n.t("没有收纳项目", "No concealed items"))
+            label.textColor = iconColor; label.alignment = .center
+            label.frame = NSRect(x: 8, y: 11, width: itemArea - 16, height: 18)
             background.addSubview(label)
         } else {
-            let scroll = NSScrollView(frame: NSRect(x: queryWidth, y: 0, width: itemArea, height: height))
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: itemArea, height: height))
             scroll.drawsBackground = false; scroll.borderType = .noBorder
             scroll.hasHorizontalScroller = itemContentWidth > itemArea
             scroll.scrollerStyle = .overlay
             let document = NSView(frame: NSRect(x: 0, y: 0, width: max(itemContentWidth, itemArea), height: height))
             var x: CGFloat = 8
             for (index, key) in keys.enumerated() {
-                let button = BarControlButton(frame: NSRect(x: x, y: 2, width: widths[index], height: 36))
+                let button = ShelfItemButton(frame: NSRect(x: x, y: 2, width: widths[index], height: 36))
                 button.title = ""; button.isBordered = false
                 button.imagePosition = .imageOnly; button.imageScaling = .scaleProportionallyDown
                 button.identifier = .init(key); button.target = self; button.action = #selector(pressShelfItem(_:))
@@ -769,21 +826,39 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 image?.size = NSSize(width: 22, height: 22)
                 button.image = image
                 let outOfSight = overflowKeys.contains(key) && (modes[key] ?? 0) == 0
-                button.toolTip = outOfSight ? L10n.t("\(name(for: key))（菜单栏放不下）", "\(name(for: key)) (no room in the menu bar)") : name(for: key)
+                var tip = outOfSight ? L10n.t("\(name(for: key))（菜单栏放不下）", "\(name(for: key)) (no room in the menu bar)") : name(for: key)
+                if index < 9 { tip += L10n.t("　键盘：\(index + 1)", "  Key: \(index + 1)") }
+                button.toolTip = tip
                 button.contentTintColor = iconColor
                 button.setAccessibilityLabel(name(for: key))
-                document.addSubview(button); x += widths[index]
+                button.rightClick = { [weak self] button, event in self?.showShelfItemMenu(button, event: event) }
+                // Only hidden icons reorder: a covered one keeps the bar's order.
+                if (modes[key] ?? 0) > 0 {
+                    button.dragMoved = { [weak self] button, dx in self?.shelfDragMoved(button, by: dx) }
+                    button.dragEnded = { [weak self] button in self?.shelfDragEnded(button) }
+                }
+                if shelfNumbered && index < 9 {
+                    let number = NSTextField(labelWithString: "\(index + 1)")
+                    number.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+                    number.textColor = iconColor.withAlphaComponent(0.75)
+                    number.alignment = .right
+                    number.frame = NSRect(x: widths[index] - 13, y: button.isFlipped ? 24 : 0, width: 10, height: 12)
+                    number.setAccessibilityElement(false)
+                    button.addSubview(number)
+                }
+                document.addSubview(button)
+                x += widths[index]
                 shelfButtons.append(button)
             }
             scroll.documentView = document; background.addSubview(scroll)
         }
 
-        let divider = NSView(frame: NSRect(x: queryWidth + itemArea, y: 8, width: 1, height: 24))
+        let divider = NSView(frame: NSRect(x: itemArea, y: 8, width: 1, height: 24))
         divider.wantsLayer = true
         divider.layer?.backgroundColor = iconColor.withAlphaComponent(0.18).cgColor
         background.addSubview(divider)
 
-        let gear = BarControlButton(frame: NSRect(x: queryWidth + itemArea + 5, y: 6, width: 28, height: 28))
+        let gear = BarControlButton(frame: NSRect(x: itemArea + 5, y: 6, width: 28, height: 28))
         gear.title = ""
         gear.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: L10n.t("设置", "Settings"))
         gear.imagePosition = .imageOnly
@@ -985,35 +1060,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    func revealHiddenSection() async {
-        guard !busy else { return }
-        busy = true
-        defer { busy = false }
-        if !shownUntil.isEmpty {
-            let ids = Set(shownUntil.keys); shownUntil.removeAll()
-            await engine.conceal(items: ids)
-        } else {
-            let ids = Set(catalog.filter { modes[$0.key] == 1 }.map { $0.value.id })
-            await engine.reveal(items: ids)
-            for id in ids { shownUntil[id] = Date().addingTimeInterval(revealSeconds) }
-            _ = await settledSnapshot(for: ids)
-        }
-        positionControlBesideMenuIcons(in: await engine.freshSnapshot())
-    }
-
     func outsideClick() {
         guard !busy, (ignoreOutsideUntil ?? .distantPast) < Date() else { return }
         let location = NSEvent.mouseLocation
-        if expanded && options[.keepShelfOpen] != 1,
+        if expanded,
            shelfPanel?.frame.contains(location) != true,
            controlPanel?.frame.contains(location) != true { closeShelf() }
-        // The walk's frames are those of the control's bar.
-        guard options[.blankClick] == 1, let screen = controlPanel?.screen ?? NSScreen.screens.first,
-              location.y >= screen.frame.maxY - 40, location.x > screen.frame.midX,
-              controlPanel?.frame.contains(location) != true else { return }
-        let cgPoint = CGPoint(x: location.x, y: screen.frame.maxY - location.y)
-        guard !currentFrames.contains(where: { $0.insetBy(dx: -4, dy: -4).contains(cgPoint) }) else { return }
-        statusClicked()
     }
 
     @objc func requestAccessibility() {
@@ -1047,6 +1099,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     statusItem?.button?.toolTip = L10n.t(
                         "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                         "YoungBar: click to show concealed icons; right-click to choose apps")
+                    applyUpdateNotice()
                     renderWindow(force: true)
                     settings?.languageChanged()
                     return
@@ -1056,24 +1109,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     renderWindow(force: true)
                     return
                 }
-                if [.appearanceMode, .themeColor, .stripOpacity, .themeScope].contains(key) {
+                if [.appearanceMode, .themeColor, .stripOpacity].contains(key) {
                     applyAppearance()
                     shelfState = nil
                     if expanded { populateShelf() }
                     renderWindow(force: true)
                     return
                 }
-                if key == .keepShelfOpen {
-                    if value == 1 { showShelf() }
-                    else { closeShelf() }
-                }
-                if key == .notchOverflow {
-                    shelfState = nil
-                    Task { await refresh() }
-                }
                 renderWindow()
             }
-            controller.onRefresh = { [weak self] in self?.refreshClicked() }
             controller.onHotKeyRecording = { [weak self] recording in
                 if recording { self?.unregisterHotKey() } else { self?.registerHotKey() }
             }
@@ -1305,13 +1349,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
             await engine.conceal(items: Set(temporary))
             positionControlBesideMenuIcons(in: await engine.freshSnapshot())
         }
-    }
-
-    @objc func toggleLeftClickMenu() {
-        options[.leftClickMenu] = options[.leftClickMenu] == 1 ? 0 : 1
-        UserDefaults.standard.set(options, forKey: "barOptions")
-        feedback = options[.leftClickMenu] == 1 ? L10n.t("左键点击改为显示菜单", "Left click now shows the menu") : L10n.t("左键点击改为展开收纳", "Left click now opens the strip")
-        renderWindow(force: true)
     }
 
     /// Bulk visibility is transient: it builds a throw-away model instead of

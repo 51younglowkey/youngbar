@@ -1425,10 +1425,42 @@ extension BarApp {
         try? await Task.sleep(for: .milliseconds(600))
         result["whatsNewShown"] = whatsNewWindow?.isVisible == true
         result["whatsNewWindow"] = whatsNewWindow?.windowNumber ?? 0
-        if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_EXTRAS_HOLD"] ?? "") {
-            writeJSON(["window": whatsNewWindow?.windowNumber ?? 0], name: "extras-hold.json")
+        result["notesLanguageEnglish"] = updateIntro?.english ?? false
+        result["tourSteps"] = updateIntro?.steps.count ?? 0
+        // Every page, held for a screenshot when asked: extras-hold.json
+        // names the window and the page on screen.
+        let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_EXTRAS_HOLD"] ?? "")
+        func show(_ page: Int, _ label: String) async {
+            updateIntro?.page = page
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let hold else { return }
+            writeJSON(["window": whatsNewWindow?.windowNumber ?? 0, "page": label], name: "extras-hold.json")
             try? await Task.sleep(for: .seconds(hold))
         }
+        // Chinese first, whatever this Mac's language, so both halves get seen.
+        func useLanguage(english: Bool) {
+            guard let intro = updateIntro, let url = Bundle.main.url(forResource: "ReleaseNotes", withExtension: "md"),
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+            intro.english = english
+            intro.shortcut = shortcutForTour(english: english)
+            intro.notes = ReleaseNotes.blocks(ReleaseNotes.localized(text, preferredLanguages: [english ? "en" : "zh-Hans"]))
+        }
+        useLanguage(english: false)
+        let pages = 1 + (updateIntro?.steps.count ?? 0)
+        for page in 0..<pages { await show(page, "zh-\(page)") }
+        // The try-it step: a real ⌘⌘ while the tour is up.
+        updateIntro?.page = 1
+        await postDoubleCommand()
+        try? await Task.sleep(for: .milliseconds(700))
+        result["tourSawShortcut"] = updateIntro?.triedShortcut == true
+        closeShelf()
+        await show(1, "zh-1-done")
+        // The English half, as an English system would get it.
+        useLanguage(english: true)
+        result["englishNotesFirst"] = updateIntro?.notes.first.map { "\($0)" } ?? ""
+        await show(0, "en-0")
+        await show(1, "en-1")
+        if hold != nil { writeJSON(["done": true], name: "extras-hold.json") }
         whatsNewWindow?.orderOut(nil)
 
         let report = await diagnosticsReport()
@@ -1561,9 +1593,8 @@ extension BarApp {
 
     /// Opt-in (`YOUNGBAR_AUTOUPDATETEST=1`, usually with
     /// `YOUNGBAR_UPDATE_PRETEND_VERSION`): runs the daily check now and
-    /// records whether the control got its dot and the menu its line, and
-    /// that no window opened. `YOUNGBAR_AUTOUPDATE_HOLD=<seconds>` keeps the
-    /// dot up for a screenshot.
+    /// records whether the menu got its line, and that no window opened.
+    /// `YOUNGBAR_AUTOUPDATE_HOLD=<seconds>` keeps the state up a while.
     func runAutoUpdateTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "current": currentVersion]
         defer { writeJSON(result, name: "autoupdatetest.json") }
@@ -1571,12 +1602,11 @@ extension BarApp {
         lastAutoUpdateCheck = nil
         await autoUpdateCheckIfDue()
         result["found"] = availableUpdate?.version.description ?? ""
-        result["badge"] = controlButton?.badgeColor != nil
         result["menuTop"] = configurationMenu().items.first?.title ?? ""
         result["windowOpened"] = updateWindow?.isVisible == true
         result["tooltip"] = controlButton?.toolTip ?? ""
         if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_AUTOUPDATE_HOLD"] ?? "") {
-            writeJSON(["badge": true], name: "autoupdate-hold.json")
+            writeJSON(["found": true], name: "autoupdate-hold.json")
             try? await Task.sleep(for: .seconds(hold))
         }
         startAutoUpdateChecks()

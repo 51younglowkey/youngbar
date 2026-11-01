@@ -41,8 +41,8 @@ remove the old YoungBar row and add it again.
 ## 4. Updates
 
 YoungBar asks GitHub for the latest release once a day (from 0.1.4; 0.1.2 and
-0.1.3 only when you click *Check for Updates…*). A newer version puts a small
-dot on ••• and a line at the top of its right-click menu; choosing it, or
+0.1.3 only when you click *Check for Updates…*). A newer version adds a line
+at the top of the ••• right-click menu; choosing it, or
 *Check for Updates…* (••• menu or Settings → General), offers *Install and
 Relaunch*: it
 downloads the zip, checks its SHA-256 and that the new app is signed with the

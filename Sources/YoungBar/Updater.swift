@@ -7,9 +7,9 @@ import Security
 import SwiftUI
 import YoungBarCore
 
-/// In-app updates from GitHub Releases. YoungBar asks GitHub once a day
-/// and marks the control when a newer version is out; Check for Updates
-/// asks right away. Installing is always the user's click.
+/// In-app updates from GitHub Releases. YoungBar asks GitHub once a day;
+/// a newer version adds a line at the top of the control's right-click
+/// menu (nothing on the bar itself). Check for Updates asks right away. Installing is always the user's click.
 ///
 /// Installing: download the zip and its .sha256, check the digest, unzip,
 /// check the new app is signed by the same certificate as this one, then
@@ -60,7 +60,7 @@ struct UpdateView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ScrollView {
-                    NotesView(blocks: ReleaseNotes.blocks(notes),
+                    NotesView(blocks: ReleaseNotes.blocks(ReleaseNotes.localized(notes, preferredLanguages: Locale.preferredLanguages)),
                               accent: theme == .clear ? .accentColor : Color(nsColor: theme.accent))
                         .padding(14)
                 }
@@ -194,13 +194,13 @@ extension BarApp {
             let release = try await fetchLatestRelease()
             guard isNewer(release) else {
                 availableUpdate = nil
-                applyUpdateBadge()
+                applyUpdateNotice()
                 model.state = .upToDate(currentVersion)
                 return
             }
             pendingRelease = release
             availableUpdate = release
-            applyUpdateBadge()
+            applyUpdateNotice()
             model.state = .available(release.version.description, release.notes)
         } catch is CancellationError {
         } catch let error as URLError where error.code == .cancelled {
@@ -232,21 +232,19 @@ extension BarApp {
         // Offline or GitHub busy: keep what we knew, try again tomorrow.
         guard let release = try? await fetchLatestRelease() else { return }
         availableUpdate = isNewer(release) ? release : nil
-        applyUpdateBadge()
+        applyUpdateNotice()
     }
 
-    func applyUpdateBadge() {
+    /// The control's tooltip says so too; the menu line is built with the
+    /// menu (`configurationMenu`).
+    func applyUpdateNotice() {
         let tip = L10n.t("YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                          "YoungBar: click to show concealed icons; right-click to choose apps")
         guard let control = controlButton else { return }
         if let release = availableUpdate {
-            control.badgeColor = themeColor == .clear ? .controlAccentColor : themeColor.accent
             control.toolTip = tip + L10n.t("\n有新版本 \(release.version)，右键菜单里更新", "\nYoungBar \(release.version) is available; update from the right-click menu")
-            control.setAccessibilityLabel(L10n.t("YoungBar，有新版本 \(release.version)", "YoungBar, \(release.version) available"))
         } else {
-            control.badgeColor = nil
             control.toolTip = tip
-            control.setAccessibilityLabel("YoungBar")
         }
     }
 

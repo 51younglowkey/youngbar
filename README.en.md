@@ -23,7 +23,7 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 
 YoungBar lives in the menu bar (•••); it has no Dock icon.
 
-**Updating**: YoungBar checks once a day (from 0.1.4); a newer version puts a dot on •••, and the first line of its right-click menu shows the notes with *Install and Relaunch*, which downloads, verifies and swaps it in place. *Check for Updates…* works any time. Running the install command again, or downloading the zip, works too.
+**Updating**: YoungBar checks once a day (from 0.1.4); a newer version adds a line at the top of the ••• right-click menu, which shows the notes with *Install and Relaunch*, which downloads, verifies and swaps it in place. *Check for Updates…* works any time. Running the install command again, or downloading the zip, works too.
 
 ### Install with an agent
 
@@ -55,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Few settings**: General has open at login, language, the shortcut and three strip switches; everything else is a fixed default.
 - **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
 - **First-run guide**: one permission, then where things are.
-- **In-app updates**: asks GitHub once a day; a newer version puts a dot on •••, and the first line of its menu downloads it, checks the SHA-256 and the signing certificate (it must be the same as this app's) and relaunches. Nothing installs by itself.
+- **In-app updates**: asks GitHub once a day; a newer version adds a line at the top of the ••• right-click menu that downloads it, checks the SHA-256 and the signing certificate (it must be the same as this app's) and relaunches. Nothing installs by itself.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
 - **Local only**: no telemetry, no screen capture; the only network use is the daily update check. About 0.3% CPU at rest.

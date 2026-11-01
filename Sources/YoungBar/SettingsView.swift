@@ -352,7 +352,7 @@ struct GeneralPane: View {
                     Button(L10n.t("检查更新…", "Check for Updates…")) { model.send(.checkUpdates) }
                 } label: {
                     Text(L10n.t("版本 \(Self.version)", "Version \(Self.version)"))
-                    Text(L10n.t("每天自动检查；有新版本时 ••• 上出现小圆点", "Checked daily; a dot on ••• means a new version"))
+                    Text(L10n.t("每天自动检查；有新版本时右键 ••• 会提示", "Checked daily; a new version shows in the ••• right-click menu"))
                 }
                 LabeledContent {
                     Button(L10n.t("打开", "Open")) { model.send(.showGuide) }

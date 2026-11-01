@@ -14,30 +14,6 @@ import YoungBarCore
 final class BarControlButton: NSButton {
     var rightClick: (() -> Void)?
     var hover: ((Bool) -> Void)?
-    /// A dot at the top right: a newer version is out.
-    var badgeColor: NSColor? {
-        didSet {
-            badge.isHidden = badgeColor == nil
-            badge.layer?.backgroundColor = badgeColor?.cgColor
-            needsLayout = true
-        }
-    }
-    private let badge: NSView = {
-        let view = NSView()
-        view.wantsLayer = true
-        view.layer?.cornerRadius = 3
-        view.isHidden = true
-        return view
-    }()
-
-    override func layout() {
-        super.layout()
-        if badge.superview == nil { addSubview(badge) }
-        let size: CGFloat = 6
-        let top: CGFloat = 3
-        badge.frame = NSRect(x: bounds.midX + 5, y: isFlipped ? top : bounds.height - top - size,
-                             width: size, height: size)
-    }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
@@ -137,11 +113,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var guideCloseObserver: NSObjectProtocol?
     var updateWindow: NSWindow?
     var whatsNewWindow: NSWindow?
+    var updateIntro: UpdateIntroModel?
     var updateModel: UpdateModel?
     var updateTask: Task<Void, Never>?
     var pendingRelease: ReleaseInfo?
-    /// A newer release found by the daily check: a dot on the control and
-    /// a line at the top of its menu until it is installed.
+    /// A newer release found by the daily check: a line at the top of the
+    /// control's right-click menu (and its tooltip) until it is installed.
     var availableUpdate: ReleaseInfo?
     var autoUpdateTask: Task<Void, Never>?
     var lastAutoUpdateCheck: Date?
@@ -294,6 +271,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             // itself, the old "Show in bar" mode, flashed and doubled the
             // bar while it reflowed; it is gone.)
             showShelf(selectFirst: fromKeyboard)
+            if fromKeyboard, whatsNewWindow?.isVisible == true { updateIntro?.triedShortcut = true }
             Task { await refresh() }
         }
     }
@@ -310,7 +288,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let mode = AppearanceMode(rawValue: options[.appearanceMode] ?? 0) ?? .system
         NSApp.appearance = mode.appearance
         NSApp.applicationIconImage = themeIcon(themeColor)
-        applyUpdateBadge()
+        applyUpdateNotice()
     }
 
     /// Every AX walk of the menu bar costs CPU, so walks follow what the
@@ -679,7 +657,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         panel.makeKeyAndOrderFront(nil)
         controlPanel = panel
         controlButton = control
-        applyUpdateBadge()
+        applyUpdateNotice()
     }
 
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
@@ -1113,7 +1091,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     statusItem?.button?.toolTip = L10n.t(
                         "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                         "YoungBar: click to show concealed icons; right-click to choose apps")
-                    applyUpdateBadge()
+                    applyUpdateNotice()
                     renderWindow(force: true)
                     settings?.languageChanged()
                     return

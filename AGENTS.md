@@ -39,7 +39,7 @@ Sources/YoungBar/
   main.swift            AppDelegate、刷新节奏、控制条、收纳条、菜单、排序（~1400 行）
   ShelfKeyboard.swift   收纳条键盘导航、数字键 1–9（ShelfPanel，非激活面板也能拿键盘焦点；没有搜索）
   ShelfItems.swift      收纳条图标：拖动排序（只改保存的顺序，不 reveal）、右键改显示方式
-  WhatsNew.swift        更新后第一次启动显示「本次更新内容」（build.sh 把 docs/RELEASE-<版本>.md 打进 bundle）
+  WhatsNew.swift        更新后第一次启动：先「本次更新内容」，再一步步的新功能引导（可跳过）；跟随**系统语言**。引导页在 `UpdateIntroModel.steps` 里按版本写，没写的版本只显示更新内容
   NotesView.swift       更新内容 / 更新窗口里的说明，按「区块 + 短句」绘制（YoungBarCore 的 ReleaseNotes.blocks）
   HotKey.swift          全局快捷键：组合键走 Carbon；默认「连按两下 ⌘」用全局/本地事件监视器（YoungBarCore 的 DoubleTapDetector）
   NotchOverflow.swift   被 macOS « 收走 / 被刘海挡住的图标；显示器变化时重装控件
@@ -58,7 +58,7 @@ Vendor/
   PelmetEngine          隐藏/展开/排序、MenuBarClientCore 评估接口
 ```
 
-- 更新器（`Updater.swift`）：启动 10 秒后、之后每天一次后台查 GitHub（始终开启，没有开关）；有新版本只在控件上加圆点、菜单第一行加「有新版本」，**不自动安装**。点「检查更新」时立即查。安装：下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
+- 更新器（`Updater.swift`）：启动 10 秒后、之后每天一次后台查 GitHub（始终开启，没有开关）；有新版本只在右键菜单第一行加「有新版本」（和控件的提示文字），菜单栏上不加圆点（用户要求），**不自动安装**。点「检查更新」时立即查。安装：下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
 - 刷新：每次刷新是一次完整 AX 遍历，耗 CPU。收纳条/设置打开或有定时展开时 1 秒一次，空闲 4 秒一次；应用启动退出、唤醒、显示器变化立即刷新。设置窗口不可见时不要重建它的模型。
 - 溢出：macOS 27 菜单栏满时在左端（刘海右侧）放一个 «，放不下的项 AX 位置互相重叠地堆在那里。判断规则在 `YoungBarCore/Overflow.swift`（与 Pelmet `PlacementGeometry.overflowTrapped` 相同）。
 
@@ -73,7 +73,7 @@ Vendor/
 - 自检开关（环境变量）：`YOUNGBAR_SELFTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_ORDERTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_HOTKEYTEST`、`YOUNGBAR_PINNEDTEST`、`YOUNGBAR_GEARTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_ABOUTTEST`、`YOUNGBAR_CONCEALTEST`。
 - `YOUNGBAR_NOASSERTIONTEST`：没有要隐藏的项时的菜单栏（引擎撤掉断言，macOS 会绘制原生状态项），检查不会多出一个 •••；`YOUNGBAR_NOASSERTION_HOLD=秒` 保持以便截图。
 - 0.1.2 新增：`YOUNGBAR_UPDATETEST`（查 GitHub、记录结果和窗口号；`YOUNGBAR_SIGCHECK_PATH` 检查某个 app 是否与本 app 同证书；`YOUNGBAR_UPDATE_INSTALL=1` 真的安装）。配合 `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.0`（仅测试版）可以端到端升级到线上最新版：它会**替换正在运行的 bundle**（`build/YoungBar.app`），测完要重新 `sh Scripts/build.sh`。
-- 0.1.4 新增：`YOUNGBAR_EXTRASTEST`（更新内容窗口、诊断文本、收纳条图标右键改为始终隐藏再恢复；`YOUNGBAR_EXTRAS_HOLD=秒`）、`YOUNGBAR_AUTOUPDATETEST`（配合 `YOUNGBAR_UPDATE_PRETEND_VERSION`：后台检查→圆点、菜单行、不弹窗；`YOUNGBAR_AUTOUPDATE_HOLD=秒`）、`YOUNGBAR_SHELFDRAGTEST`（真实鼠标在收纳条里拖动排序，检查保存顺序、没有 reveal，结束恢复顺序）、`YOUNGBAR_AUTOHIDETEST`（把一个显示中的应用图标当成新图标，检查自动收纳，结束恢复）。`YOUNGBAR_KEYBOARDTEST` 改为真实按键连按两下 ⌘、⌘⇧ / 慢按不触发、数字键、自定义快捷键并恢复；`YOUNGBAR_KEYBOARD_DIGIT=1` 时还会用数字键真的点开一个第三方项的菜单再 Esc。
+- 0.1.4 新增：`YOUNGBAR_EXTRASTEST`（更新内容窗口、诊断文本、收纳条图标右键改为始终隐藏再恢复；`YOUNGBAR_EXTRAS_HOLD=秒`）、`YOUNGBAR_AUTOUPDATETEST`（配合 `YOUNGBAR_UPDATE_PRETEND_VERSION`：后台检查→菜单行、不弹窗；`YOUNGBAR_AUTOUPDATE_HOLD=秒`）、`YOUNGBAR_SHELFDRAGTEST`（真实鼠标在收纳条里拖动排序，检查保存顺序、没有 reveal，结束恢复顺序）、`YOUNGBAR_AUTOHIDETEST`（把一个显示中的应用图标当成新图标，检查自动收纳，结束恢复）。`YOUNGBAR_KEYBOARDTEST` 改为真实按键连按两下 ⌘、⌘⇧ / 慢按不触发、数字键、自定义快捷键并恢复；`YOUNGBAR_KEYBOARD_DIGIT=1` 时还会用数字键真的点开一个第三方项的菜单再 Esc。
 - 0.1.1 新增：`YOUNGBAR_KEYBOARDTEST`（快捷键打开、方向键、Esc、自定义快捷键并恢复）、`YOUNGBAR_HOTKEYPROBE`（多组快捷键各按一次）、`YOUNGBAR_OVERFLOWTEST`（临时显示全部隐藏项制造拥挤，记录被 « 收走的项，恢复模式和顺序；`YOUNGBAR_OVERFLOW_HOLD=秒` 保持拥挤状态以便截图）、`YOUNGBAR_CONFIGTEST`（导出→改→导入）、`YOUNGBAR_SHOWGUIDE` / `YOUNGBAR_SHOWSETTINGS=general|layout|appearance`（打开窗口并把 windowNumber 写进 JSON，配合 `screencapture -l <id>` 截真实窗口）。
 - 本机 shell 可以直接 `screencapture -x -R 700,0,1100,38` 截菜单栏；`cacheDisplay` 的离屏渲染没有窗口背景，深色模式下文字会看不见，不能当外观证据。
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。
@@ -88,7 +88,7 @@ Vendor/
 - **混合结构**：设置窗口内容用 SwiftUI（`Form` + `.formStyle(.grouped)`，对齐 System Settings 的间距、对齐和控件），菜单栏控件、收纳条、右键菜单和所有改菜单栏的逻辑保持 AppKit。
 - 设置页里不要再手写坐标；新选项就是 `Section` 里加一行：名称在左、控件在右、说明用第二个 `Text`。布尔值用开关。
 - **选项要少**（0.1.4 用户要求）：能定成合理默认的就不做开关。0.1.4 去掉了：点击 ••• 的方式、始终显示收纳条、点击空白处展开、放不下的图标进收纳条（固定开）、自动收起秒数（固定 20 秒）、主题应用范围（固定全部）、左键显示菜单、自动检查更新开关、刷新列表按钮；权限行只在未授权时出现。加新开关前先想能不能直接定默认。
-- **更新日志**：`docs/RELEASE-<版本>.md` 的「新增 / 优化 / 移除 / 修复」每条一句话、十来个字（app 里原样显示）；「说明 / 校验」只在 GitHub 上看，app 会跳过。
+- **更新日志**：`docs/RELEASE-<版本>.md` 先中文、再 `<!-- en -->`、再英文（GitHub 两段都显示，app 按系统语言只显示一段）。「新增 / 优化 / 移除 / 修复」每条一句话、十来个字（app 里原样显示）；开头可以有一段作者的话；「说明 / Notes / 校验」只在 GitHub 上看，app 会跳过。
 - **少一步点击**：两到四个选项一律用分段按钮（`.pickerStyle(.segmented)`），一下就选中；弹出菜单只留给选项多的场合（目前只有语言）。
 - **保留个性**：窗口是带主题色的玻璃（`NSGlassEffectView`，染色 10%，内容区遮罩深色 46% / 浅色 58%），侧栏是系统侧栏毛玻璃 + 8% 主题色，顶部是主题角色大图；选中色、开关、分段按钮都跟随主题色。
 - **配色规则**：蓝 / 粉 / 黄在 OKLCH 里取同一亮度和彩度，只换色相（强调色 L 0.70 C 0.13，收纳条色 L 0.55 C 0.12）。新增配色也按这个规则算，不要单独调某个颜色更亮。收纳条 = 系统毛玻璃 + 主题色 × 不透明度（`stripOpacity`，30–100）。

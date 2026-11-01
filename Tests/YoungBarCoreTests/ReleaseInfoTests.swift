@@ -85,6 +85,15 @@ import Testing
         #expect(ReleaseNotes.forDisplay(notes) == "【新增】\n• 数字键：按 1 打开\n  • 子项")
     }
 
+    @Test func picksTheReadersLanguage() {
+        let body = "## 新增\n- 中文\n## 说明\n- x\n<!-- en -->\n## New\n- English\n## Notes\n- y\n## 校验 / Checksum\n- z"
+        #expect(ReleaseNotes.blocks(ReleaseNotes.localized(body, preferredLanguages: ["zh-Hans-CN", "en"])) ==
+                [.section("新增"), .bullet("中文", level: 0)])
+        #expect(ReleaseNotes.blocks(ReleaseNotes.localized(body, preferredLanguages: ["en-GB", "zh-Hans"])) ==
+                [.section("New"), .bullet("English", level: 0)])
+        #expect(ReleaseNotes.localized("## 新增", preferredLanguages: ["en"]) == "## 新增")
+    }
+
     @Test func fencesAndBlankLinesAreDropped() {
         #expect(ReleaseNotes.blocks("## 修复\n\n```\nx\n```\n- a\n\n\nplain\n") == [
             .section("修复"), .bullet("a", level: 0), .text("plain"),

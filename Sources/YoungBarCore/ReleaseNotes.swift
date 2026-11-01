@@ -14,7 +14,19 @@ public enum ReleaseNotes {
 
     /// Headings whose section is only about getting the build.
     static let skippedSections = ["说明", "安装", "升级", "校验", "要求", "已知限制",
-                                  "Install", "Updating", "Checksum", "Requirements", "Known"]
+                                  "Notes", "Install", "Updating", "Checksum", "Requirements", "Known"]
+
+    /// A release body is Chinese, then this marker, then English; GitHub
+    /// shows both (the marker is an HTML comment), the app one of them.
+    public static let englishMarker = "<!-- en -->"
+
+    /// The half for the reader: English unless their first preferred
+    /// language is Chinese. A body without the marker is returned whole.
+    public static func localized(_ markdown: String, preferredLanguages: [String]) -> String {
+        guard let range = markdown.range(of: englishMarker) else { return markdown }
+        let chinese = preferredLanguages.first?.hasPrefix("zh") ?? false
+        return String(chinese ? markdown[..<range.lowerBound] : markdown[range.upperBound...])
+    }
 
     public static func blocks(_ markdown: String) -> [Block] {
         var blocks: [Block] = []

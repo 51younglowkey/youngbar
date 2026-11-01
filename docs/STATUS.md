@@ -3,7 +3,7 @@
 > 只写**当前**状态和它的证据。0.1.0 及之前的阶段记录（截图缓存、旧 AppKit 设置窗口等）
 > 已原样移到 [`JOURNAL.md`](JOURNAL.md) 附录。
 >
-> 最后核对：**2026-10-29 21:20 +00:00**，版本 **0.1.2 (3)**（未发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
+> 最后核对：**2026-11-01 02:40 +00:00**，版本 **0.1.3 (4)**（2.2 的修复），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 
 ## 1. 构建
 
@@ -45,6 +45,19 @@
 | 端到端安装 | ✅ 下载 → SHA-256 → 解压 → 版本/签名检查 → 正常退出 → 脚本换 bundle → 重新打开；新进程 PID 不同，`build/YoungBar.app` 变成 GitHub 上的 0.1.1 发布包 | `update.log`：`installed 0.1.1 at …/build/YoungBar.app`；`strings` 无测试钩子 |
 | 升级后权限 | ✅ 新版本照常隐藏图标（辅助功能授权保留） | 升级后菜单栏截图只剩常显项 |
 | 更正 | 第一次端到端时卡在「正在安装」：在并发任务里直接调 `NSApp.terminate` 与 `applicationShouldTerminate` 的异步回复互相等待（`sample` 显示主线程停在 `-[NSApplication _shouldTerminate]` 的嵌套事件循环）。改为 run loop 上的 `perform` 后通过 | `sample` 输出；第二次 `update.log` |
+
+## 2.2 用户反馈：多出一个 •••（2026-11-01，0.1.3）
+
+小红书与交流群反馈「三个点和菜单栏图标重叠」「会多三个点 / 两个隐藏 logo」。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 原因 | 控件是一块浮在菜单栏上的面板，下面垫着 YoungBar 自己的原生状态项（标题 `•••`）占位。有隐藏断言时 macOS 不绘制这个状态项；**没有要隐藏的项时**（新用户、隐藏的应用都没在运行）引擎撤掉断言，macOS 就把 `•••` 画出来，和浮动控件叠在一起 | `noassertiontest.json`：`assertionBare:false`，原生项 x 1037.5、控件 x 1035；![修复前](images/no-assertion-before.png)（爱心控件旁露出原生 `•••` 的点） |
+| 修复 | 原生状态项改为空白占位（无标题，保留 accessibility label），只由浮动控件画图标 | `nativeTitle:""`；![修复后](images/no-assertion-after.png) 只剩一个控件 |
+| 复现方式 | `YOUNGBAR_NOASSERTIONTEST=1`（可加 `YOUNGBAR_NOASSERTION_HOLD=秒`）：临时给引擎空模型，不改保存的模式，结束后恢复 | 两次运行均 `restored:true`，`concealedAfter` 与 `concealedBefore` 相同 |
+| 单元测试 | 23 passed | `swift test --disable-sandbox` |
+
+边界：本机控件图标是爱心；用户用的默认省略号没有单独截图，但原生项与控件位置的重叠关系相同。没有在拥挤（« 收走）的同时又无断言的状态下测过。
 
 边界：只测了 `build/` 下、目录可写的情况；`/Applications` 里由非管理员用户运行（目录不可写）时会提示去 GitHub 手动下载，没有实测。下载中途取消没有实测。
 

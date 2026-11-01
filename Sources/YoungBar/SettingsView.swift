@@ -343,7 +343,7 @@ struct GeneralPane: View {
                 }
                 Toggle(isOn: model.boolBinding(.shelfNumbers, default: true)) {
                     Text(L10n.t("图标下方显示数字", "Show numbers under icons"))
-                    Text(L10n.t("用快捷键打开时显示 1–9；关掉后按数字照样能打开", "Shown when opened by shortcut; the number keys work either way"))
+                    Text(L10n.t("收纳条里的前 9 个图标标出 1–9；关掉后按数字照样能打开", "The first nine icons are numbered; the number keys work either way"))
                 }
                 Toggle(L10n.t("鼠标悬停 0.5 秒后打开", "Open on hover after 0.5 s"),
                        isOn: model.boolBinding(.hoverExpand))

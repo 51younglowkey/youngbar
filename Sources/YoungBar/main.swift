@@ -113,7 +113,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Typed into the open strip: filters it to matching items.
     /// Keyboard selection in the strip, an index into `shelfButtons`.
     var shelfSelection: Int?
-    /// Opened from the keyboard: the first nine icons show their number.
+    /// The first nine icons show their number (unless turned off), however
+    /// the strip was opened: the number keys work after a click too.
     var shelfNumbered = false
     var shelfButtons: [NSButton] = []
     var shelfIconColor: NSColor = .white
@@ -722,7 +723,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         expanded = true
         shelfAnchored = false
         shelfSelection = selectFirst ? 0 : nil
-        shelfNumbered = selectFirst && options[.shelfNumbers] != 0
+        shelfNumbered = options[.shelfNumbers] != 0
         shelfState = nil
         // Above the menu bar while browsing; lowered while an item's own menu
         // or panel is open so that opens on top of the strip.

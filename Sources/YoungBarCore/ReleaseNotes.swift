@@ -16,14 +16,17 @@ public enum ReleaseNotes {
     static let skippedSections = ["说明", "安装", "升级", "校验", "要求", "已知限制",
                                   "Notes", "Install", "Updating", "Checksum", "Requirements", "Known"]
 
-    /// A release body is Chinese, then this marker, then English; GitHub
-    /// shows both (the marker is an HTML comment), the app one of them.
-    public static let englishMarker = "<!-- en -->"
+    /// A release body is Chinese, then this heading on its own line, then
+    /// English. GitHub shows both; this app shows one. Older YoungBar
+    /// versions (0.1.2–0.1.3) print the whole body in their update window,
+    /// where it reads as a plain "English" title, so it can't be a hidden
+    /// marker.
+    public static let englishMarker = "# English"
 
     /// The half for the reader: English unless their first preferred
     /// language is Chinese. A body without the marker is returned whole.
     public static func localized(_ markdown: String, preferredLanguages: [String]) -> String {
-        guard let range = markdown.range(of: englishMarker) else { return markdown }
+        guard let range = markdown.range(of: "\n" + englishMarker + "\n") else { return markdown }
         let chinese = preferredLanguages.first?.hasPrefix("zh") ?? false
         return String(chinese ? markdown[..<range.lowerBound] : markdown[range.upperBound...])
     }

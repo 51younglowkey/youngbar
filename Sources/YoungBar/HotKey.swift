@@ -26,6 +26,16 @@ extension BarApp {
         return hotKey.display(keyName: Self.keyName(for: hotKey.keyCode))
     }
 
+    /// The shortcut as something to do, for sentences: "连按两下 ⌘" /
+    /// "按 ⌃⌥B"; nil when there is none.
+    var hotKeyAction: String? {
+        guard let hotKey else { return nil }
+        if hotKey.isDoubleTap {
+            return L10n.t("连按两下 \(hotKey.modifierSymbols)", "press \(hotKey.modifierSymbols) twice")
+        }
+        return L10n.t("按 \(hotKeyDisplay)", "press \(hotKeyDisplay)")
+    }
+
     /// (Re)registers the saved shortcut. Returns false when macOS refuses
     /// it, usually because another app already owns the combination.
     @discardableResult

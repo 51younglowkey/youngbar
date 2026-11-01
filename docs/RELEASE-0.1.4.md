@@ -36,9 +36,7 @@
 - 默认快捷键从 ⌃⌥B 改为连按两下 ⌘，自己改过的不变
 - 以后有新版本，右键 ••• 菜单会提示更新
 
-<!-- en -->
-
-# YoungBar 0.1.4
+# English
 
 I was in Manchester yesterday watching Man City lose 0–1 to Brighton. A bit gutted — but no worries, the new version is ready!
 

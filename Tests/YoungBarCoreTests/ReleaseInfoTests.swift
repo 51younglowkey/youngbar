@@ -86,7 +86,7 @@ import Testing
     }
 
     @Test func picksTheReadersLanguage() {
-        let body = "## 新增\n- 中文\n## 说明\n- x\n<!-- en -->\n## New\n- English\n## Notes\n- y\n## 校验 / Checksum\n- z"
+        let body = "## 新增\n- 中文\n## 说明\n- x\n# English\n## New\n- English\n## Notes\n- y\n## 校验 / Checksum\n- z"
         #expect(ReleaseNotes.blocks(ReleaseNotes.localized(body, preferredLanguages: ["zh-Hans-CN", "en"])) ==
                 [.section("新增"), .bullet("中文", level: 0)])
         #expect(ReleaseNotes.blocks(ReleaseNotes.localized(body, preferredLanguages: ["en-GB", "zh-Hans"])) ==

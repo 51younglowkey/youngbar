@@ -75,8 +75,10 @@
 | 收纳条里拖动排序 | ✅ 真实鼠标把第一个拖到最后：收纳条和保存的顺序都跟着变，菜单栏没有任何图标被显示；测试后恢复顺序 | `shelfdragtest.json`：`stripReordered`、`savedOrderFollows`、`nothingRevealed`、`orderRestored` |
 | 新图标自动收纳（默认关） | ✅ 打开选项后，把 State 当作新图标：自动设为隐藏并收进收纳条，提示「新图标已放进收纳条：State」；第一次运行（没有保存过顺序）不会触发；Apple 的图标不受影响；测试后恢复 | `autohidetest.json`：`modeAfter:1`、`concealed`、`inStrip`、`shownAgain`、`restored` |
 | 更新内容窗口 | ✅ 从 0.1.3 升到 0.1.4 后第一次启动自动弹出；按「新增 / 优化 / 移除 / 修复」分区、每条一句短话，不含安装命令和校验；••• 菜单「本次更新内容…」可再打开；新安装不弹 | 真实启动截图；`extrastest.json`：`whatsNewShown`、`notesHaveNoInstall`；![更新内容](images/whats-new-0.1.4.png) |
+| 更新后先走引导 | ✅ 模拟从 0.1.3 升级（`lastLaunchedVersion=0.1.3` 后启动）：先弹出使用引导，授权那步显示「已授权」；点「完成」（Finder 在前台时一次真实点击就生效）后接着弹出更新内容。引导第 3 步改为「或连按两下 ⌘」 | ![引导](images/guide-after-update-0.1.4.png) |
+| 旧版更新窗口 | ✅ 中英分隔改为单独一行 `# English`：0.1.2/0.1.3 的更新窗口会把发布说明原样显示，隐藏注释会露出来，标题则显示为干净的「English」 | 单元测试 `picksTheReadersLanguage` |
 | 新功能引导 | ✅ 更新内容页点「了解新功能」进入 5 页引导（连按两下 ⌘ / 数字键 / 拖动与右键 / 新图标自动收纳 / 更新提示与反馈），每页有跳过、上一步、下一步；第 1 页真的连按两下 ⌘ 后显示「成功打开了收纳条」；第 4 页的开关直接改设置 | `extrastest.json`：`tourSteps:5`、`tourSawShortcut:true`；![引导](images/update-tour-0.1.4.png) |
-| 中英文 | ✅ 更新日志一个文件两段（`<!-- en -->` 分隔），更新内容和引导跟随**系统语言**（不是 YoungBar 的语言设置）。本机系统首选 en-GB，所以本机显示英文 | `AppleLanguages: en-GB, zh-Hans-CN`；`notesLanguageEnglish:true`；单元测试 `picksTheReadersLanguage`；![英文](images/whats-new-0.1.4-en.png) |
+| 中英文 | ✅ 更新日志一个文件两段（单独一行 `# English` 分隔；不用隐藏注释，因为 0.1.2/0.1.3 的更新窗口会把它原样显示出来），更新内容和引导跟随**系统语言**（不是 YoungBar 的语言设置）。本机系统首选 en-GB，所以本机显示英文 | `AppleLanguages: en-GB, zh-Hans-CN`；`notesLanguageEnglish:true`；单元测试 `picksTheReadersLanguage`；![英文](images/whats-new-0.1.4-en.png) |
 | 复制诊断信息 | ✅ ••• 菜单一项：复制 8 行纯文本（版本、macOS、机型、屏幕/刘海、权限与隐藏状态、快捷键、控件位置、各状态图标名单）并弹窗显示内容 | `extrastest.json`：`reportLines:8`、`report` |
 | 收纳条图标右键 | ✅ 菜单列出另外两种状态和「在设置中调整…」；选「始终隐藏」后该图标离开收纳条；测试后恢复 | `menuTitles`、`modeAfterMenu:2`、`leftStrip`、`restored` |
 | 数字显示开关 | ✅ 「图标下方显示数字」默认开，**点击 •••、悬停、快捷键打开都显示**；关掉后数字键照样能打开。**更正**：第一版只在快捷键打开时显示，用户点击打开看不到数字（用户报告） | `keyboardtest.json`：真实点击控件 `clickOpened`、`clickNumbersShown`、`clickStripIsKey`、真实 Esc `clickClosedByRealEsc`；![点击打开](images/strip-numbers.png) |

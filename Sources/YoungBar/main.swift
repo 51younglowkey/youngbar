@@ -111,6 +111,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var guideModel: GuideModel?
     var guideTimer: Timer?
     var guideCloseObserver: NSObjectProtocol?
+    /// Runs once when the guide is finished or closed (after an update:
+    /// What's New and the tour).
+    var afterGuide: (() -> Void)?
     var updateWindow: NSWindow?
     var whatsNewWindow: NSWindow?
     var updateIntro: UpdateIntroModel?
@@ -209,7 +212,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
             #if YOUNGBAR_TESTHOOKS
             await runLaunchHooks()
             #endif
-            if updated && !needsGuide { showWhatsNew() }
+            // After an update everyone walks through the guide again (the
+            // permission step just shows it is granted), then what changed.
+            if updated && !needsGuide {
+                afterGuide = { [weak self] in self?.showWhatsNew() }
+                showGuide()
+            }
         }
     }
 

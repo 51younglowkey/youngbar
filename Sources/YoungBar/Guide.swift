@@ -4,8 +4,9 @@
 import AppKit
 import SwiftUI
 
-/// First-run guide: the one permission, then where things are. Shown once
-/// on a fresh install; Settings → General → Getting started reopens it.
+/// First-run guide: the one permission, then where things are. Shown on a
+/// fresh install and again after every update (then What's New follows);
+/// Settings → General → Getting started reopens it.
 @MainActor
 @Observable
 final class GuideModel {
@@ -54,8 +55,11 @@ struct GuideView: View {
                     .disabled(!model.axTrusted)
             }
             GuideStep(number: 3, title: L10n.t("打开收纳条", "Open the strip"),
-                      detail: L10n.t("点菜单栏里的 •••，或按 \(model.hotKey)。打开后按 1–9 直接打开对应图标。",
-                                     "Click ••• in the menu bar or press \(model.hotKey). Then press 1–9 to open that icon.")) {
+                      detail: model.hotKey.isEmpty
+                          ? L10n.t("点菜单栏里的 •••。打开后按 1–9 直接打开对应图标。",
+                                   "Click ••• in the menu bar. Then press 1–9 to open that icon.")
+                          : L10n.t("点菜单栏里的 •••，或\(model.hotKey)。打开后按 1–9 直接打开对应图标。",
+                                   "Click ••• in the menu bar or \(model.hotKey). Then press 1–9 to open that icon.")) {
                 EmptyView()
             }
             HStack {
@@ -129,10 +133,13 @@ extension BarApp {
             guideWindow = window
             guideCloseObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.markGuided() }
+                Task { @MainActor in
+                    self?.markGuided()
+                    self?.runAfterGuide()
+                }
             }
         }
-        guideModel?.hotKey = hotKeyDisplay
+        guideModel?.hotKey = hotKeyAction ?? ""
         guideModel?.theme = themeColor
         guideModel?.axTrusted = AXIsProcessTrusted()
         guideWindow?.makeKeyAndOrderFront(nil)
@@ -158,6 +165,13 @@ extension BarApp {
         markGuided()
         guideWindow?.orderOut(nil)
         guideTimer?.invalidate()
+        runAfterGuide()
+    }
+
+    func runAfterGuide() {
+        let next = afterGuide
+        afterGuide = nil
+        next?()
     }
 
     func markGuided() {

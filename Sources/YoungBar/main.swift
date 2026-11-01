@@ -1145,7 +1145,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
                     shelfState = nil
                     Task { await refresh() }
                 }
-                if key == .autoUpdateCheck { startAutoUpdateChecks() }
                 renderWindow()
             }
             controller.onRefresh = { [weak self] in self?.refreshClicked() }

@@ -53,10 +53,10 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Settings entry from the strip**: a pinned gear at the right edge.
 - **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
 - **First-run guide**: one permission, then where things are.
-- **In-app updates**: asks GitHub once a day (can be turned off); a newer version puts a dot on •••, and the first line of its menu downloads it, checks the SHA-256 and the signing certificate (it must be the same as this app's) and relaunches. Nothing installs by itself.
+- **In-app updates**: asks GitHub once a day; a newer version puts a dot on •••, and the first line of its menu downloads it, checks the SHA-256 and the signing certificate (it must be the same as this app's) and relaunches. Nothing installs by itself.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no screen capture; the only network use is the update check (once a day, can be turned off in General). About 0.3% CPU at rest.
+- **Local only**: no telemetry, no screen capture; the only network use is the daily update check. About 0.3% CPU at rest.
 
 See [docs/FAQ.md](docs/FAQ.md) for the IP/licence/private-API/distribution questions.
 

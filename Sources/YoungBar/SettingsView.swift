@@ -420,12 +420,8 @@ struct GeneralPane: View {
                     Button(L10n.t("检查更新…", "Check for Updates…")) { model.send(.checkUpdates) }
                 } label: {
                     Text(L10n.t("版本 \(Self.version)", "Version \(Self.version)"))
-                    Text(L10n.t("有新版本时直接下载安装。", "Downloads and installs a newer version."))
-                }
-                Toggle(isOn: model.boolBinding(.autoUpdateCheck, default: true)) {
-                    Text(L10n.t("自动检查更新", "Check for updates automatically"))
-                    Text(L10n.t("每天向 GitHub 查一次。有新版本时 ••• 上出现小圆点，右键菜单里点一下即可更新；不会自动安装。",
-                                "Asks GitHub once a day. A newer version puts a dot on •••; update from its menu. Nothing installs by itself."))
+                    Text(L10n.t("每天自动查一次 GitHub。有新版本时 ••• 上出现小圆点，右键菜单里点一下即可下载安装。",
+                                "Checks GitHub once a day. A newer version puts a dot on •••; install it from its menu."))
                 }
             } header: {
                 Text(L10n.t("更新", "Updates"))

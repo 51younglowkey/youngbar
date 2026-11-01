@@ -67,14 +67,14 @@
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| 自动检查更新 | ✅ 启动 10 秒后、之后每天一次查 GitHub；假装 0.1.2 时找到 0.1.3：控件右上角出现主题色圆点，右键菜单第一行「有新版本 0.1.3，点此更新…」，**不弹窗、不自动安装**；关掉「自动检查更新」后圆点和菜单行消失 | `autoupdatetest.json`：`found:0.1.3`、`badge:true`、`windowOpened:false`、`badgeWhenOff:false`、`optionRestored:true`；![圆点](images/update-badge.png) |
+| 自动检查更新 | ✅ 启动 10 秒后、之后每天一次查 GitHub；假装 0.1.2 时找到 0.1.3：控件右上角出现主题色圆点，右键菜单第一行「有新版本 0.1.3，点此更新…」，**不弹窗、不自动安装**。始终开启，设置里没有开关 | `autoupdatetest.json`：`found:0.1.3`、`badge:true`、`windowOpened:false`；![圆点](images/update-badge.png) |
 | 默认快捷键：连按两下 ⌘ | ✅ 真实按键连按两下 ⌘ 打开收纳条（键盘焦点在收纳条，前台应用不变）；⌘ 后接 ⌘⇧、两次间隔 0.7 秒都不触发；改成 ⌃⌥⌘Y 后能打开、⌘⌘ 失效；测试后恢复 | `keyboardtest.json`：`passed:true`、`defaultDisplay:"双击 ⌘"`、`commandShiftIgnored`、`slowTapsIgnored`、`doubleCommandIgnoredAfterChange`；另一个进程发出的 ⌘⌘ 也能打开（截图） |
 | 设置里录快捷键 | 🟡 可以录组合键，或连按两下 ⌘ / ⌥ / ⌃；连按的识别逻辑有单元测试，**设置窗口里真的录一次没有实测** | `DoubleTapDetectorTests` 5 项 |
 | 去掉搜索 | ✅ 收纳条里打字不再筛选；Esc 直接关闭 | `typingIgnored:true`、`closedByEsc:true` |
 | 数字键 1–9 | ✅ 键盘打开时前 9 个图标标出数字；按数字直接打开（ChatGPT 菜单在收纳条旁弹出）；超过图标数的数字只响一声 | `digitPressed:true`（`digitTarget: codex`）、`digitPastEndIgnored:true`；![数字](images/strip-numbers.png) |
 | 收纳条里拖动排序 | ✅ 真实鼠标把第一个拖到最后：收纳条和保存的顺序都跟着变，菜单栏没有任何图标被显示；测试后恢复顺序 | `shelfdragtest.json`：`stripReordered`、`savedOrderFollows`、`nothingRevealed`、`orderRestored` |
 | 新图标自动收纳（默认关） | ✅ 打开选项后，把 State 当作新图标：自动设为隐藏并收进收纳条，提示「新图标已放进收纳条：State」；第一次运行（没有保存过顺序）不会触发；Apple 的图标不受影响；测试后恢复 | `autohidetest.json`：`modeAfter:1`、`concealed`、`inStrip`、`shownAgain`、`restored` |
-| 设置页 | ✅ 快捷键显示「双击 ⌘」，收纳条组新增「新图标自动收纳」，更新组新增「自动检查更新」 | ![通用](images/general-0.1.4.png) |
+| 设置页 | ✅ 快捷键显示「双击 ⌘」，收纳条组新增「新图标自动收纳」，更新组说明改为「每天自动查一次」 | ![通用](images/general-0.1.4.png) |
 | 单元测试 | 29 passed | `swift test --disable-sandbox` |
 | 测试后复原 | ✅ 键盘测试前后 `defaults export` 只差 `sessionActive`（运行标记） | diff |
 

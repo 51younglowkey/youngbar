@@ -1493,9 +1493,8 @@ extension BarApp {
 
     /// Opt-in (`YOUNGBAR_AUTOUPDATETEST=1`, usually with
     /// `YOUNGBAR_UPDATE_PRETEND_VERSION`): runs the daily check now and
-    /// records whether the control got its dot and the menu its line, that
-    /// no window opened, and that turning the option off clears both (the
-    /// option is put back). `YOUNGBAR_AUTOUPDATE_HOLD=<seconds>` keeps the
+    /// records whether the control got its dot and the menu its line, and
+    /// that no window opened. `YOUNGBAR_AUTOUPDATE_HOLD=<seconds>` keeps the
     /// dot up for a screenshot.
     func runAutoUpdateTest() async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "current": currentVersion]
@@ -1512,14 +1511,7 @@ extension BarApp {
             writeJSON(["badge": true], name: "autoupdate-hold.json")
             try? await Task.sleep(for: .seconds(hold))
         }
-        let saved = options[.autoUpdateCheck]
-        options[.autoUpdateCheck] = 0
         startAutoUpdateChecks()
-        result["badgeWhenOff"] = controlButton?.badgeColor != nil
-        result["menuTopWhenOff"] = configurationMenu().items.first?.title ?? ""
-        options[.autoUpdateCheck] = saved
-        startAutoUpdateChecks()
-        result["optionRestored"] = options[.autoUpdateCheck] == saved
     }
 
     /// Opt-in (`YOUNGBAR_NOASSERTIONTEST=1`): the bar a user sees with

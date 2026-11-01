@@ -72,19 +72,6 @@ enum ThemeColor: Int, CaseIterable {
     }
 }
 
-/// How far the theme reaches.
-enum ThemeScope: Int, CaseIterable {
-    case both, interfaceOnly, stripOnly
-
-    var title: String {
-        switch self {
-        case .both: return L10n.t("界面与收纳条", "Both")
-        case .interfaceOnly: return L10n.t("仅界面", "Interface")
-        case .stripOnly: return L10n.t("仅收纳条", "Strip")
-        }
-    }
-}
-
 /// How opaque the theme colour is over the strip's blur, in percent;
 /// 100 is a solid strip. Older settings stored a three-way `stripStyle`
 /// (solid / translucent / glass), which maps onto the same scale.

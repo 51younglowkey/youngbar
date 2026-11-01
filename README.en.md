@@ -48,9 +48,11 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Icons that don't fit**: when the bar is full, macOS 27 moves icons into a « beside the notch. YoungBar lists those in the strip too, and they leave it by themselves once there is room. The ••• control stays visible instead of following them under the notch.
 - **Menu Bar page**: every item in menu-bar order with Shown / Hidden / Always Hidden segmented choices; Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
-- **Appearance**: system / light / dark; blue, pink and yellow palettes with matched OKLCH lightness/saturation, plus a neutral clear one; a theme-tinted glass window with the theme character in the sidebar; three-way scope and one strip opacity slider (30–100%).
+- **Appearance**: system / light / dark; blue, pink and yellow palettes with matched OKLCH lightness/saturation, plus a neutral clear one; a theme-tinted glass window with the theme character in the sidebar; one strip opacity slider (30–100%).
 - **Custom menu-bar button**: ellipsis, heart, star, sparkles, grid, or a 36×36 PNG.
-- **Settings entry from the strip**: a pinned gear at the right edge.
+- **Settings entry from the strip**: a pinned gear at the right edge; right-click an icon in the strip to put it back in the bar or make it Always Hidden.
+- **What's New and diagnostics**: the first launch after an update shows what changed; *Copy Diagnostics* in the ••• menu gives a short report to paste when something looks wrong.
+- **Few settings**: General has open at login, language, the shortcut and three strip switches; everything else is a fixed default.
 - **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
 - **First-run guide**: one permission, then where things are.
 - **In-app updates**: asks GitHub once a day; a newer version puts a dot on •••, and the first line of its menu downloads it, checks the SHA-256 and the signing certificate (it must be the same as this app's) and relaunches. Nothing installs by itself.

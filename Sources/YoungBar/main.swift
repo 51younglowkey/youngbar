@@ -81,10 +81,19 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var refreshing = false
     var includeAlwaysHidden = false
     var feedback = ""
-    var options = UserDefaults.standard.dictionary(forKey: "barOptions") as? [String: Int] ?? [:]
+    /// Keys no version reads any more (options 0.1.4 turned into fixed
+    /// behaviour) are dropped on load, so they don't linger in exports.
+    var options: [String: Int] = {
+        let saved = UserDefaults.standard.dictionary(forKey: "barOptions") as? [String: Int] ?? [:]
+        let known = saved.filter { Option(rawValue: $0.key) != nil }
+        if known.count != saved.count { UserDefaults.standard.set(known, forKey: "barOptions") }
+        return known
+    }()
     var isHovered = false
+    /// When hovering last opened the strip: a click landing just after
+    /// (the user was reaching for •••) must not close it again.
+    var hoverOpenedAt: Date?
     var mouseMonitor: Any?
-    var currentFrames: [CGRect] = []
     /// How long a system item clicked from the strip stays in the bar.
     let revealSeconds: TimeInterval = 20
     var expanded = false
@@ -109,8 +118,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// change and key press goes through this.
     var doubleTapDetector = DoubleTapDetector(target: nil)
     var doubleTapMonitors: [Any] = []
+    var doubleTapNeedsTrust = false
     var shelfState: String?
-    /// Typed into the open strip: filters it to matching items.
     /// Keyboard selection in the strip, an index into `shelfButtons`.
     var shelfSelection: Int?
     /// The first nine icons show their number (unless turned off), however
@@ -275,6 +284,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         guard !busy else { return }
         if expanded {
+            if !fromKeyboard, let opened = hoverOpenedAt, Date().timeIntervalSince(opened) < 1.5 { return }
             closeShelf()
         } else {
             let event = NSApp.currentEvent
@@ -350,6 +360,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func refresh() async {
         guard !busy, !refreshing, AXIsProcessTrusted(), AssessmentMode.isAvailable else { return }
+        if doubleTapNeedsTrust { registerHotKey() }
         refreshing = true
         lastRefreshAt = Date()
         defer { refreshing = false }
@@ -386,7 +397,6 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let snapshot = await engine.freshSnapshot()
         remember(snapshot)
         overflowKeys = computeOverflow(outOfSightKeys(snapshot))
-        currentFrames = snapshot.items.compactMap(\.frame)
         positionControlBesideMenuIcons(in: snapshot)
         if expanded { populateShelf() }
         // The settings model only matters while its window is on screen;
@@ -465,15 +475,17 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func autoHide(_ keys: [String]) {
-        guard !busy else { return }
+        // Saved first: these keys are now known, so they are never "new"
+        // again even if the bar is busy right now.
         for key in keys { modes[key] = 1 }
         UserDefaults.standard.set(modes, forKey: "itemModes")
         UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
         let names = keys.map { name(for: $0) }.joined(separator: L10n.t("、", ", "))
         feedback = L10n.t("新图标已放进收纳条：\(names)", "New icons moved to the strip: \(names)")
         shelfState = nil
-        busy = true
         Task {
+            for _ in 0..<100 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+            busy = true
             await engine.setModel(currentModel())
             busy = false
             renderWindow()
@@ -655,7 +667,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
             if entered && options[.hoverExpand] == 1 {
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
-                    if isHovered && !expanded && !busy { toggleShelf() }
+                    if isHovered && !expanded && !busy {
+                        toggleShelf()
+                        hoverOpenedAt = Date()
+                    }
                 }
             }
         }
@@ -750,6 +765,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func closeShelf() {
         expanded = false
+        hoverOpenedAt = nil
         shelfAnchored = false
         shelfSelection = nil
         shelfNumbered = false

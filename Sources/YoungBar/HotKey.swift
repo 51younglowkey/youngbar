@@ -44,16 +44,24 @@ extension BarApp {
             }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &hotKeyHandler)
         }
         unregisterHotKey()
+        doubleTapNeedsTrust = false
         guard let hotKey else { return true }
         if hotKey.isDoubleTap {
+            // Monitors installed before the Accessibility permission get no
+            // key events; the first walk after it is granted installs again.
+            doubleTapNeedsTrust = !AXIsProcessTrusted()
             doubleTapDetector = DoubleTapDetector(target: hotKey.modifiers)
             let handle: (NSEvent) -> Void = { [weak self] event in
                 MainActor.assumeIsolated { self?.handleDoubleTapEvent(event) }
             }
-            if let global = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown], handler: handle) {
+            // Clicks and scrolls count as "something else" too: ⌘-click twice
+            // (Finder multi-select, links) is not a double tap.
+            let events: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown,
+                                                 .otherMouseDown, .scrollWheel]
+            if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: handle) {
                 doubleTapMonitors.append(global)
             }
-            if let local = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown], handler: { event in
+            if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { event in
                 handle(event)
                 return event
             }) {
@@ -76,7 +84,7 @@ extension BarApp {
     }
 
     func handleDoubleTapEvent(_ event: NSEvent) {
-        if event.type == .keyDown {
+        if event.type != .flagsChanged {
             doubleTapDetector.otherKey()
             return
         }

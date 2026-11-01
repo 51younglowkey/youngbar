@@ -142,7 +142,12 @@ final class BarApp: NSObject, NSApplicationDelegate {
         CGDisplayShowCursor(CGMainDisplayID())
         applyAppearance()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.title = "•••"
+        // A blank placeholder: the floating control draws over its slot.
+        // While a hide assertion holds, macOS doesn't draw this item; with
+        // nothing to hide it does, and a title here showed a second •••
+        // under the control.
+        statusItem.button?.title = ""
+        statusItem.button?.setAccessibilityLabel("YoungBar")
         statusItem.button?.toolTip = L10n.t(
             "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
             "YoungBar: click to show concealed icons; right-click to choose apps")

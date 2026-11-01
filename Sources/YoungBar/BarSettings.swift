@@ -21,7 +21,6 @@ struct BarEntry {
 final class BarSettings: NSObject {
     var onMode: ((String, Int) -> Void)?
     var onMove: ((String, String) -> Void)?
-    var onRefresh: (() -> Void)?
     var onOption: ((Option, Int) -> Void)?
     var onLogin: ((Bool) -> Void)?
     var onPermission: ((String) -> Void)?
@@ -37,19 +36,21 @@ final class BarSettings: NSObject {
     var onGuide: (() -> Void)?
     var onCheckUpdates: (() -> Void)?
     private var keyMonitor: Any?
+    /// While recording: a modifier pressed twice becomes a double-tap shortcut.
+    private var flagsMonitor: Any?
+    private var tapDetector = DoubleTapDetector(target: nil)
     private var resignObserver: NSObjectProtocol?
 
     private let window: NSWindow
     private let model = SettingsModel()
     private let glass = NSGlassEffectView()
-    private(set) var refreshClickCount = 0
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 600),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         super.init()
-        window.title = SettingsPage.general.title
+        window.title = SettingsPage.layout.title
         window.isReleasedWhenClosed = false
         // No toolbar: the traffic lights float on the glass and each page
         // draws its own title. `title` still names the window in Mission
@@ -114,9 +115,6 @@ final class BarSettings: NSObject {
         case .spacing(let level): onSpacing?(level)
         case .chooseCustomIcon: onCustomIcon?()
         case .removeCustomIcon: onRemoveCustomIcon?()
-        case .refresh:
-            refreshClickCount += 1
-            onRefresh?()
         case .recordHotKey(let start):
             if start { startRecording() } else { stopRecording() }
         case .clearHotKey: onHotKey?(nil)
@@ -145,6 +143,15 @@ final class BarSettings: NSObject {
             }
             return nil
         }
+        tapDetector = DoubleTapDetector(target: nil)
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self, self.model.recordingHotKey else { return event }
+            let modifiers = BarApp.carbonModifiers(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
+            if let tapped = self.tapDetector.flagsChanged(modifiers, at: event.timestamp) {
+                self.stopRecording(saving: .some(.doubleTap(tapped)))
+            }
+            return event
+        }
         // Clicking elsewhere ends recording without a change.
         resignObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
@@ -157,6 +164,8 @@ final class BarSettings: NSObject {
         guard keyMonitor != nil else { return }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        flagsMonitor = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         resignObserver = nil
         model.recordingHotKey = false
@@ -171,7 +180,9 @@ final class BarSettings: NSObject {
 
     func close() { window.close() }
 
+    /// Opening (not raising an open window) starts on the Menu Bar page.
     func show() {
+        if !window.isVisible { model.page = .layout }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -179,7 +190,7 @@ final class BarSettings: NSObject {
     func select(_ page: SettingsPage) { model.page = page }
 
     /// Re-reads localized strings that live outside SwiftUI.
-    func languageChanged() { window.title = (model.page ?? .general).title }
+    func languageChanged() { window.title = (model.page ?? .layout).title }
 
     func update(entries: [BarEntry], message: String, axTrusted: Bool,
                 launchAtLogin: Bool, customIcon: NSImage?, options: [String: Int],
@@ -197,15 +208,14 @@ final class BarSettings: NSObject {
         if model.launchAtLogin != launchAtLogin { model.launchAtLogin = launchAtLogin }
         if model.customIcon !== customIcon { model.customIcon = customIcon }
         let theme = ThemeColor(rawValue: options[.themeColor] ?? 0) ?? .blue
-        let tinted = (ThemeScope(rawValue: options[.themeScope] ?? 0) ?? .both) != .stripOnly
-        glass.tintColor = tinted && theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil
+        glass.tintColor = theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil
     }
 
     #if YOUNGBAR_TESTHOOKS
     // MARK: - Self-test support
 
     var currentEntries: [BarEntry] { model.entries }
-    var currentPage: SettingsPage { model.page ?? .general }
+    var currentPage: SettingsPage { model.page ?? .layout }
     var windowFrame: NSRect { window.frame }
     var windowTitle: String { window.title }
 
@@ -217,11 +227,6 @@ final class BarSettings: NSObject {
             ? rect
             : NSRect(x: rect.minX, y: view.bounds.height - rect.maxY, width: rect.width, height: rect.height)
         return window.convertToScreen(view.convert(local, to: nil))
-    }
-
-    func refreshButtonScreenRect() -> NSRect? {
-        guard model.page == .general else { return nil }
-        return screenRect(for: "refresh")
     }
 
     /// Diagnostic: what would receive a click on the login switch?

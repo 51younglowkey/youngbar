@@ -56,3 +56,47 @@ import Testing
         #expect(ReleaseInfo.expectedDigest(fromChecksumFile: "nope") == nil)
     }
 }
+
+@Suite struct ReleaseNotesTests {
+    @Test func keepsChangesDropsInstallSections() {
+        let notes = """
+        # YoungBar 0.1.4 更新日志
+
+        ## 新增
+
+        - **数字键**：按 `1` 打开
+          - 子项
+
+        ## 说明
+
+        - 0.1.2 用户：手动点一次。
+
+        ```sh
+        curl … | sh
+        ```
+
+        ## 校验
+
+        对应源码：本 tag。
+        """
+        #expect(ReleaseNotes.blocks(notes) == [
+            .section("新增"), .bullet("数字键：按 1 打开", level: 0), .bullet("子项", level: 1),
+        ])
+        #expect(ReleaseNotes.forDisplay(notes) == "【新增】\n• 数字键：按 1 打开\n  • 子项")
+    }
+
+    @Test func picksTheReadersLanguage() {
+        let body = "## 新增\n- 中文\n## 说明\n- x\n# English\n## New\n- English\n## Notes\n- y\n## 校验 / Checksum\n- z"
+        #expect(ReleaseNotes.blocks(ReleaseNotes.localized(body, preferredLanguages: ["zh-Hans-CN", "en"])) ==
+                [.section("新增"), .bullet("中文", level: 0)])
+        #expect(ReleaseNotes.blocks(ReleaseNotes.localized(body, preferredLanguages: ["en-GB", "zh-Hans"])) ==
+                [.section("New"), .bullet("English", level: 0)])
+        #expect(ReleaseNotes.localized("## 新增", preferredLanguages: ["en"]) == "## 新增")
+    }
+
+    @Test func fencesAndBlankLinesAreDropped() {
+        #expect(ReleaseNotes.blocks("## 修复\n\n```\nx\n```\n- a\n\n\nplain\n") == [
+            .section("修复"), .bullet("a", level: 0), .text("plain"),
+        ])
+    }
+}

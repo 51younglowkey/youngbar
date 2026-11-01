@@ -5,8 +5,11 @@ import AppKit
 import Carbon.HIToolbox
 import YoungBarCore
 
-/// The global shortcut that opens the strip. Carbon hot keys need neither
-/// AX focus nor an event tap; the handler runs on the main event loop.
+/// The global shortcut that opens the strip. A key combination is a Carbon
+/// hot key (no AX focus or event tap needed; the handler runs on the main
+/// event loop). A modifier pressed twice (the default, ⌘⌘) can't be a
+/// Carbon hot key: global and local event monitors watch for it, which the
+/// Accessibility permission YoungBar already has allows.
 extension BarApp {
     var hotKey: HotKeyCombo? {
         // A code of -1 means the user cleared the shortcut.
@@ -17,7 +20,20 @@ extension BarApp {
 
     var hotKeyDisplay: String {
         guard let hotKey else { return L10n.t("无", "None") }
+        if hotKey.isDoubleTap {
+            return L10n.t("双击 \(hotKey.modifierSymbols)", "Double-tap \(hotKey.modifierSymbols)")
+        }
         return hotKey.display(keyName: Self.keyName(for: hotKey.keyCode))
+    }
+
+    /// The shortcut as something to do, for sentences: "连按两下 ⌘" /
+    /// "按 ⌃⌥B"; nil when there is none.
+    var hotKeyAction: String? {
+        guard let hotKey else { return nil }
+        if hotKey.isDoubleTap {
+            return L10n.t("连按两下 \(hotKey.modifierSymbols)", "press \(hotKey.modifierSymbols) twice")
+        }
+        return L10n.t("按 \(hotKeyDisplay)", "press \(hotKeyDisplay)")
     }
 
     /// (Re)registers the saved shortcut. Returns false when macOS refuses
@@ -38,7 +54,31 @@ extension BarApp {
             }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &hotKeyHandler)
         }
         unregisterHotKey()
+        doubleTapNeedsTrust = false
         guard let hotKey else { return true }
+        if hotKey.isDoubleTap {
+            // Monitors installed before the Accessibility permission get no
+            // key events; the first walk after it is granted installs again.
+            doubleTapNeedsTrust = !AXIsProcessTrusted()
+            doubleTapDetector = DoubleTapDetector(target: hotKey.modifiers)
+            let handle: (NSEvent) -> Void = { [weak self] event in
+                MainActor.assumeIsolated { self?.handleDoubleTapEvent(event) }
+            }
+            // Clicks and scrolls count as "something else" too: ⌘-click twice
+            // (Finder multi-select, links) is not a double tap.
+            let events: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown,
+                                                 .otherMouseDown, .scrollWheel]
+            if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: handle) {
+                doubleTapMonitors.append(global)
+            }
+            if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { event in
+                handle(event)
+                return event
+            }) {
+                doubleTapMonitors.append(local)
+            }
+            return true
+        }
         let hotKeyID = EventHotKeyID(signature: OSType(0x5942_4152), id: 1) // "YBAR"
         let status = RegisterEventHotKey(hotKey.keyCode, hotKey.modifiers, hotKeyID,
                                          GetApplicationEventTarget(), 0, &hotKeyRef)
@@ -49,6 +89,19 @@ extension BarApp {
     func unregisterHotKey() {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         hotKeyRef = nil
+        for monitor in doubleTapMonitors { NSEvent.removeMonitor(monitor) }
+        doubleTapMonitors = []
+    }
+
+    func handleDoubleTapEvent(_ event: NSEvent) {
+        if event.type != .flagsChanged {
+            doubleTapDetector.otherKey()
+            return
+        }
+        let modifiers = Self.carbonModifiers(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
+        guard doubleTapDetector.flagsChanged(modifiers, at: event.timestamp) != nil else { return }
+        hotKeyPressCount += 1
+        toggleShelfFrom(keyboard: true)
     }
 
     /// Saves and registers a new shortcut (nil clears it). A combination

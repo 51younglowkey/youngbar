@@ -13,8 +13,10 @@ extension BarEntry: Identifiable {
     var id: String { key }
 }
 
+/// Sidebar order is how often each page is used: the menu-bar icons first
+/// (why Settings is usually opened), General last (set once).
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, layout, appearance
+    case layout, appearance, general
 
     var id: String { rawValue }
 
@@ -44,7 +46,6 @@ enum SettingsAction {
     case spacing(Int)
     case chooseCustomIcon
     case removeCustomIcon
-    case refresh
     /// Start (true) or cancel (false) recording a new global shortcut.
     case recordHotKey(Bool)
     case clearHotKey
@@ -57,8 +58,8 @@ enum SettingsAction {
 @MainActor
 @Observable
 final class SettingsModel {
-    var page: SettingsPage? = .general {
-        didSet { onPageChange(page ?? .general) }
+    var page: SettingsPage? = .layout {
+        didSet { onPageChange(page ?? .layout) }
     }
     var entries: [BarEntry] = []
     var options: [String: Int] = [:]
@@ -98,14 +99,11 @@ final class SettingsModel {
     }
 
     var theme: ThemeColor { ThemeColor(rawValue: value(.themeColor)) ?? .blue }
-    var scope: ThemeScope { ThemeScope(rawValue: value(.themeScope)) ?? .both }
     var stripOpacity: Int { stripOpacityPercent(options) }
-    var tintsInterface: Bool { scope != .stripOnly }
-    var accent: Color? { tintsInterface ? Color(nsColor: theme.accent) : nil }
+    var accent: Color? { Color(nsColor: theme.accent) }
 
-    /// The strip has no theme colour (so no opacity) when it follows the
-    /// system look.
-    var stripTintLocked: Bool { scope == .interfaceOnly || theme == .clear }
+    /// The Clear theme's strip has no colour, so no opacity.
+    var stripTintLocked: Bool { theme == .clear }
 
     func setMode(_ key: String, _ mode: Int) {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return }
@@ -152,7 +150,7 @@ struct SettingsDetailView: View {
 
     var body: some View {
         Group {
-            switch model.page ?? .general {
+            switch model.page ?? .layout {
             case .general: GeneralPane(model: model)
             case .layout: LayoutPane(model: model)
             case .appearance: AppearancePane(model: model)
@@ -163,7 +161,7 @@ struct SettingsDetailView: View {
         // the traffic lights; content scrolling underneath is blurred
         // instead of running into the title.
         .safeAreaInset(edge: .top, spacing: 0) {
-            Text((model.page ?? .general).title)
+            Text((model.page ?? .layout).title)
                 .font(.system(size: 15, weight: .semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 30)
@@ -192,7 +190,7 @@ struct SettingsSidebar: View {
             AppIdentityHeader(theme: model.theme)
             ForEach(SettingsPage.allCases) { page in
                 SidebarRow(title: page.title, symbol: page.symbol, color: color(for: page),
-                           accent: model.accent ?? .accentColor, selected: (model.page ?? .general) == page,
+                           accent: model.accent ?? .accentColor, selected: (model.page ?? .layout) == page,
                            hovering: model.hoveredPage == page,
                            onHover: { inside in
                                if inside { model.hoveredPage = page } else if model.hoveredPage == page { model.hoveredPage = nil }
@@ -330,84 +328,23 @@ struct GeneralPane: View {
                 LabeledContent {
                     HotKeyField(model: model)
                 } label: {
-                    Text(L10n.t("打开收纳条", "Open the strip"))
-                    Text(L10n.t("打开后直接输入名称搜索，← → 选择，回车打开，Esc 关闭",
-                                "Then type to search, ← → to choose, Return to open, Esc to close"))
+                    Text(L10n.t("快捷键", "Shortcut"))
+                    Text(L10n.t("打开后按 1–9 直接打开对应图标，Esc 关闭",
+                                "Then press 1–9 to open that icon; Esc closes"))
                 }
-            } header: {
-                Text(L10n.t("快捷键", "Shortcut"))
-            }
-
-            Section {
-                LabeledContent {
-                    SegmentedButtons(options: [L10n.t("打开收纳条", "Open strip"),
-                                               L10n.t("在菜单栏中展开", "Show in bar")],
-                                     selection: model.intBinding(.nativeExpand), width: 240)
-                } label: {
-                    Text(L10n.t("点击 ••• 时", "When clicking •••"))
-                    Text(L10n.t("收纳条把隐藏的图标集中在一条浮动栏里；在菜单栏中展开会让它们临时回到原位。",
-                                "The strip gathers hidden icons; Show in bar puts them back for a while."))
+                Toggle(isOn: model.boolBinding(.shelfNumbers, default: true)) {
+                    Text(L10n.t("图标下方显示数字", "Show numbers under icons"))
+                    Text(L10n.t("收纳条里的前 9 个图标标出 1–9；关掉后按数字照样能打开", "The first nine icons are numbered; the number keys work either way"))
                 }
-                Toggle(isOn: model.boolBinding(.keepShelfOpen)) {
-                    Text(L10n.t("始终显示收纳条", "Keep the strip open"))
-                    Text(L10n.t("点击别处时不自动关闭", "Don't close it when clicking elsewhere"))
-                }
-                Toggle(L10n.t("鼠标悬停 0.5 秒后展开", "Open on hover after 0.5 s"),
+                Toggle(L10n.t("鼠标悬停 0.5 秒后打开", "Open on hover after 0.5 s"),
                        isOn: model.boolBinding(.hoverExpand))
-                Toggle(L10n.t("点击菜单栏空白处展开", "Open when clicking empty menu-bar space"),
-                       isOn: model.boolBinding(.blankClick))
-                Toggle(isOn: model.boolBinding(.notchOverflow, default: true)) {
-                    Text(L10n.t("放不下的图标放进收纳条", "Put icons that don't fit in the strip"))
-                    Text(model.hasNotch
-                         ? L10n.t("菜单栏满了时，macOS 会把放不下的图标收进刘海旁的 «；它们会出现在收纳条里，有空间时自动回到菜单栏。",
-                                  "When the bar is full, macOS moves icons that don't fit into the « beside the notch; they show up in the strip and return once there is room.")
-                         : L10n.t("菜单栏满了时，macOS 会把放不下的图标收进 «；它们会出现在收纳条里，有空间时自动回到菜单栏。",
-                                  "When the bar is full, macOS moves icons that don't fit into a «; they show up in the strip and return once there is room."))
-                }
-                LabeledContent {
-                    HStack(spacing: 10) {
-                        Slider(value: Binding(
-                            get: { Double(model.value(.revealSeconds, 20)) },
-                            set: { model.set(.revealSeconds, Int($0.rounded())) }), in: 5...60)
-                            .frame(width: 160)
-                        Text(L10n.t("\(model.value(.revealSeconds, 20)) 秒", "\(model.value(.revealSeconds, 20)) s"))
-                            .monospacedDigit()
-                            .frame(minWidth: 40, alignment: .trailing)
-                    }
-                } label: {
-                    Text(L10n.t("自动收起", "Hide again after"))
-                    Text(L10n.t("点开收纳项后，它在菜单栏上停留的时间", "How long a clicked item stays in the menu bar"))
+                Toggle(isOn: model.boolBinding(.autoHideNew)) {
+                    Text(L10n.t("新图标自动收纳", "Put new icons in the strip"))
+                    Text(L10n.t("新装应用的图标直接进收纳条，系统图标不受影响",
+                                "New apps' icons go straight to the strip; system icons stay"))
                 }
             } header: {
                 Text(L10n.t("收纳条", "Strip"))
-            }
-
-            Section {
-                PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
-                              detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
-                              granted: model.axTrusted) { model.send(.permission("accessibility")) }
-            } header: {
-                Text(L10n.t("权限", "Permissions"))
-            }
-
-            Section {
-                LabeledContent {
-                    HStack(spacing: 8) {
-                        Button(L10n.t("导出…", "Export…")) { model.send(.exportConfig) }
-                        Button(L10n.t("导入…", "Import…")) { model.send(.importConfig) }
-                    }
-                } label: {
-                    Text(L10n.t("收纳配置", "Layout file"))
-                    Text(L10n.t("每个图标的显示方式、顺序和所有选项，存为一个 JSON 文件", "Each icon's state, the order and all options, as one JSON file"))
-                }
-                LabeledContent {
-                    Button(L10n.t("打开", "Open")) { model.send(.showGuide) }
-                } label: {
-                    Text(L10n.t("使用引导", "Getting started"))
-                    Text(L10n.t("授权与基本用法", "Permission and the basics"))
-                }
-            } header: {
-                Text(L10n.t("配置", "Configuration"))
             }
 
             Section {
@@ -415,21 +352,24 @@ struct GeneralPane: View {
                     Button(L10n.t("检查更新…", "Check for Updates…")) { model.send(.checkUpdates) }
                 } label: {
                     Text(L10n.t("版本 \(Self.version)", "Version \(Self.version)"))
-                    Text(L10n.t("有新版本时直接下载安装。只有点这里时才会访问 GitHub。",
-                                "Downloads and installs a newer version. YoungBar goes online only when you click this."))
+                    Text(L10n.t("每天自动检查；有新版本时右键 ••• 会提示", "Checked daily; a new version shows in the ••• right-click menu"))
+                }
+                LabeledContent {
+                    Button(L10n.t("打开", "Open")) { model.send(.showGuide) }
+                } label: {
+                    Text(L10n.t("使用引导", "Getting started"))
+                }
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Button(L10n.t("导出…", "Export…")) { model.send(.exportConfig) }
+                        Button(L10n.t("导入…", "Import…")) { model.send(.importConfig) }
+                    }
+                } label: {
+                    Text(L10n.t("收纳配置", "Layout file"))
+                    Text(L10n.t("换电脑或重装时用", "For a new Mac or a reinstall"))
                 }
             } header: {
-                Text(L10n.t("更新", "Updates"))
-            }
-
-            Section {
-                LabeledContent {
-                    Button(L10n.t("刷新", "Refresh")) { model.send(.refresh) }
-                        .settingsFrame("refresh", model)
-                } label: {
-                    Text(L10n.t("菜单栏项目列表", "Menu-bar item list"))
-                    Text(L10n.t("重新读取菜单栏里的项目", "Read the menu-bar items again"))
-                }
+                Text(L10n.t("关于", "About"))
             } footer: {
                 if !model.message.isEmpty {
                     Text(model.message)
@@ -452,13 +392,13 @@ struct HotKeyField: View {
             Button {
                 model.send(.recordHotKey(!model.recordingHotKey))
             } label: {
-                Text(model.recordingHotKey ? L10n.t("按下新的快捷键…", "Press the new shortcut…") : model.hotKeyDisplay)
+                Text(model.recordingHotKey ? L10n.t("按下新的快捷键，或连按两下 ⌘…", "Press a shortcut, or ⌘ twice…") : model.hotKeyDisplay)
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
                     .frame(minWidth: 120)
             }
-            .help(L10n.t("点一下，然后按下新的组合键（需包含 ⌘、⌃ 或 ⌥）；Esc 取消，⌫ 清除",
-                         "Click, then press the new combination (with ⌘, ⌃ or ⌥); Esc cancels, ⌫ clears"))
+            .help(L10n.t("点一下，然后按下新的组合键（需包含 ⌘、⌃ 或 ⌥），或连按两下 ⌘ / ⌥ / ⌃；Esc 取消，⌫ 清除",
+                         "Click, then press the new combination (with ⌘, ⌃ or ⌥), or press ⌘, ⌥ or ⌃ twice; Esc cancels, ⌫ clears"))
             .accessibilityLabel(L10n.t("快捷键：\(model.hotKeyDisplay)", "Shortcut: \(model.hotKeyDisplay)"))
             Button {
                 model.send(.clearHotKey)
@@ -506,11 +446,22 @@ struct LayoutPane: View {
 
     var body: some View {
         Form {
+            // The first page anyone sees: without the permission there is
+            // nothing to list, so it is granted right here.
+            if !model.axTrusted {
+                Section {
+                    PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
+                                  detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
+                                  granted: model.axTrusted) { model.send(.permission("accessibility")) }
+                } header: {
+                    Text(L10n.t("需要授权", "Permission needed"))
+                }
+            }
             Section {
                 if model.entries.isEmpty {
                     Text(model.axTrusted
                          ? L10n.t("正在读取菜单栏图标…", "Reading menu-bar items…")
-                         : L10n.t("需要辅助功能权限后才能读取菜单栏项目。", "Accessibility permission is required to read menu-bar items."))
+                         : L10n.t("授权后这里会列出菜单栏里的每个图标。", "Once allowed, every menu-bar icon is listed here."))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -722,7 +673,7 @@ struct AppearancePane: View {
             }
 
             Section {
-                StripPreview(color: model.scope == .interfaceOnly ? .clear : model.theme,
+                StripPreview(color: model.theme,
                              opacity: CGFloat(model.stripOpacity) / 100,
                              isDark: colorScheme == .dark)
                     .frame(width: 280, height: 40)
@@ -745,10 +696,6 @@ struct AppearancePane: View {
                         }
                     }
                 }
-                LabeledContent(L10n.t("应用到", "Apply to")) {
-                    SegmentedButtons(options: ThemeScope.allCases.map(\.title),
-                                     selection: model.intBinding(.themeScope), width: 300)
-                }
                 LabeledContent {
                     HStack(spacing: 10) {
                         Slider(value: Binding(
@@ -769,9 +716,7 @@ struct AppearancePane: View {
                 Text(L10n.t("主题", "Theme"))
             } footer: {
                 if model.stripTintLocked {
-                    Text(model.theme == .clear
-                         ? L10n.t("「透明」主题的收纳条跟随系统毛玻璃，没有主题色可调。", "The Clear theme uses the system blur only, so there is no colour to adjust.")
-                         : L10n.t("主题只应用到界面时，收纳条使用系统毛玻璃。", "When the theme only applies to the interface, the strip uses the system blur."))
+                    Text(L10n.t("「透明」主题的收纳条跟随系统毛玻璃，没有主题色可调。", "The Clear theme uses the system blur only, so there is no colour to adjust."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

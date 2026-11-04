@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 YoungBar contributors
 // SPDX-License-Identifier: GPL-3.0-only
 
+import Foundation
+
 /// Release notes (`docs/RELEASE-<version>.md`, also the GitHub release body)
 /// as YoungBar shows them in its own windows: what changed, without the
 /// install commands, checksums and source link meant for the web page, and
@@ -29,16 +31,27 @@ public enum ReleaseNotes {
     /// The half for the reader: English unless their first preferred
     /// language is Chinese. A body without the marker is returned whole.
     public static func localized(_ markdown: String, preferredLanguages: [String]) -> String {
-        guard let range = markdown.range(of: "\n" + englishMarker + "\n") else { return markdown }
+        let lines = unixLines(markdown)
+        guard let marker = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == englishMarker }) else {
+            return lines.joined(separator: "\n")
+        }
         let chinese = preferredLanguages.first?.hasPrefix("zh") ?? false
-        return String(chinese ? markdown[..<range.lowerBound] : markdown[range.upperBound...])
+        return (chinese ? lines[..<marker] : lines[(marker + 1)...]).joined(separator: "\n")
+    }
+
+    /// Lines of `markdown` whatever its line endings: a body saved from
+    /// GitHub's web editor has CRLF, and "\r\n" is one Character in Swift,
+    /// so splitting on "\n" alone found no lines at all.
+    static func unixLines(_ markdown: String) -> [String] {
+        markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     }
 
     public static func blocks(_ markdown: String) -> [Block] {
         var blocks: [Block] = []
         var skipping = false
         var inFence = false
-        for raw in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+        for raw in unixLines(markdown) {
             let line = String(raw)
             if line.hasPrefix("```") { inFence.toggle(); continue }
             if inFence || line.hasPrefix("# ") { continue }

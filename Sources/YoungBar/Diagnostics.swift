@@ -85,14 +85,22 @@ extension BarApp {
             let text = await diagnosticsReport()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = L10n.t("诊断信息已复制", "Diagnostics copied")
-            alert.informativeText = L10n.t("可以直接粘贴到评论区或群里。内容如下：", "Paste it into a comment or chat. It reads:")
-                + "\n\n" + text
-            alert.addButton(withTitle: L10n.t("好", "OK"))
-            alert.runModal()
+            // The alert is modal. Run from inside this task it would hold the
+            // main actor, so no other task ran until OK: an item opened from
+            // the strip stayed on the bar, refreshes stopped. From the run
+            // loop, they go on.
+            perform(#selector(showDiagnosticsAlert(_:)), with: text as NSString, afterDelay: 0)
         }
+    }
+
+    @objc func showDiagnosticsAlert(_ text: NSString) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L10n.t("诊断信息已复制", "Diagnostics copied")
+        alert.informativeText = L10n.t("可以直接粘贴到评论区或群里。内容如下：", "Paste it into a comment or chat. It reads:")
+            + "\n\n" + (text as String)
+        alert.addButton(withTitle: L10n.t("好", "OK"))
+        alert.runModal()
     }
 
     nonisolated static func sysctl(_ name: String) -> String {

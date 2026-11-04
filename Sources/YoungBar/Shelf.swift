@@ -17,7 +17,10 @@ extension BarApp {
         toggleShelfFrom(keyboard: false)
     }
 
-    func toggleShelfFrom(keyboard fromKeyboard: Bool) {
+    /// `byHover`: opened by resting the pointer on •••. Such a strip takes no
+    /// keyboard focus — the user may be typing elsewhere, and a digit would
+    /// open an item.
+    func toggleShelfFrom(keyboard fromKeyboard: Bool, byHover: Bool = false) {
         guard AXIsProcessTrusted(), AssessmentMode.isAvailable else {
             showConfigurationMenu()
             return
@@ -28,18 +31,18 @@ extension BarApp {
             closeShelf()
         } else {
             let event = NSApp.currentEvent
-            includeAlwaysHidden = !fromKeyboard && event?.type == .leftMouseUp && event?.modifierFlags.contains(.option) == true
+            includeAlwaysHidden = !fromKeyboard && !byHover && event?.type == .leftMouseUp && event?.modifierFlags.contains(.option) == true
             // Always the strip: it shows app icons, so nothing on the bar is
             // revealed to open it. (Showing the hidden icons in the bar
             // itself, the old "Show in bar" mode, flashed and doubled the
             // bar while it reflowed; it is gone.)
-            showShelf(selectFirst: fromKeyboard)
+            showShelf(selectFirst: fromKeyboard, takeKeyboard: !byHover)
             if fromKeyboard, whatsNewWindow?.isVisible == true { updateIntro?.triedShortcut = true }
             Task { await refresh() }
         }
     }
 
-    func showShelf(selectFirst: Bool = false) {
+    func showShelf(selectFirst: Bool = false, takeKeyboard: Bool = true) {
         guard controlPanel != nil else { return }
         if shelfPanel == nil {
             let panel = ShelfPanel(contentRect: NSRect(x: 0, y: 0, width: 160, height: 40),
@@ -73,7 +76,7 @@ extension BarApp {
         let fade = !wasOpen && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         shelfPanel.alphaValue = fade ? 0.2 : 1
         shelfPanel.orderFrontRegardless()
-        shelfPanel.makeKeyAndOrderFront(nil)
+        if takeKeyboard { shelfPanel.makeKeyAndOrderFront(nil) }
         if fade {
             Task {
                 for step in 1...4 {
@@ -105,7 +108,8 @@ extension BarApp {
     }
 
     func shelfKeys() -> [String] {
-        ShelfContents.keys(order: orderedKeys(), modes: modes, covered: overflowKeys,
+        // Out of sight on top of the saved modes: no room in the bar, or "Hide all".
+        ShelfContents.keys(order: orderedKeys(), modes: modes, covered: overflowKeys.union(bulkHiddenKeys),
                            includeAlwaysHidden: includeAlwaysHidden)
     }
 
@@ -121,7 +125,8 @@ extension BarApp {
                 || MenuBarPolicy.isPinnedSystemItem(item.id)
                 || MenuBarPolicy.isPinnedAppleHost(item.id.bundleID)
         })
-        return ShelfContents.tuckInCandidates(order: order, modes: modes, covered: overflowKeys, excluded: excluded)
+        return ShelfContents.tuckInCandidates(order: order, modes: modes, covered: overflowKeys.union(bulkHiddenKeys),
+                                              excluded: excluded)
     }
 
     func populateShelf() {
@@ -135,6 +140,9 @@ extension BarApp {
             + (adding ? "+" + candidates.joined(separator: "|") : "")
         guard state != shelfState || shelfPanel.contentView == nil else { return }
         shelfState = state
+        let previousFrame = shelfPanel.frame
+        let previousScroll = (shelfPanel.contentView?.subviews.first { $0 is NSScrollView } as? NSScrollView)?
+            .contentView.bounds.origin.x ?? 0
         // Each item shows its app's own icon (or the system symbol): sharp at
         // any size, unlike a menu-bar crop.
         let slot = Self.shelfSlot
@@ -275,6 +283,12 @@ extension BarApp {
                 x += slot
             }
             scroll.documentView = document; background.addSubview(scroll)
+            // A rebuild (an icon dropped, one more tucked in) keeps the view where it was.
+            let offset = min(previousScroll, max(0, document.frame.width - itemArea))
+            if offset > 0 {
+                scroll.contentView.scroll(to: NSPoint(x: offset, y: 0))
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
         }
 
         let divider = NSView(frame: NSRect(x: itemArea, y: 8, width: 1, height: height - 16))
@@ -298,7 +312,13 @@ extension BarApp {
         shelfPanel.contentView = background
         if let selection = shelfSelection { shelfSelection = shelfButtons.isEmpty ? nil : min(selection, shelfButtons.count - 1) }
         applyShelfSelection()
-        positionShelf()
+        if shelfAnchored && previousFrame.width > 0 {
+            // An item's own menu is open beside the strip: grow or shrink
+            // about the same centre and top edge instead of jumping.
+            shelfPanel.setFrameOrigin(NSPoint(x: previousFrame.midX - width / 2, y: previousFrame.maxY - height))
+        } else {
+            positionShelf()
+        }
     }
 
     /// An icon offered by an empty strip, clicked: it goes into the strip
@@ -306,6 +326,7 @@ extension BarApp {
     /// open for the next one.
     @objc func tuckInFromShelf(_ button: NSButton) {
         guard let key = button.identifier?.rawValue, catalog[key] != nil, (modes[key] ?? 0) == 0 else { return }
+        bulkHiddenKeys = []
         modes[key] = 1
         UserDefaults.standard.set(modes, forKey: "itemModes")
         UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
@@ -336,9 +357,20 @@ extension BarApp {
         }
     }
 
+    /// The on-screen windows of `pid` right now.
+    func windowNumbers(of pid: pid_t) -> Set<Int> {
+        guard pid > 0 else { return [] }
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        return Set(windows.compactMap { info in
+            (info[kCGWindowOwnerPID as String] as? pid_t) == pid ? info[kCGWindowNumber as String] as? Int : nil
+        })
+    }
+
     /// Orders the strip just below the frontmost window of `pid` that overlaps
-    /// it, if there is one.
-    func tuckShelf(below pid: pid_t) {
+    /// it, if there is one — among the windows the press opened, not those
+    /// on screen before it: under the app's own main window the strip would
+    /// vanish while still open.
+    func tuckShelf(below pid: pid_t, excluding existing: Set<Int> = []) {
         guard pid > 0, let shelfPanel, expanded else { return }
         let screenTop = NSScreen.screens.first?.frame.maxY ?? 0
         let shelf = shelfPanel.frame
@@ -346,6 +378,7 @@ extension BarApp {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
         guard let panel = windows.first(where: { info in
             guard (info[kCGWindowOwnerPID as String] as? pid_t) == pid,
+                  let number = info[kCGWindowNumber as String] as? Int, !existing.contains(number),
                   ((info[kCGWindowLayer as String] as? Int) ?? 0) < shelfPanel.level.rawValue,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat] else { return false }
             let rect = CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
@@ -366,9 +399,9 @@ extension BarApp {
         // next to it.
         flashPressed(button)
         shelfAnchored = true
-        ignoreOutsideUntil = Date().addingTimeInterval(2)
         shelfPanel?.level = .floating
         let owner = NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == item.id.bundleID }?.processIdentifier ?? 0
+        let ownerWindows = windowNumbers(of: owner)
         // A covered item's menu opens under its slot, just below the notch:
         // still on screen, so it is pressed in place too.
         if let element = pressableElement(for: key, item: item, pid: owner),
@@ -382,11 +415,14 @@ extension BarApp {
             Task {
                 for delay in [350, 600] {
                     try? await Task.sleep(for: .milliseconds(delay))
-                    tuckShelf(below: owner)
+                    tuckShelf(below: owner, excluding: ownerWindows)
                 }
             }
             return
         }
+        // Our own click below is not a click outside the strip. (A press in
+        // place clicks nothing, so a quick pick from its menu still closes it.)
+        ignoreOutsideUntil = Date().addingTimeInterval(2)
         // System items (Wi-Fi, battery…) have no press action: reveal and
         // click, as iBar did, with the pointer hidden so it doesn't jump.
         busy = true
@@ -405,6 +441,19 @@ extension BarApp {
                 renderWindow(force: true)
                 return
             }
+            // Out but still out of sight (in macOS's « or under the notch): a
+            // click there would open « or hit nothing. Say so instead.
+            guard !outOfSightKeys(snapshot).contains(key) else {
+                shownUntil[item.id] = nil
+                await engine.conceal(items: [item.id])
+                NSSound.beep()
+                feedback = L10n.t("菜单栏放不下「\(name(for: key))」：隐藏几个别的图标再试",
+                                  "No room in the menu bar for \(name(for: key)): hide a few other icons and try again")
+                renderWindow(force: true)
+                return
+            }
+            let pid = snapshot.items.first { $0.id.sectionKey == item.id.sectionKey }?.pid ?? 0
+            let pidWindows = windowNumbers(of: pid)
             NSCursor.hide()
             await ItemMover.shieldedClick(at: CGPoint(x: frame.midX, y: frame.midY))
             NSCursor.unhide()
@@ -413,7 +462,7 @@ extension BarApp {
             // panel is on top while the strip still covers other windows.
             for delay in [350, 600] {
                 try? await Task.sleep(for: .milliseconds(delay))
-                tuckShelf(below: snapshot.items.first { $0.id.sectionKey == item.id.sectionKey }?.pid ?? 0)
+                tuckShelf(below: pid, excluding: pidWindows)
             }
             renderWindow()
         }
@@ -439,8 +488,12 @@ extension BarApp {
         var extras: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, "AXExtrasMenuBar" as CFString, &extras) == .success,
               let extras, CFGetTypeID(extras) == AXUIElementGetTypeID() else { return nil }
+        let bar = extras as! AXUIElement
+        // Without its own timeout this read waited the system default
+        // (seconds) on a busy app, freezing the strip.
+        AXUIElementSetMessagingTimeout(bar, timeout)
         var children: CFTypeRef?
-        AXUIElementCopyAttributeValue(extras as! AXUIElement, kAXChildrenAttribute as CFString, &children)
+        AXUIElementCopyAttributeValue(bar, kAXChildrenAttribute as CFString, &children)
         guard let items = children as? [AXUIElement], items.count == 1, let element = items.first else { return nil }
         AXUIElementSetMessagingTimeout(element, timeout)
         return element

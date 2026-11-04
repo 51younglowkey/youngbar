@@ -49,6 +49,14 @@ public struct ConfigFile: Codable, Equatable, Sendable {
         file.itemModes = file.itemModes.filter { (0...2).contains($0.value) }
         file.itemOrder = LayoutOrder.unique(file.itemOrder)
         file.options = file.options.filter { knownOptions.contains($0.key) }
+        // A hand-edited shortcut that isn't a real one (negative, out of
+        // range, no ⌘/⌥/⌃) would crash or swallow a letter: drop the pair,
+        // and the Mac's current shortcut stays.
+        if let code = file.options["hotKeyCode"], code != -1,
+           HotKeyCombo.savedPair(code: code, modifiers: file.options["hotKeyModifiers"] ?? 0) == nil {
+            file.options["hotKeyCode"] = nil
+            file.options["hotKeyModifiers"] = nil
+        }
         return file
     }
 }

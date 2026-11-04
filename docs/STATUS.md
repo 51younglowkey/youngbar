@@ -104,9 +104,11 @@
 > ① YoungBarCore 单元测试 **70 passed**（Linux 上 Docker `swift:6.4-noble`，和 CI 的 macOS 上都跑）；
 > ② GitHub Actions `xcode-27`（macOS 27.0.1 / Xcode 27.1 / Swift 6.4）**编译通过**：调试版、测试版、正式版打包和 `Scripts/verify.sh`；同一种机器上 install.sh 装线上 0.1.4 通过（`install-script.yml`）。
 > 下表的「状态」除了纯逻辑和安装脚本都是 🟡：代码与编译有证据，**真机行为没有证据**。发布前按表末的清单在 Mac 上跑一遍。
+> 例外：「••• 掉到菜单栏下面」一行是之后在作者的 Mac 上测的，证据写在那一行。
 
 | 项 | 状态 | 证据 / 怎么验 |
 |---|---|---|
+| ••• 掉到菜单栏下面（小红书用户反馈，0.1.4） | ✅ 本机真机通过：安装时按菜单栏高度居中；每次刷新再按旁边第一个图标的竖直中心对齐（只在图标确实在这块屏的菜单栏里时）。**原因是推断**：用户机器上没拿到诊断，本机 0.1.4 没复现，所以用户那边是否解决要等反馈。只在本机测过（有刘海的内建屏、单屏、1800×1169、菜单栏 40 点、系统深色）；外接屏、多显示器、菜单栏自动隐藏、全屏、系统浅色都没测。之前的记录见 JOURNAL | 2026-11-04 移植到 ControlPanel.swift 后重跑。`YOUNGBAR_CONTROLYTEST=1`：`controlytest.json` 人为下移半个菜单栏（中心 19→39），一次刷新后回到 19，图标中心 19.5，`levelAfter:true`；菜单栏截图平齐。同一控件回归 `YOUNGBAR_APPEARANCETEST=1`：`appearancetest.json` `passed:true`、`controlIgnoresSetting:true`、`restored:true`，三步 `control == bar` 都是 dark，YoungBar 选浅色时 ••• 仍是 dark；菜单栏截图一致 |
 | ••• 跟随菜单栏外观（Issue #4 的一黑一白） | 🟡 控件面板取 YoungBar 状态项按钮的外观（状态栏窗口），不再跟 YoungBar 自己的「外观」设置；每次刷新、切换深浅色、改外观设置时同步 | `YOUNGBAR_APPEARANCETEST=1`：`steps` 里每步 `control == bar`，`controlIgnoresSetting:true`；加 `YOUNGBAR_APPEARANCE_HOLD=3` 时每步 `screencapture -x -R <controlFrame>` |
 | 收纳条为空时收图标进来 | 🟡 打开时一个都没有：上面一行说明，下面列出菜单栏上能收的图标（变暗带 ＋），点一下设为隐藏、收纳条不关，可以连续点；都收完或没有可收的时显示「去设置里选择」 | `YOUNGBAR_EMPTYSHELFTEST=1`：`adding`、`inStripAtOnce`、`concealed`、`stillOpen`、`restored`、`alphaAfterOpen:1`；单元测试 `ShelfContentsTests` |
 | 设置里标「放不下」 | 🟡 被 « 收走或在刘海下的「显示」图标在菜单栏页标出 | `YOUNGBAR_OVERFLOWTEST=1` 新增 `settingsMarksOverflow:true` |

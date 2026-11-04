@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # The README one-liner against the live release, on a Mac that has never
-# seen the author's certificate: a fresh install, then an update over the
-# installed copy (the certificate pin). Runs when the script changes, when a
-# release is published, and once a week.
+# seen the author's certificate: a fresh install, an update over the
+# installed copy, and the two refusals (an ad-hoc build; another signer than
+# the installed copy's). Runs when the script changes, when a release is
+# published, and once a week.
 name: Install script
 
 on:
@@ -47,9 +48,40 @@ jobs:
           sh Scripts/install.sh
           for i in $(seq 1 20); do pgrep -xq YoungBar && break; sleep 0.5; done
           pgrep -xl YoungBar
-          for app in /Applications/YoungBar.app "$HOME/Applications/YoungBar.app"; do
-            if [ -d "$app" ]; then codesign -dv "$app" 2>&1 | grep -E '^(Identifier|Authority|Signature|TeamIdentifier)='; fi
-          done
+          codesign -dvv /Applications/YoungBar.app 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier)='
+      - name: Refuses an ad-hoc build and leaves the installed copy alone
+        run: |
+          work="$(mktemp -d)"
+          ditto /Applications/YoungBar.app "$work/YoungBar.app"
+          xattr -cr "$work/YoungBar.app"
+          codesign --force --deep --sign - "$work/YoungBar.app"
+          (cd "$work" && ditto -c -k --keepParent YoungBar.app YoungBar-ci.zip && shasum -a 256 YoungBar-ci.zip > YoungBar-ci.zip.sha256)
+          if YOUNGBAR_VERSION=ci YOUNGBAR_RELEASE_BASE="file://$work" sh Scripts/install.sh; then
+            echo "install.sh installed an ad-hoc build"; exit 1
+          fi
+          if codesign -dv /Applications/YoungBar.app 2>&1 | grep -q '^Signature=adhoc'; then
+            echo "the installed copy was replaced"; exit 1
+          fi
+          pgrep -xl YoungBar
+      - name: The certificate pin turns away another signer
+        run: |
+          # Read exactly as install.sh reads it: an empty requirement would
+          # skip the pin without a word.
+          requirement="$(codesign -d -r- /Applications/YoungBar.app 2>/dev/null | sed -n 's/^designated => //p')"
+          echo "designated => $requirement"
+          case "$requirement" in
+            *certificate*) ;;
+            *) echo "no certificate in the requirement: install.sh would not pin"; exit 1 ;;
+          esac
+          codesign --verify -R="$requirement" /Applications/YoungBar.app
+          work="$(mktemp -d)"
+          ditto /Applications/YoungBar.app "$work/YoungBar.app"
+          xattr -cr "$work/YoungBar.app"
+          codesign --force --deep --sign - "$work/YoungBar.app"
+          if codesign --verify -R="$requirement" "$work/YoungBar.app" 2>/dev/null; then
+            echo "a copy signed by someone else passed the pin"; exit 1
+          fi
+          echo "pin holds"
       - name: Quit YoungBar
         if: always()
         run: pkill -9 -x YoungBar || true

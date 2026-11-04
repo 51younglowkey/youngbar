@@ -31,9 +31,12 @@ final class UpdateIntroModel {
 
     /// The tour that goes with this version; none for a version without one.
     var steps: [TourStep] {
-        if version.hasPrefix("0.1.5") { return tour015 }
-        if version.hasPrefix("0.1.4") { return tour014 }
-        return []
+        // The exact version: a prefix would replay 0.1.4's tour for 0.1.40.
+        switch AppVersion(version)?.description {
+        case "0.1.5": return tour015
+        case "0.1.4": return tour014
+        default: return []
+        }
     }
 
     var tour015: [TourStep] {

@@ -28,6 +28,9 @@ extension BarApp {
     func writeConfiguration(to url: URL) throws {
         var exported = options
         exported[.onboarded] = nil
+        // Icon spacing is this Mac's own global setting, written with
+        // `defaults -currentHost`; another Mac would show it without having it.
+        exported[.iconSpacing] = nil
         try ConfigFile(itemModes: modes, itemOrder: savedOrder, options: exported).encoded()
             .write(to: url, options: .atomic)
     }
@@ -71,26 +74,43 @@ extension BarApp {
     func applyConfiguration(_ file: ConfigFile, completion: @escaping @MainActor () -> Void = {}) {
         modes = file.itemModes
         savedOrder = LayoutOrder.unique(file.itemOrder + savedOrder)
-        let onboarded = options[.onboarded]
+        bulkHiddenKeys = []
+        let kept = (onboarded: options[.onboarded], spacing: options[.iconSpacing],
+                    hotKeyCode: options[.hotKeyCode], hotKeyModifiers: options[.hotKeyModifiers])
         options = file.options
-        options[.onboarded] = onboarded
+        options[.onboarded] = kept.onboarded
+        // What this Mac's defaults actually hold, not what another Mac had.
+        options[.iconSpacing] = kept.spacing
+        L10n.current = Language(rawValue: options[.language] ?? 0) ?? .chinese
+        settings?.languageChanged()
+        applyAppearance()
+        applyControlIcon()
+        var refusedShortcut: String?
+        if !registerHotKey() {
+            // Owned by another app on this Mac: keep the shortcut that works.
+            refusedShortcut = hotKeyDisplay
+            options[.hotKeyCode] = kept.hotKeyCode
+            options[.hotKeyModifiers] = kept.hotKeyModifiers
+            registerHotKey()
+        }
         let defaults = UserDefaults.standard
         defaults.set(modes, forKey: "itemModes")
         defaults.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
         defaults.set(savedOrder, forKey: "itemOrder")
         defaults.set(options, forKey: "barOptions")
-        L10n.current = Language(rawValue: options[.language] ?? 0) ?? .chinese
-        settings?.languageChanged()
-        applyAppearance()
-        applyControlIcon()
-        registerHotKey()
+        // Icons opened from the strip are out on their own timer: release them too.
+        let timed = Set(shownUntil.keys)
         closeShelf(); shownUntil.removeAll(); shelfState = nil
         busy = true
         Task {
-            await engine.conceal()
+            await engine.conceal(releasing: timed)
             await engine.setModel(currentModel())
             busy = false
             completion()
+            if let refusedShortcut {
+                feedback += L10n.t("；\(refusedShortcut) 已被其他应用占用，保留原来的 \(hotKeyDisplay)",
+                                   "; \(refusedShortcut) is taken by another app, so \(hotKeyDisplay) stays")
+            }
             await refresh()
             renderWindow(force: true)
         }

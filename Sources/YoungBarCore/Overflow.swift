@@ -22,8 +22,10 @@ public enum Overflow {
         let list = Array(frames)
         var result = Set<String>()
         for (i, a) in list.enumerated() {
+            // Same bar only: a copy on a display above or below can share x.
             for (j, b) in list.enumerated() where j != i
-                && min(a.value.maxX, b.value.maxX) - max(a.value.minX, b.value.minX) > tolerance {
+                && min(a.value.maxX, b.value.maxX) - max(a.value.minX, b.value.minX) > tolerance
+                && min(a.value.maxY, b.value.maxY) - max(a.value.minY, b.value.minY) > 0 {
                 result.insert(a.key)
                 break
             }

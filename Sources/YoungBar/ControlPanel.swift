@@ -31,9 +31,11 @@ final class BarControlButton: NSButton {
     }
 }
 
+/// The control never needs the keyboard: as a key window it took typing
+/// away from the frontmost app at launch and after every display change.
 @MainActor
 final class BarControlPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { false }
 }
 
 /// The ••• control: a small panel floating over YoungBar's own (blank)
@@ -64,7 +66,7 @@ extension BarApp {
             menu.addItem(.separator())
         }
         if !AXIsProcessTrusted() {
-            menu.addItem(withTitle: L10n.t("开启辅助功能权限…", "Open Accessibility…"), action: #selector(requestAccessibility), keyEquivalent: "")
+            menu.addItem(withTitle: L10n.t("允许「设备控制与数据访问」…", "Allow Device Control and Data Access…"), action: #selector(requestAccessibility), keyEquivalent: "")
         } else if !AssessmentMode.isAvailable {
             menu.addItem(withTitle: L10n.t("此系统上无法使用原生隐藏功能", "Native hiding is unavailable on this system"), action: nil, keyEquivalent: "")
         } else {
@@ -141,7 +143,11 @@ extension BarApp {
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // Not `.fullScreenAuxiliary`: in a full-screen space the menu bar
+        // hides, and the control floated over the app's own toolbar,
+        // catching its clicks. There the blank status item still opens the
+        // strip when the bar slides down.
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -166,7 +172,7 @@ extension BarApp {
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
                     if isHovered && !expanded && !busy {
-                        toggleShelf()
+                        toggleShelfFrom(keyboard: false, byHover: true)
                         hoverOpenedAt = Date()
                     }
                 }
@@ -177,7 +183,7 @@ extension BarApp {
         controlPanel = panel
         controlButton = control
         syncControlAppearance()
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         applyUpdateNotice()
     }
 
@@ -276,7 +282,8 @@ extension BarApp {
     func removeCustomIcon() {
         try? FileManager.default.removeItem(at: customControlIconURL)
         customIconImage = nil
-        options[.controlIcon] = 0
+        // Back to the ellipsis only if the picture was the one in use.
+        if options[.controlIcon] == ControlIcon.symbols.count { options[.controlIcon] = 0 }
         UserDefaults.standard.set(options, forKey: "barOptions")
         applyControlIcon()
         renderWindow(force: true)

@@ -31,6 +31,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var refreshing = false
     var includeAlwaysHidden = false
     var feedback = ""
+    /// Show icons "Hide all" also took off the bar, until Show all, Restore
+    /// my layout or a per-item change (`LayoutActions`).
+    var bulkHiddenKeys: Set<String> = []
+    /// Set once quitting starts: nothing re-applies the layout after that.
+    var quitting = false
+    /// A re-apply after an engine event is pending; they come 10 s apart at most.
+    var reapplyScheduled = false
+    var lastReapplyAt = Date.distantPast
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
     var options: [String: Int] = {
@@ -171,19 +179,26 @@ final class BarApp: NSObject, NSApplicationDelegate {
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             Task { @MainActor in self?.outsideClick() }
         }
-        registerHotKey()
+        let hotKeyRegistered = registerHotKey()
         refreshLoginItemIfMoved()
         startAutoUpdateChecks()
-        // After an update, say so once in Settings and show what changed
-        // (not on a first install: there was no earlier version).
+        // After an update: say so once in Settings, walk through the guide
+        // again (its permission step just shows it is granted), then show
+        // what changed. Decided once, here — the first walk below can change
+        // what `needsGuide` reads.
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        var updated = false
-        if let last = UserDefaults.standard.string(forKey: "lastLaunchedVersion"), last != version {
-            feedback = L10n.t("已更新到 \(version)", "Updated to \(version)")
-            updated = true
+        let lastVersion = UserDefaults.standard.string(forKey: "lastLaunchedVersion")
+        let firstRun = needsGuide
+        // 0.1.0 and 0.1.1 saved no version: a saved layout means an update.
+        let updated = lastVersion.map { $0 != version } ?? !firstRun
+        if updated { feedback = L10n.t("已更新到 \(version)", "Updated to \(version)") }
+        if !hotKeyRegistered {
+            feedback = L10n.t("快捷键 \(hotKeyDisplay) 被其他应用占用，可以在设置里换一个",
+                              "\(hotKeyDisplay) is taken by another app; choose another in Settings")
         }
-        UserDefaults.standard.set(version, forKey: "lastLaunchedVersion")
-        if needsGuide {
+        let showNotes: () -> Void = { [weak self] in self?.showWhatsNew() }
+        if firstRun {
+            if updated { afterGuide = showNotes }
             showGuide()
         } else {
             markGuided()
@@ -200,17 +215,19 @@ final class BarApp: NSObject, NSApplicationDelegate {
             #if YOUNGBAR_TESTHOOKS
             await runLaunchHooks()
             #endif
-            // After an update everyone walks through the guide again (the
-            // permission step just shows it is granted), then what changed.
-            if updated && !needsGuide {
-                afterGuide = { [weak self] in self?.showWhatsNew() }
+            if updated && !firstRun {
+                afterGuide = showNotes
                 showGuide()
             }
+            // Saved only now: quitting during the first walk shows the
+            // update again next time instead of never.
+            UserDefaults.standard.set(version, forKey: "lastLaunchedVersion")
         }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if previewOnly { return .terminateNow }
+        quitting = true
         if rescueRequested {
             UserDefaults.standard.set(false, forKey: "sessionActive")
             return .terminateNow
@@ -267,7 +284,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func startRefreshTriggers() {
         let tick = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, Date().timeIntervalSince(self.lastRefreshAt) >= self.refreshInterval - 0.05 else { return }
+                guard let self, Date().timeIntervalSince(self.lastRefreshAt) >= self.refreshInterval - 0.05,
+                      self.sessionIsOnScreen else { return }
                 await self.refresh()
             }
         }
@@ -276,8 +294,24 @@ final class BarApp: NSObject, NSApplicationDelegate {
         timer = tick
         let center = NSWorkspace.shared.notificationCenter
         // A launching app adds its item a moment after the launch notice.
-        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification,
-                     NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+        workspaceObservers.append(center.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let pid = app?.processIdentifier ?? 0
+            let bundle = app?.bundleIdentifier
+            Task { @MainActor in
+                self?.appLaunched(pid: pid, bundle: bundle)
+                self?.refreshSoon()
+            }
+        })
+        workspaceObservers.append(center.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.appTerminated()
+                self?.refreshSoon()
+            }
+        })
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.refreshSoon() }
             })
@@ -318,11 +352,17 @@ final class BarApp: NSObject, NSApplicationDelegate {
         if !started {
             await engine.start()
             await engine.setSteadyExtras(false)
+            // The engine reads the running apps once unless told; launches
+            // and quits keep it current from here (EngineSync).
+            await engine.setRunningBundles(runningBundleIDs())
+            watchEngineEvents()
             if previousSessionCrashed || rescueRequested {
                 await revealEverything()
                 let wasCrashed = previousSessionCrashed
                 previousSessionCrashed = false
-                UserDefaults.standard.set(false, forKey: "sessionActive")
+                // The marker stays set for this session (it hides icons
+                // again), so a second crash is noticed too; a rescue run
+                // clears it as it quits.
                 let recovered = await engine.freshSnapshot()
                 writeJSON(["at": ISO8601DateFormatter().string(from: Date()),
                            "crashed": wasCrashed,
@@ -421,7 +461,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// An app's icon the user has never had in the bar. Apple's own items
     /// (system extras, the clock, Control Center) never count.
     func shouldAutoHide(_ item: ObservedItem) -> Bool {
-        guard options[.autoHideNew] == 1, modes[item.id.sectionKey.rawValue] == nil,
+        // A helper with no bundle of its own (filed under its app) can never
+        // be hidden by the assertion: it would sit in the bar and the strip.
+        guard options[.autoHideNew] == 1, modes[item.id.sectionKey.rawValue] == nil, !item.hostIsBundleless,
               let bundle = item.id.bundleID, !bundle.hasPrefix("com.apple."),
               MenuBarPolicy.systemItem(for: item.id) == nil else { return false }
         return true
@@ -450,8 +492,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// rewrite just those slots to the actual left-to-right order and persist.
     func reconcileVisibleOrder(_ snapshot: EngineSnapshot) {
         guard !busy else { return }
+        // Only icons set to Show and in sight: a Hidden one out for a moment
+        // (opened from the strip, Show all) keeps its place in the strip's
+        // order, and a pile in macOS's « has no order to learn from.
+        let outOfSight = outOfSightKeys(snapshot)
         let actual = LayoutOrder.unique(snapshot.items
-            .filter { $0.frame != nil }
+            .filter { item in
+                let key = item.id.sectionKey.rawValue
+                return item.frame != nil && (modes[key] ?? 0) == 0 && !outOfSight.contains(key)
+            }
             .sorted { ($0.frame?.minX ?? 0) < ($1.frame?.minX ?? 0) }
             .map { $0.id.sectionKey.rawValue })
         guard let reconciled = LayoutOrder.reconciled(savedOrder, actual: actual) else { return }
@@ -539,8 +588,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
 /// `dev.leorea.bar` → `dev.leorea.youngbar` → `studio.wuyiyang.youngbar`.
 enum YoungBarDefaults {
     static func migrateIfNeeded() {
-        migrate(from: "dev.leorea.bar", marker: "migratedFromLeoreaBar")
+        // Newest first: dev.leorea.youngbar copied dev.leorea.bar's keys and
+        // then kept the newer edits, which an older-first pass would skip.
         migrate(from: "dev.leorea.youngbar", marker: "migratedFromLeoreaYoungBar")
+        migrate(from: "dev.leorea.bar", marker: "migratedFromLeoreaBar")
     }
 
     private static func migrate(from suiteName: String, marker: String) {

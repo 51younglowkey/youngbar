@@ -34,6 +34,15 @@ public enum LayoutOrder {
         return saved.map { presentSet.contains($0) ? (iterator.next() ?? $0) : $0 }
     }
 
+    /// Whether `key` sits right before `neighbour` in `order`, or right after
+    /// it when `after`. A drag that macOS refused leaves the item where it
+    /// was, which for a move to the right is still somewhere left of the
+    /// target — so "left of it" alone can't tell success from failure.
+    public static func isAdjacent(_ key: String, to neighbour: String, after: Bool, in order: [String]) -> Bool {
+        guard let a = order.firstIndex(of: key), let b = order.firstIndex(of: neighbour) else { return false }
+        return after ? a == b + 1 : a + 1 == b
+    }
+
     /// `key` moved to just before `before`; an empty or unknown `before`
     /// moves it to the end.
     public static func moving(_ key: String, before: String, in order: [String]) -> [String] {

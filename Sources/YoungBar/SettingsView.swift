@@ -456,7 +456,7 @@ struct LayoutPane: View {
             // nothing to list, so it is granted right here.
             if !model.axTrusted {
                 Section {
-                    PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
+                    PermissionRow(title: L10n.t("设备控制与数据访问", "Device Control and Data Access"),
                                   detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
                                   granted: model.axTrusted) { model.send(.permission("accessibility")) }
                 } header: {
@@ -480,10 +480,19 @@ struct LayoutPane: View {
             } header: {
                 Text(L10n.t("按菜单栏中的顺序，从左到右", "In menu-bar order, left to right"))
             } footer: {
-                Text(L10n.t("把一行拖到另一行上即可换到那个位置，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
-                            "Drag a row onto another, or right-click it, to reorder. Locked items stay where macOS puts them but can be hidden. Always Hide items appear in the strip only when you ⌥-click •••."))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    // What a change just did ("macOS did not accept the
+                    // order"…), here where the change was made.
+                    if !model.message.isEmpty {
+                        Text(model.message)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.primary)
+                    }
+                    Text(L10n.t("把一行拖到另一行上即可换到那个位置，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
+                                "Drag a row onto another, or right-click it, to reorder. Locked items stay where macOS puts them but can be hidden. Always Hide items appear in the strip only when you ⌥-click •••."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {

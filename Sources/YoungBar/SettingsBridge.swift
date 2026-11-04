@@ -39,8 +39,10 @@ extension BarApp {
                 UserDefaults.standard.set(options, forKey: "barOptions")
                 if key == .language {
                     // The SwiftUI tree rebuilds in place; the window keeps
-                    // its position and page.
+                    // its position and page. The last message was written in
+                    // the old language, so it goes.
                     L10n.current = Language(rawValue: value) ?? .chinese
+                    feedback = ""
                     statusItem?.button?.toolTip = L10n.t(
                         "YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                         "YoungBar: click to show concealed icons; right-click to choose apps")
@@ -95,7 +97,7 @@ extension BarApp {
     func renderWindow(force: Bool = false) {
         guard let settings, force || settings.isVisible else { return }
         let message: String
-        if !AXIsProcessTrusted() { message = L10n.t("需要辅助功能权限", "Accessibility permission required") }
+        if !AXIsProcessTrusted() { message = L10n.t("需要「设备控制与数据访问」权限", "Device Control and Data Access is needed") }
         else if !feedback.isEmpty { message = feedback }
         else { message = "" }
         settings.update(entries: barEntries(), message: message,

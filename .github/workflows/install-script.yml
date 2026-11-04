@@ -29,8 +29,13 @@ permissions:
 jobs:
   install:
     name: install.sh against the latest release (macOS 27)
-    # This tests the public repo's release, so it only runs by itself there.
-    if: github.repository == '51younglowkey/youngbar' || github.event_name == 'workflow_dispatch'
+    # This tests the public repo's release, so it runs by itself there. In
+    # the dev repo only when main changes the script (or this file): the
+    # change gets a real Mac before it is published.
+    if: >-
+      github.repository == '51younglowkey/youngbar'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     # The release needs macOS 27 to open.
     runs-on: xcode-27
     timeout-minutes: 15

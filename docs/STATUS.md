@@ -128,6 +128,7 @@
 | 代码整理 | ✅ main.swift 1507 行拆成 main / ControlPanel / Shelf / LayoutActions / SettingsBridge / EngineSync；拆分时逐行核对没有丢行 | CI 编译通过 |
 
 **没有处理（审查报告里提到，留给以后）**：
+- 各桌面壁纸明暗不同时，••• 只跟启动时所在的桌面：状态项按钮的外观启动后不再变（`YOUNGBAR_BARLOOKTEST=34`：切 6 次桌面只有 1 条记录；黑色桌面启动后切到浅色桌面，白色 ••• 几乎看不见）。重启 YoungBar 可以重新取色。不是回归，0.1.4 也不跟壁纸；已写进更新日志的说明。
 - 全屏空间里菜单栏隐藏时，••• 浮在应用上面（0.1.4 起就这样）。这一轮试过去掉 `.fullScreenAuxiliary`，复审指出那样全屏时就没有任何可点的地方（隐藏生效时 macOS 不画 YoungBar 自己的状态项），已撤回；要在真机上找到判断「全屏菜单栏是否滑下」的办法再做。菜单栏设为「自动隐藏」时同理。
 - 收纳条拖动中途如果正好重建，这次拖动会丢；只保留了滚动位置。
 - 换包失败只写在 `update.log`，下次启动不提示。
@@ -162,6 +163,20 @@
 | 正式版第一次启动（模拟从 0.1.4 升级） | ✅ 使用引导（授权显示已授权）→ 更新内容（有「••• 不再掉到菜单栏下面」，没有说明和校验）→ 新功能 1/3–3/3 → 正常结束，`lastLaunchedVersion` 记成 0.1.5。按钮是用辅助功能按的，不是鼠标点的 | 窗口截图、窗口文字 |
 
 另外观察到：`engine.conceal(items:)` 之后 ••• 要等下一次刷新才靠回图标，中间有一段空白；约 8 秒后的截图已经归位。
+
+**清单结果（第二轮，补上面没测到的）**（2026-11-04 晚，main `842b2c4` 加下面的修复；同一台 Mac）。每项跑完和 `defaults export` 的备份比对，都没有差异：
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 1. `YOUNGBAR_OVERFLOWTEST`（开 Stats、All、XApp 挤满） | ✅ 菜单栏出现 «，设置「菜单栏」页给有道和 Stats 标了「放不下」，两者都列进收纳条 | `overflowtest.json`：`crowded:true`、`passed:true`、`settingsMarksOverflow:true`、`stripListsOverflow:true`、`restored:true`；`overflowAllShown` 是有道、Stats；菜单栏和设置页截图 |
+| 2. 隐藏的应用退出再打开 | ❌→✅ **第一次没过**：不在菜单栏，也不在收纳条和设置里（`inStripAfterLaunch:false`，设置里没有这一行）。修复后通过 | 修复后 `launchtest.json`（CodexBar）：`mode:1`、`holdsAssertion:true`、`onBarAfterLaunch:false`、`inStripAfterLaunch:true`、`inSettingsAfterLaunch:true`、`passed:true`；收纳条截图 |
+| 2. 从收纳条点它 | ✅ 菜单开在收纳条旁边，收纳条不关，约 20 秒后图标收回。**和清单预期不同：其他隐藏图标没有闪**，日志没有 `adoptWindow`，这条路没用到接纳窗口 | 连拍 24 张；CodexBar 菜单窗口 310×1003、x=1350，收纳条 x=1242；图标从 `x=7` 到 `x=1362` |
+| 3. 重开后、点它之前改成「显示」 | ✅ **疑似问题不成立**，代码没改：1 秒内回到菜单栏 | AX 位置 `x=7` → `x=1362`（按清单顺序走了两遍），菜单栏截图 |
+| 4. 系统浅色 `YOUNGBAR_APPEARANCETEST` | ❌→✅ **第一次没过**：黑色桌面上在 YoungBar 里选浅色或深色时 ••• 变深色，几乎看不见。修复后黑色、浅色桌面都通过 | 修复前 `passed:false`、`controlIgnoresSetting:false`，连拍；修复后黑色桌面三步 `bar`/`control` 都是 dark、浅色桌面三步都是 light，含 YoungBar 选深色那步，`passed:true`、`restored:true`，连拍 |
+| 5. 全屏时菜单栏滑下能点到 ••• | ✅ 作者本人操作，能打开收纳条 | 作者确认，没有截图 |
+| 改完后的回归（系统深色） | ✅ | `appearancetest.json`、`controlytest.json`（`levelAfter:true`）、`launchtest.json`（显示的应用，0.85 秒回来）、`shelfopen.json`、`emptyshelftest.json` 都通过，defaults 无差异 |
+
+这一轮的代码改动：`EngineSync.swift` + `main.swift`（`parkedKeys`：隐藏生效时重开的隐藏应用留在收纳条和设置里）；`ControlPanel.swift`（`menuBarAppearance` 只用状态项按钮的外观，不再退回系统设置）；`TestHooks.swift`（`YOUNGBAR_LAUNCHTEST` 要求找得到、新增 `YOUNGBAR_BARLOOKTEST`）；`RELEASE-0.1.5.md`。
 
 **剩下的发布步骤**（2026-11-04 晚，云端整理；在作者的 Mac 上按顺序做，做完一项在上面「清单结果」里补一行）：
 

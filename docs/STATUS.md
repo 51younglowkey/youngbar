@@ -4,6 +4,8 @@
 > 已原样移到 [`JOURNAL.md`](JOURNAL.md) 附录。
 >
 > 最后核对：**2026-11-01 06:25 +00:00**，版本 **0.1.4 (5)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
+>
+> 分支 `claude/modest-albattani-ov9mnb`：**0.1.5 (6)，未发布**（2026-11-04 云端会话）。只有单元测试和 CI 编译的证据，**没有在真机上跑过**，见 2.4。
 
 ## 1. 构建
 
@@ -13,6 +15,8 @@
 | 工具链 | 只需命令行工具：Swift 6.4（CLT 27.0，2026-10-26 安装），**不需要 Xcode** | `swift --version`；包内不再使用 `@State`（宏插件只随 Xcode） |
 | 测试版构建 | `TESTHOOKS=1 sh Scripts/build.sh`：编入 `TestHooks.swift` 的真机自检 | 正式版 `strings` 中 `YOUNGBAR_*TEST` 0 处；`otool -L` 无 ScreenCaptureKit |
 | 单元测试 | `swift test --disable-sandbox`：17 项（排序、溢出判断、快捷键、配置文件） | 17 passed |
+| CI（0.1.5 分支起） | `.github/workflows/ci.yml`：Linux（swift:6.4-noble）跑单元测试；`xcode-27`（macOS 27.0.1、Xcode 27.1、Swift 6.4）跑单元测试、测试版编译（`-DYOUNGBAR_TESTHOOKS`）和 `Scripts/verify.sh` | Actions 日志里的 `sw_vers` / `swift --version`；见 2.4 |
+| Linux 上的单元测试 | `Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test` 可以在没有 Mac 的地方跑 | Docker `swift:6.4-noble` 64 passed |
 | 签名 | 本地 `YoungBar Local Signing` 证书；重建后辅助功能授权保持 | `codesign -dv`；重建后自检仍 `axTrusted:true` |
 
 ## 2. 当前行为与证据（0.1.1）
@@ -93,6 +97,46 @@
 | 测试后复原 | ✅ 键盘测试前后 `defaults export` 只差 `sessionActive`（运行标记） | diff |
 
 边界：老用户如果从没改过快捷键，升级后默认从 ⌃⌥B 变成连按两下 ⌘（改过的保留）。数字键之外的拖动只在 3 个图标、收纳条不滚动时测过。自动收纳只用「假装新图标」测过，没有真的装一个新应用。去掉的选项：老用户之前存的值会被忽略（例如开过「始终显示收纳条」的人升级后不再常开）。`YOUNGBAR_SETTINGSUITEST`（真实鼠标走设置窗口）本轮没有重跑。
+
+## 2.4 0.1.5（分支，未发布，2026-11-04）
+
+> 在云端 Linux 机器上做的：**跑不了 app，也没有你的 Mac**。证据只有两种：
+> ① YoungBarCore 单元测试 **64 passed**（Linux 上 Docker `swift:6.4-noble`，和 CI 的 macOS 上都跑）；
+> ② GitHub Actions `xcode-27`（macOS 27.0.1 / Xcode 27.1 / Swift 6.4）**编译通过**：调试版、测试版、正式版打包和 `Scripts/verify.sh`。
+> 下表的「状态」全部是 🟡：代码与编译有证据，**真机行为没有证据**。发布前按表末的清单在 Mac 上跑一遍。
+
+| 项 | 状态 | 证据 / 怎么验 |
+|---|---|---|
+| ••• 跟随菜单栏外观（Issue #4 的一黑一白） | 🟡 控件面板取 YoungBar 状态项按钮的外观（状态栏窗口），不再跟 YoungBar 自己的「外观」设置；每次刷新、切换深浅色、改外观设置时同步 | `YOUNGBAR_APPEARANCETEST=1`：`steps` 里每步 `control == bar`，`controlIgnoresSetting:true`；加 `YOUNGBAR_APPEARANCE_HOLD=3` 时每步 `screencapture -x -R <controlFrame>` |
+| 收纳条为空时收图标进来 | 🟡 打开时一个都没有：上面一行说明，下面列出菜单栏上能收的图标（变暗带 ＋），点一下设为隐藏、收纳条不关，可以连续点；都收完或没有可收的时显示「去设置里选择」 | `YOUNGBAR_EMPTYSHELFTEST=1`：`adding`、`inStripAtOnce`、`concealed`、`stillOpen`、`restored`、`alphaAfterOpen:1`；单元测试 `ShelfContentsTests` |
+| 设置里标「放不下」 | 🟡 被 « 收走或在刘海下的「显示」图标在菜单栏页标出 | `YOUNGBAR_OVERFLOWTEST=1` 新增 `settingsMarksOverflow:true` |
+| 收纳条淡入 | 🟡 约 0.1 秒、手动四步（不依赖 `animator()`），减少动态效果时不淡入 | `YOUNGBAR_SHELFOPENTEST=1` 新增 `alphaAfterFade:1` |
+| 新启动的应用（EngineSync） | 🟡 启动/退出时把运行中的应用告诉引擎并重新应用布局；有菜单栏图标却没出现（隐藏生效时 macOS 会把新注册停在屏幕外）就开一次接纳窗口（隐藏的图标闪一下）；读取引擎事件，断言被撤或激活失败时重新应用（最多 10 秒一次） | `YOUNGBAR_LAUNCHTEST=<一个菜单栏小工具的 bundle id>`：`holdsAssertion:true` 时 `onBarAfterLaunch` 与模式一致；隐藏一个图标后真的退出再打开一个带图标的应用，看图标是否回来、是否闪了一下 |
+| 单独显示的图标都会收回 | 🟡 设置里排序后、点开收纳条图标 20 秒内改显示方式、导入配置、「全部显示」后「全部隐藏」——都改成配对的 `conceal(items:)` / `conceal(releasing:)` | `YOUNGBAR_SETTINGSUITEST=1`（排序）后把那个图标设为隐藏应能藏住；`YOUNGBAR_BULKTEST=1` |
+| 「全部隐藏」 | 🟡 只藏应用图标（不藏 Wi-Fi、电池等）、藏起来的在收纳条里、不会被之后的重新应用悄悄撤销 | `YOUNGBAR_BULKTEST=1`；右键 ••• →「全部隐藏」后打开收纳条 |
+| 导入配置的快捷键校验 | ✅（纯逻辑）不合法的快捷键数值不再导致导入和之后每次启动闪退；被占用时保留原快捷键；不导入/导出本机的图标间隙 | 单元测试 `SavedShortcutTests` |
+| 收纳条与 ••• 的细节 | 🟡 •••不抢键盘焦点；悬停打开不接管键盘；全屏空间里没有浮动 •••；被 « 收走的系统图标点了提示而不是点空；只塞到新弹出的窗口下面；原地打开后快速选菜单也会关；打开菜单时收纳条变宽不跳；重建保留滚动位置 | `YOUNGBAR_KEYBOARDTEST=1`、`YOUNGBAR_INTERACTIONTEST=1`、`YOUNGBAR_CONCEALTEST=1` |
+| 设置细节 | 🟡 向右排序被拒也显示成功 → 改为检查是否真的挨着目标；忙时的点击不丢；中间有带锁项目时往右移不再变成往左；移除自定义图片不改动已选符号；菜单栏页显示操作结果；切语言清掉旧提示；「设备控制与数据访问」统一叫法 | `YOUNGBAR_SETTINGSUITEST=1`；单元测试 `MoveLandingTests` |
+| 启动与更新流程 | 🟡 新安装跟随系统语言（老用户不变）；0.1.0/0.1.1 升级上来也走引导和更新内容；版本号在第一次刷新后才记下；新功能引导按准确版本匹配（0.1.5 三页）；登录项需要批准时提示并打开设置；自动检查失败一小时后重试 | 单元测试 `PreferredLanguageTests`；模拟升级：`defaults write studio.wuyiyang.youngbar lastLaunchedVersion 0.1.4` 后启动 |
+| 更新器与安装脚本 | 🟡 不装比本机系统要求更新的版本；换包脚本保留旧版直到新版打开成功；等退出 10 分钟；下载中再点不重来；清理临时文件；install.sh 先校验签名再替换、作者签名时要求同一证书；package.sh 无证书时不打包 | `YOUNGBAR_UPDATETEST=1` + `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`（发布 0.1.5 之后）；`make package` 在没有证书的环境应失败 |
+| 自检本身 | 🟡 menutest / concealtest 收回显示的图标、恢复原模式；spacingtest 写回本机原值；临时模式只在内存里 | 跑完各自检后 `defaults export studio.wuyiyang.youngbar` 与之前对比 |
+| 代码整理 | ✅ main.swift 1507 行拆成 main / ControlPanel / Shelf / LayoutActions / SettingsBridge / EngineSync；拆分时逐行核对没有丢行 | CI 编译通过 |
+
+**没有处理（审查报告里提到，留给以后）**：
+- 菜单栏设为「自动隐藏」（不是全屏）时 ••• 仍浮着；只处理了全屏空间。
+- 收纳条拖动中途如果正好重建，这次拖动会丢；只保留了滚动位置。
+- 换包失败只写在 `update.log`，下次启动不提示。
+- `YOUNGBAR_DIAGNOSTICS=1` 时每次刷新逐项读 AX 位置（只影响开着诊断时的 CPU）。
+- 自检收尾关窗口仍按「测试前屏幕上没有窗口」判断，不比较窗口号；gear / about 测试结束后窗口没关。
+- 收纳条里调的顺序不会推到菜单栏上（这是现在的设计，注释已改正）。
+
+**发布前在 Mac 上的清单**（`TESTHOOKS=1 sh Scripts/build.sh` 之后，每项单独 `open --env …=1 build/YoungBar.app`，结果在 `~/Library/Application Support/YoungBar/*.json`）：
+1. `YOUNGBAR_APPEARANCETEST`（再在 YoungBar 里选深色、系统浅色时截一张菜单栏）
+2. `YOUNGBAR_EMPTYSHELFTEST`
+3. `YOUNGBAR_LAUNCHTEST=<菜单栏小工具 bundle id>`，以及手动：隐藏一个图标后退出并重新打开一个带菜单栏图标的应用
+4. `YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_OVERFLOWTEST`、`YOUNGBAR_KEYBOARDTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_CONCEALTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_BULKTEST`、`YOUNGBAR_SETTINGSUITEST`
+5. 全屏一个应用，确认右上角没有 •••；ESC 退出全屏后 ••• 还在
+6. 正式版 `sh Scripts/build.sh` 启动一次：先走使用引导，再是 0.1.5 的更新内容和三页新功能
 
 ## 3. 验证边界（不许含糊）
 

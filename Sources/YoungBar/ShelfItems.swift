@@ -41,6 +41,12 @@ final class ShelfItemButton: NSButton {
     }
 }
 
+/// An image that never takes a click: the ＋ on an icon an empty strip
+/// offers, so the click reaches the icon underneath.
+final class PassThroughImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 /// Reordering in the strip changes the saved order only: hidden icons are
 /// not in the bar, so nothing is revealed or dragged there. They take the
 /// new order the next time they show.

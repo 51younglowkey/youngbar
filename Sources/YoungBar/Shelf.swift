@@ -53,10 +53,13 @@ extension BarApp {
             panel.hidesOnDeactivate = false
             shelfPanel = panel
         }
+        let wasOpen = expanded && shelfPanel?.isVisible == true
         expanded = true
         shelfAnchored = false
         shelfSelection = selectFirst ? 0 : nil
         shelfNumbered = options[.shelfNumbers] != 0
+        // Nothing in it: show the bar's icons, ready to be tucked in.
+        shelfAdding = shelfKeys().isEmpty
         shelfState = nil
         // Above the menu bar while browsing; lowered while an item's own menu
         // or panel is open so that opens on top of the strip.
@@ -64,8 +67,22 @@ extension BarApp {
         populateShelf()
         guard let shelfPanel else { return }
         positionShelf()
+        // A short fade in, stepped by hand: `animator()` on these panels
+        // has not always applied (see positionControlBesideMenuIcons), and a
+        // strip stuck at alpha 0 would be far worse than no fade.
+        let fade = !wasOpen && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        shelfPanel.alphaValue = fade ? 0.2 : 1
         shelfPanel.orderFrontRegardless()
         shelfPanel.makeKeyAndOrderFront(nil)
+        if fade {
+            Task {
+                for step in 1...4 {
+                    try? await Task.sleep(for: .milliseconds(25))
+                    shelfPanel.alphaValue = 0.2 + 0.8 * CGFloat(step) / 4
+                }
+                shelfPanel.alphaValue = 1
+            }
+        }
     }
 
     func positionShelf() {
@@ -83,36 +100,90 @@ extension BarApp {
         shelfAnchored = false
         shelfSelection = nil
         shelfNumbered = false
+        shelfAdding = false
         shelfPanel?.orderOut(nil)
     }
 
     func shelfKeys() -> [String] {
-        return orderedKeys().filter {
-            (modes[$0] ?? 0) == 1 || (includeAlwaysHidden && modes[$0] == 2) || overflowKeys.contains($0)
-        }
+        ShelfContents.keys(order: orderedKeys(), modes: modes, covered: overflowKeys,
+                           includeAlwaysHidden: includeAlwaysHidden)
+    }
+
+    /// What a strip that opened empty offers to tuck in: icons on the bar set
+    /// to Show, in bar order — not YoungBar itself, not the clock and Control
+    /// Center that macOS pins, not icons the bar has no room for.
+    func tuckInCandidates() -> [String] {
+        let order = orderedKeys()
+        let excluded = Set(order.filter { key in
+            guard let item = catalog[key] else { return true }
+            return item.id.bundleID == Bundle.main.bundleIdentifier
+                || !MenuBarPolicy.isSectionManageable(item.id)
+                || MenuBarPolicy.isPinnedSystemItem(item.id)
+                || MenuBarPolicy.isPinnedAppleHost(item.id.bundleID)
+        })
+        return ShelfContents.tuckInCandidates(order: order, modes: modes, covered: overflowKeys, excluded: excluded)
     }
 
     func populateShelf() {
         guard let shelfPanel else { return }
         let keys = shelfKeys()
+        // Opened empty: the bar's own icons are offered, dimmed, until the
+        // strip closes, so several can be tucked in one after another.
+        let candidates = shelfAdding ? tuckInCandidates() : []
+        let adding = !candidates.isEmpty
         let state = (shelfNumbered ? "#" : "") + keys.joined(separator: "|")
+            + (adding ? "+" + candidates.joined(separator: "|") : "")
         guard state != shelfState || shelfPanel.contentView == nil else { return }
         shelfState = state
         // Each item shows its app's own icon (or the system symbol): sharp at
         // any size, unlike a menu-bar crop.
-        let widths = keys.map { _ in CGFloat(40) }
-        let itemContentWidth = widths.reduce(16, +)
+        let slot = Self.shelfSlot
+        let inset = Self.shelfInset
+        // A little air between what is in the strip and what could join it.
+        let gap: CGFloat = adding && !keys.isEmpty ? 10 : 0
+        let itemContentWidth = inset * 2 + slot * CGFloat(keys.count + candidates.count) + gap
         let screenWidth = (controlPanel?.screen ?? NSScreen.screens.first)?.frame.width ?? 800
         let gearWidth: CGFloat = 38
-        let width = min(max(keys.isEmpty ? 150 : 100, itemContentWidth + gearWidth), screenWidth - 24)
-        let height: CGFloat = 40
-        shelfPanel.setContentSize(NSSize(width: width, height: height))
+        let rowHeight: CGFloat = 40
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let themeForStrip: ThemeColor? = themeColor
-        let systemStrip = themeForStrip == nil || themeForStrip == .clear
-        let lightStrip = systemStrip ? !isDark : false
-        let iconColor: NSColor = lightStrip ? .black : .white
+        // The clear theme is the system blur only, so its icons follow light
+        // and dark; every colour theme is dark enough for white icons.
+        let systemStrip = themeColor == .clear
+        let iconColor: NSColor = systemStrip && !isDark ? .black : .white
         shelfIconColor = iconColor
+
+        // Text above the icons while offering them; the only content when
+        // there is nothing in the strip and nothing to offer.
+        var header: NSTextField?
+        var emptyLink: NSButton?
+        if adding {
+            let text = keys.isEmpty
+                ? L10n.t("还没有收纳的图标，点一下就收进来", "Nothing here yet. Click an icon to tuck it in")
+                : L10n.t("已收进 \(keys.count) 个，可以接着点；按 Esc 完成",
+                         "\(keys.count) tucked in. Keep clicking, or press Esc when done")
+            let label = NSTextField(labelWithString: text)
+            label.font = .systemFont(ofSize: 11, weight: .medium)
+            label.textColor = iconColor.withAlphaComponent(0.85)
+            label.lineBreakMode = .byTruncatingTail
+            header = label
+        } else if keys.isEmpty {
+            // Nothing to show and nothing to offer (every icon is hidden
+            // already, or the bar hasn't been read yet): Settings decides.
+            let link = NSButton(title: "", target: self, action: #selector(openLayoutSettings))
+            link.isBordered = false
+            link.attributedTitle = NSAttributedString(
+                string: L10n.t("还没有收纳的图标 · 去设置里选择", "Nothing tucked away yet · choose in Settings"),
+                attributes: [.foregroundColor: iconColor, .font: NSFont.systemFont(ofSize: 12)])
+            link.toolTip = L10n.t("在设置的「菜单栏」页把图标设为「隐藏」", "Set icons to Hide on the Menu Bar page in Settings")
+            link.setAccessibilityLabel(L10n.t("去设置里选择要收纳的图标", "Choose icons to tuck away in Settings"))
+            emptyLink = link
+        }
+        let headerHeight: CGFloat = header == nil ? 0 : 22
+        let height = rowHeight + headerHeight
+        let textWidth = (header?.fittingSize.width ?? emptyLink?.fittingSize.width ?? 0) + 24
+        let contentWidth = keys.isEmpty && !adding ? textWidth : max(itemContentWidth, textWidth)
+        let width = min(max(keys.isEmpty && !adding ? 150 : 100, contentWidth + gearWidth), screenWidth - 24)
+        shelfPanel.setContentSize(NSSize(width: width, height: height))
 
         // Every theme uses the same two layers: blur, then the theme colour at
         // the chosen opacity (100% is a solid strip). Clear keeps the blur only.
@@ -126,26 +197,27 @@ extension BarApp {
         let tint = NSView(frame: effect.bounds)
         tint.autoresizingMask = [.width, .height]
         tint.wantsLayer = true
-        tint.layer?.backgroundColor = (systemStrip ? NSColor.clear
-            : (themeForStrip?.strip ?? .clear).withAlphaComponent(stripOpacity)).cgColor
+        tint.layer?.backgroundColor = (systemStrip ? NSColor.clear : themeColor.strip.withAlphaComponent(stripOpacity)).cgColor
         effect.addSubview(tint)
         let background: NSView = effect
         let itemArea = width - gearWidth
         shelfButtons = []
-        if keys.isEmpty {
-            let label = NSTextField(labelWithString: L10n.t("没有收纳项目", "No concealed items"))
-            label.textColor = iconColor; label.alignment = .center
-            label.frame = NSRect(x: 8, y: 11, width: itemArea - 16, height: 18)
-            background.addSubview(label)
+        if let emptyLink {
+            emptyLink.frame = NSRect(x: 8, y: 10, width: itemArea - 16, height: 20)
+            background.addSubview(emptyLink)
         } else {
-            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: itemArea, height: height))
+            if let header {
+                header.frame = NSRect(x: 12, y: rowHeight + 2, width: itemArea - 20, height: 16)
+                background.addSubview(header)
+            }
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: itemArea, height: rowHeight))
             scroll.drawsBackground = false; scroll.borderType = .noBorder
             scroll.hasHorizontalScroller = itemContentWidth > itemArea
             scroll.scrollerStyle = .overlay
-            let document = NSView(frame: NSRect(x: 0, y: 0, width: max(itemContentWidth, itemArea), height: height))
-            var x: CGFloat = 8
+            let document = NSView(frame: NSRect(x: 0, y: 0, width: max(itemContentWidth, itemArea), height: rowHeight))
+            var x = inset
             for (index, key) in keys.enumerated() {
-                let button = ShelfItemButton(frame: NSRect(x: x, y: 2, width: widths[index], height: 36))
+                let button = ShelfItemButton(frame: NSRect(x: x, y: 2, width: slot, height: 36))
                 button.title = ""; button.isBordered = false
                 button.imagePosition = .imageOnly; button.imageScaling = .scaleProportionallyDown
                 button.identifier = .init(key); button.target = self; button.action = #selector(pressShelfItem(_:))
@@ -170,23 +242,47 @@ extension BarApp {
                     number.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
                     number.textColor = iconColor.withAlphaComponent(0.75)
                     number.alignment = .right
-                    number.frame = NSRect(x: widths[index] - 13, y: button.isFlipped ? 24 : 0, width: 10, height: 12)
+                    number.frame = NSRect(x: slot - 13, y: button.isFlipped ? 24 : 0, width: 10, height: 12)
                     number.setAccessibilityElement(false)
                     button.addSubview(number)
                 }
                 document.addSubview(button)
-                x += widths[index]
+                x += slot
                 shelfButtons.append(button)
+            }
+            x += gap
+            for key in candidates {
+                let button = ShelfItemButton(frame: NSRect(x: x, y: 2, width: slot, height: 36))
+                button.title = ""; button.isBordered = false
+                button.imagePosition = .imageOnly; button.imageScaling = .scaleProportionallyDown
+                button.identifier = .init(key); button.target = self; button.action = #selector(tuckInFromShelf(_:))
+                let image = fallbackImage(for: key)?.copy() as? NSImage
+                image?.size = NSSize(width: 22, height: 22)
+                button.image = image
+                button.contentTintColor = iconColor
+                // Dimmed: not in the strip yet. The ＋ beside it stays bright.
+                button.alphaValue = 0.45
+                let tip = L10n.t("收进收纳条：\(name(for: key))", "Tuck into the strip: \(name(for: key))")
+                button.toolTip = tip
+                button.setAccessibilityLabel(tip)
+                document.addSubview(button)
+                let badge = PassThroughImageView(frame: NSRect(x: x + slot - 15, y: 4, width: 12, height: 12))
+                badge.image = NSImage(systemSymbolName: "plus.circle.fill", accessibilityDescription: nil)?
+                    .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+                badge.contentTintColor = iconColor
+                badge.setAccessibilityElement(false)
+                document.addSubview(badge)
+                x += slot
             }
             scroll.documentView = document; background.addSubview(scroll)
         }
 
-        let divider = NSView(frame: NSRect(x: itemArea, y: 8, width: 1, height: 24))
+        let divider = NSView(frame: NSRect(x: itemArea, y: 8, width: 1, height: height - 16))
         divider.wantsLayer = true
         divider.layer?.backgroundColor = iconColor.withAlphaComponent(0.18).cgColor
         background.addSubview(divider)
 
-        let gear = BarControlButton(frame: NSRect(x: itemArea + 5, y: 6, width: 28, height: 28))
+        let gear = BarControlButton(frame: NSRect(x: itemArea + 5, y: (height - 28) / 2, width: 28, height: 28))
         gear.title = ""
         gear.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: L10n.t("设置", "Settings"))
         gear.imagePosition = .imageOnly
@@ -203,6 +299,41 @@ extension BarApp {
         if let selection = shelfSelection { shelfSelection = shelfButtons.isEmpty ? nil : min(selection, shelfButtons.count - 1) }
         applyShelfSelection()
         positionShelf()
+    }
+
+    /// An icon offered by an empty strip, clicked: it goes into the strip
+    /// (Hidden) at once and leaves the bar a moment later. The strip stays
+    /// open for the next one.
+    @objc func tuckInFromShelf(_ button: NSButton) {
+        guard let key = button.identifier?.rawValue, catalog[key] != nil, (modes[key] ?? 0) == 0 else { return }
+        modes[key] = 1
+        UserDefaults.standard.set(modes, forKey: "itemModes")
+        UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
+        feedback = L10n.t("已收进收纳条：\(name(for: key))", "Tucked into the strip: \(name(for: key))")
+        // The bar reflows as the icon leaves it; that is not a click outside.
+        ignoreOutsideUntil = Date().addingTimeInterval(1.5)
+        shelfState = nil
+        populateShelf()
+        applyTuckIns()
+    }
+
+    /// Clicks can come faster than the engine applies them: one apply runs
+    /// at a time and takes whatever was tucked in meanwhile with it.
+    func applyTuckIns() {
+        guard !tuckInApplying else { tuckInPending = true; return }
+        tuckInApplying = true
+        Task {
+            repeat {
+                tuckInPending = false
+                for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+                busy = true
+                await engine.setModel(currentModel())
+                busy = false
+            } while tuckInPending
+            tuckInApplying = false
+            await refresh()
+            renderWindow()
+        }
     }
 
     /// Orders the strip just below the frontmost window of `pid` that overlaps

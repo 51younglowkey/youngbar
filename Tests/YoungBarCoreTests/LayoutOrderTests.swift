@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 YoungBar contributors
 // SPDX-License-Identifier: GPL-3.0-only
 
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import Foundation
 import Testing
 @testable import YoungBarCore

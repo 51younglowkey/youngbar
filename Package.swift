@@ -3,6 +3,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import PackageDescription
 
+#if os(Linux)
+// Linux (CI, or an agent without a Mac) builds only the pure logic and its
+// unit tests: the app and the vendored engine need macOS 27.
+let package = Package(
+    name: "YoungBar",
+    targets: [
+        .target(name: "YoungBarCore"),
+        .testTarget(name: "YoungBarCoreTests", dependencies: ["YoungBarCore"]),
+    ]
+)
+#else
 let package = Package(
     name: "YoungBar",
     platforms: [.macOS("27.0")],
@@ -25,3 +36,4 @@ let package = Package(
         .testTarget(name: "YoungBarCoreTests", dependencies: ["YoungBarCore"]),
     ]
 )
+#endif

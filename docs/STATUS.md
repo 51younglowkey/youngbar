@@ -5,7 +5,7 @@
 >
 > 最后核对：**2026-11-01 06:25 +00:00**，版本 **0.1.4 (5)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 >
-> 分支 `claude/modest-albattani-ov9mnb`：**0.1.5 (6)，未发布**（2026-11-04 云端会话）。只有单元测试和 CI 编译的证据，**没有在真机上跑过**，见 2.4。
+> main：**0.1.5 (6)，未发布**（2026-11-04 云端会话，PR #9 合并）。只有单元测试和 CI 的证据，**没有在真机上跑过**，见 2.4。
 
 ## 1. 构建
 
@@ -14,9 +14,9 @@
 | 命令 | `sh Scripts/build.sh` → `build/YoungBar.app` | 构建通过（2026-10-29） |
 | 工具链 | 只需命令行工具：Swift 6.4（CLT 27.0，2026-10-26 安装），**不需要 Xcode** | `swift --version`；包内不再使用 `@State`（宏插件只随 Xcode） |
 | 测试版构建 | `TESTHOOKS=1 sh Scripts/build.sh`：编入 `TestHooks.swift` 的真机自检 | 正式版 `strings` 中 `YOUNGBAR_*TEST` 0 处；`otool -L` 无 ScreenCaptureKit |
-| 单元测试 | `swift test --disable-sandbox`：17 项（排序、溢出判断、快捷键、配置文件） | 17 passed |
-| CI（0.1.5 分支起） | `.github/workflows/ci.yml`：Linux（swift:6.4-noble）跑单元测试；`xcode-27`（macOS 27.0.1、Xcode 27.1、Swift 6.4）跑单元测试、测试版编译（`-DYOUNGBAR_TESTHOOKS`）和 `Scripts/verify.sh` | Actions 日志里的 `sw_vers` / `swift --version`；见 2.4 |
-| Linux 上的单元测试 | `Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test` 可以在没有 Mac 的地方跑 | Docker `swift:6.4-noble` 64 passed |
+| 单元测试 | `swift test --disable-sandbox`：70 项（排序与落点、溢出判断、快捷键与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言） | 70 passed（2026-11-04，Linux 与 CI 的 macOS） |
+| CI（0.1.5 起） | `.github/workflows/ci.yml`：Linux（swift:6.4-noble）跑单元测试；`xcode-27`（macOS 27.0.1、Xcode 27.1、Swift 6.4）跑单元测试、测试版编译（`-DYOUNGBAR_TESTHOOKS`）和 `Scripts/verify.sh`。`install-script.yml`：同一种机器上用 install.sh 装线上最新版、覆盖更新、拒绝 ad-hoc 包、证书比对拒绝别的签名 | Actions 日志里的 `sw_vers` / `swift --version`；见 2.4 |
+| Linux 上的单元测试 | `Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test` 可以在没有 Mac 的地方跑 | Docker `swift:6.4-noble` 与 CI：70 passed |
 | 签名 | 本地 `YoungBar Local Signing` 证书；重建后辅助功能授权保持 | `codesign -dv`；重建后自检仍 `axTrusted:true` |
 
 ## 2. 当前行为与证据（0.1.1）
@@ -98,12 +98,12 @@
 
 边界：老用户如果从没改过快捷键，升级后默认从 ⌃⌥B 变成连按两下 ⌘（改过的保留）。数字键之外的拖动只在 3 个图标、收纳条不滚动时测过。自动收纳只用「假装新图标」测过，没有真的装一个新应用。去掉的选项：老用户之前存的值会被忽略（例如开过「始终显示收纳条」的人升级后不再常开）。`YOUNGBAR_SETTINGSUITEST`（真实鼠标走设置窗口）本轮没有重跑。
 
-## 2.4 0.1.5（分支，未发布，2026-11-04）
+## 2.4 0.1.5（main，未发布，2026-11-04）
 
 > 在云端 Linux 机器上做的：**跑不了 app，也没有你的 Mac**。证据只有两种：
-> ① YoungBarCore 单元测试 **64 passed**（Linux 上 Docker `swift:6.4-noble`，和 CI 的 macOS 上都跑）；
-> ② GitHub Actions `xcode-27`（macOS 27.0.1 / Xcode 27.1 / Swift 6.4）**编译通过**：调试版、测试版、正式版打包和 `Scripts/verify.sh`。
-> 下表的「状态」全部是 🟡：代码与编译有证据，**真机行为没有证据**。发布前按表末的清单在 Mac 上跑一遍。
+> ① YoungBarCore 单元测试 **70 passed**（Linux 上 Docker `swift:6.4-noble`，和 CI 的 macOS 上都跑）；
+> ② GitHub Actions `xcode-27`（macOS 27.0.1 / Xcode 27.1 / Swift 6.4）**编译通过**：调试版、测试版、正式版打包和 `Scripts/verify.sh`；同一种机器上 install.sh 装线上 0.1.4 通过（`install-script.yml`）。
+> 下表的「状态」除了纯逻辑和安装脚本都是 🟡：代码与编译有证据，**真机行为没有证据**。发布前按表末的清单在 Mac 上跑一遍。
 
 | 项 | 状态 | 证据 / 怎么验 |
 |---|---|---|
@@ -116,9 +116,10 @@
 | 「全部隐藏」 | 🟡 只藏应用图标（不藏 Wi-Fi、电池等）、藏起来的在收纳条里、不会被之后的重新应用悄悄撤销 | `YOUNGBAR_BULKTEST=1`；右键 ••• →「全部隐藏」后打开收纳条 |
 | 导入配置的快捷键校验 | ✅（纯逻辑）不合法的快捷键数值不再导致导入和之后每次启动闪退；被占用时保留原快捷键；不导入/导出本机的图标间隙 | 单元测试 `SavedShortcutTests` |
 | 收纳条与 ••• 的细节 | 🟡 •••不抢键盘焦点；悬停打开不接管键盘；被 « 收走的系统图标点了提示而不是点空；只塞到新弹出的窗口下面；原地打开后快速选菜单也会关；打开菜单时收纳条变宽不跳；重建保留滚动位置 | `YOUNGBAR_KEYBOARDTEST=1`、`YOUNGBAR_INTERACTIONTEST=1`、`YOUNGBAR_CONCEALTEST=1` |
-| 设置细节 | 🟡 向右排序被拒也显示成功 → 改为按位置检查是否真的挨着目标（一个应用有几个图标时取离目标最近的那个）；忙时的点击不丢（同一行以最后一次为准）；忙时的点击不丢；中间有带锁项目时往右移不再变成往左；移除自定义图片不改动已选符号；菜单栏页显示操作结果；切语言清掉旧提示；「设备控制与数据访问」统一叫法 | `YOUNGBAR_SETTINGSUITEST=1`；单元测试 `MoveLandingTests` |
+| 设置细节 | 🟡 向右排序被拒也显示成功 → 改为按位置检查是否真的挨着目标（一个应用有几个图标时取离目标最近的那个）；忙时的点击不丢（同一行以最后一次为准）；中间有带锁项目时往右移不再变成往左；移除自定义图片不改动已选符号；菜单栏页显示操作结果；切语言清掉旧提示；「设备控制与数据访问」统一叫法 | `YOUNGBAR_SETTINGSUITEST=1`；单元测试 `MoveLandingTests` |
 | 启动与更新流程 | 🟡 新安装跟随系统语言（老用户不变）；0.1.0/0.1.1 升级上来也走引导和更新内容；版本号在第一次刷新后才记下；新功能引导按准确版本匹配（0.1.5 三页）；登录项需要批准时提示并打开设置；自动检查失败一小时后重试 | 单元测试 `PreferredLanguageTests`；模拟升级：`defaults write studio.wuyiyang.youngbar lastLaunchedVersion 0.1.4` 后启动 |
-| 更新器与安装脚本 | 🟡 不装比本机系统要求更新的版本；换包脚本保留旧版直到新版打开成功；等退出 10 分钟；下载中再点不重来；清理临时文件；install.sh 先校验签名再替换、作者签名时要求同一证书；package.sh 无证书时不打包 | `YOUNGBAR_UPDATETEST=1` + `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`（发布 0.1.5 之后）；`make package` 在没有证书的环境应失败 |
+| 更新器 | 🟡 不装比本机系统要求更新的版本；换包脚本保留旧版直到新版打开成功；等退出 10 分钟；下载中再点不重来；清理临时文件；package.sh 无证书时不打包 | `YOUNGBAR_UPDATETEST=1` + `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`（发布 0.1.5 之后）；`make package` 在没有证书的环境应失败 |
+| 安装脚本（install.sh） | ✅ 先解压、检查新 app，再动已安装的那份；ad-hoc 包不装；已安装的是作者签名时要求同一证书 | CI `install-script.yml`，macOS 27、从没见过作者证书的机器：全新安装线上 0.1.4 并启动、覆盖更新、ad-hoc 包被拒且已装的那份不动、ad-hoc 副本不满足已装那份的 designated requirement。退出正在运行的 YoungBar（AppleScript）那一段没测 |
 | 自检本身 | 🟡 menutest / concealtest 收回显示的图标、恢复原模式；spacingtest 写回本机原值；临时模式只在内存里 | 跑完各自检后 `defaults export studio.wuyiyang.youngbar` 与之前对比 |
 | 代码整理 | ✅ main.swift 1507 行拆成 main / ControlPanel / Shelf / LayoutActions / SettingsBridge / EngineSync；拆分时逐行核对没有丢行 | CI 编译通过 |
 

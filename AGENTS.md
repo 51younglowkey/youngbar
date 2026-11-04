@@ -18,6 +18,8 @@ swift test --disable-sandbox           # YoungBarCore 单元测试（改代码�
 open build/YoungBar.app
 ```
 
+- CI：`.github/workflows/ci.yml` 每次推送在 Linux 上跑单元测试，在 GitHub 的 `xcode-27` 机器（macOS 27 SDK，Swift 6.4）上编译测试版和正式版并跑 `Scripts/verify.sh`。CI **只证明能编译**，不碰菜单栏；真机行为仍要按第 5 节自检。
+- 没有 Mac 时（例如云端会话）：`Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test --disable-sandbox` 可以在 `swift:6.4-noble` 容器里跑；YoungBarCore 里导入 CoreGraphics 要写成 `#if canImport(CoreGraphics)`。
 - 只需要命令行工具（Swift 6.4），不需要 Xcode。**不要用 `@State` 等 SwiftUI 宏**：它们的编译插件只随 Xcode 提供，CLT 上会编不过；视图状态放进 `SettingsModel` / `GuideModel`（`@Observable` 可以用，Observation 宏插件在 CLT 里）。
 
 - `Scripts/build.sh` 带 `--disable-sandbox`：SwiftPM 的 manifest 沙箱无法嵌套在宿主沙箱里。
@@ -36,7 +38,12 @@ macOS 27 的界面叫「设备控制与数据访问」，不是旧的「辅助�
 
 ```
 Sources/YoungBar/
-  main.swift            AppDelegate、刷新节奏、控制条、收纳条、菜单、排序（~1400 行）
+  main.swift            BarApp 的状态、启动/退出、刷新节奏、顺序校准、名称与图标查找（~610 行）
+  ControlPanel.swift    ••• 控件（浮在空白状态项上的面板，外观跟随菜单栏）、右键菜单、菜单栏按钮图片
+  Shelf.swift           收纳条的打开与绘制、空收纳条的「点图标收进来」、从收纳条原地打开（AXPress / 显示后点击）
+  LayoutActions.swift   显示方式、排序、全部隐藏/显示、交给引擎的模型（currentModel）
+  SettingsBridge.swift  设置窗口的回调、权限、登录项、图标间隙
+  EngineSync.swift      让引擎跟上外面：运行中的应用、新启动应用的接纳窗口、引擎事件、锁屏时不遍历
   ShelfKeyboard.swift   收纳条键盘导航、数字键 1–9（ShelfPanel，非激活面板也能拿键盘焦点；没有搜索）
   ShelfItems.swift      收纳条图标：拖动排序（只改保存的顺序，不 reveal）、右键改显示方式
   WhatsNew.swift        更新后第一次启动：先「本次更新内容」，再一步步的新功能引导（可跳过）；和使用引导一样跟随 **YoungBar 设置里的语言**。引导页在 `UpdateIntroModel.steps` 里按版本写，没写的版本只显示更新内容
@@ -51,7 +58,7 @@ Sources/YoungBar/
   Theme.swift           配色、主题图（缓存）、控件图标
   Diagnostics.swift     运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）；「复制诊断信息」的纯文本报告
   TestHooks.swift       真机自检，只在 TESTHOOKS=1 构建时编译
-Sources/YoungBarCore/   纯逻辑（排序、溢出判断、快捷键组合、配置文件），有单元测试
+Sources/YoungBarCore/   纯逻辑（排序与落点、溢出判断、快捷键组合与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言），有单元测试；Linux 上也能编译
 Tests/YoungBarCoreTests/
 Vendor/
   PelmetCore            菜单栏模型、策略、ItemID、搜索排序（SearchRanker）
@@ -59,6 +66,10 @@ Vendor/
 ```
 
 - 更新器（`Updater.swift`）：启动 10 秒后、之后每天一次后台查 GitHub（始终开启，没有开关）；有新版本只在右键菜单第一行加「有新版本」（和控件的提示文字），菜单栏上不加圆点（用户要求），**不自动安装**。点「检查更新」时立即查。安装：下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
+- **引擎的两种「显示」**：`reveal(_ sections)` 由 `conceal()` 收回；`reveal(items:)` **只有** `conceal(items:)` / `conceal(releasing:)` 收得回，`conceal()` 不管它。没收回的单个图标会一直留在菜单栏，改成隐藏也藏不住（0.1.4 及之前排序、改显示方式、导入都踩过）。每个 `reveal(items:)` 都要有配对的收回；清空 `shownUntil` 时用 `conceal(releasing: 那些项)`。
+- **引擎不会自己知道外面发生了什么**：运行中的应用要 `setRunningBundles` 推给它（启动/退出时，EngineSync）；隐藏生效时 macOS 把新注册的菜单栏图标停在屏幕外，要 `openAdoptionWindow` 才会落位（会闪一下，只对确实有菜单栏图标且没出现的应用开）；`engine.events` 要读，断言被撤掉时重新 `setModel`。
+- 「全部隐藏」是 `bulkHiddenKeys`：叠在保存的模式上（只含应用图标，不含系统图标），收纳条列出它们，`currentModel()` 带上它们，「全部显示」「恢复」或改任何一个图标时清掉。
+- ••• 的颜色：控件面板的 `appearance` 取 YoungBar 状态项按钮的外观（菜单栏本身），不跟 `NSApp.appearance`（用户在 YoungBar 里选的外观）。
 - 刷新：每次刷新是一次完整 AX 遍历，耗 CPU。收纳条/设置打开或有定时展开时 1 秒一次，空闲 4 秒一次；应用启动退出、唤醒、显示器变化立即刷新。设置窗口不可见时不要重建它的模型。
 - 溢出：macOS 27 菜单栏满时在左端（刘海右侧）放一个 «，放不下的项 AX 位置互相重叠地堆在那里。判断规则在 `YoungBarCore/Overflow.swift`（与 Pelmet `PlacementGeometry.overflowTrapped` 相同）。
 
@@ -74,6 +85,7 @@ Vendor/
 - `YOUNGBAR_NOASSERTIONTEST`：没有要隐藏的项时的菜单栏（引擎撤掉断言，macOS 会绘制原生状态项），检查不会多出一个 •••；`YOUNGBAR_NOASSERTION_HOLD=秒` 保持以便截图。
 - 0.1.2 新增：`YOUNGBAR_UPDATETEST`（查 GitHub、记录结果和窗口号；`YOUNGBAR_SIGCHECK_PATH` 检查某个 app 是否与本 app 同证书；`YOUNGBAR_UPDATE_INSTALL=1` 真的安装）。配合 `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.0`（仅测试版）可以端到端升级到线上最新版：它会**替换正在运行的 bundle**（`build/YoungBar.app`），测完要重新 `sh Scripts/build.sh`。
 - 0.1.4 新增：`YOUNGBAR_EXTRASTEST`（更新内容窗口、诊断文本、收纳条图标右键改为始终隐藏再恢复；`YOUNGBAR_EXTRAS_HOLD=秒`）、`YOUNGBAR_AUTOUPDATETEST`（配合 `YOUNGBAR_UPDATE_PRETEND_VERSION`：后台检查→菜单行、不弹窗；`YOUNGBAR_AUTOUPDATE_HOLD=秒`）、`YOUNGBAR_SHELFDRAGTEST`（真实鼠标在收纳条里拖动排序，检查保存顺序、没有 reveal，结束恢复顺序）、`YOUNGBAR_AUTOHIDETEST`（把一个显示中的应用图标当成新图标，检查自动收纳，结束恢复）。`YOUNGBAR_KEYBOARDTEST` 改为真实按键连按两下 ⌘、⌘⇧ / 慢按不触发、数字键、自定义快捷键并恢复；`YOUNGBAR_KEYBOARD_DIGIT=1` 时还会用数字键真的点开一个第三方项的菜单再 Esc。
+- 0.1.5 新增：`YOUNGBAR_APPEARANCETEST`（外观设置依次切到跟随系统 / 浅色 / 深色，检查 ••• 每次都和菜单栏一致；`YOUNGBAR_APPEARANCE_HOLD=秒` 每步停留以便截图）、`YOUNGBAR_EMPTYSHELFTEST`（临时显示所有「隐藏」让收纳条变空，检查提供的图标、点一个收进来、收纳条不关，结束恢复）、`YOUNGBAR_LAUNCHTEST=<bundle id>`（**会真的退出并重开那个应用**，挑没有文档的菜单栏小工具；检查图标回来）。`YOUNGBAR_SHELFOPENTEST` 多查淡入后不透明度为 1，`YOUNGBAR_OVERFLOWTEST` 多查设置里「放不下」的标记。自检里临时改的显示方式只放内存，不写进 defaults。
 - 0.1.1 新增：`YOUNGBAR_KEYBOARDTEST`（快捷键打开、方向键、Esc、自定义快捷键并恢复）、`YOUNGBAR_HOTKEYPROBE`（多组快捷键各按一次）、`YOUNGBAR_OVERFLOWTEST`（临时显示全部隐藏项制造拥挤，记录被 « 收走的项，恢复模式和顺序；`YOUNGBAR_OVERFLOW_HOLD=秒` 保持拥挤状态以便截图）、`YOUNGBAR_CONFIGTEST`（导出→改→导入）、`YOUNGBAR_SHOWGUIDE` / `YOUNGBAR_SHOWSETTINGS=general|layout|appearance`（打开窗口并把 windowNumber 写进 JSON，配合 `screencapture -l <id>` 截真实窗口）。
 - 本机 shell 可以直接 `screencapture -x -R 700,0,1100,38` 截菜单栏；`cacheDisplay` 的离屏渲染没有窗口背景，深色模式下文字会看不见，不能当外观证据。
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。
@@ -110,3 +122,5 @@ Vendor/
 - 不要把测试钩子暴露成普通用户功能；新的自检写进 `TestHooks.swift`（`#if YOUNGBAR_TESTHOOKS`），不要放回 `main.swift`。
 - 不要在收纳条打开路径里重新引入“临时显示全部图标”的抓图流程（用户明确讨厌闪烁），也不要再回到截图显示。
 - 不要提交 `build/`、`.build/`、诊断 JSON。
+- 不要用 `conceal()` 收回 `reveal(items:)` 显示的单个图标（见第 4 节）；不要在 Swift 并发任务里直接 `runModal`（会卡住所有主线程任务，用 `perform(_:with:afterDelay:)` 放到 run loop 上）。
+- 不要让 ••• 控件面板成为 key window：它会抢走前台应用的键盘焦点。

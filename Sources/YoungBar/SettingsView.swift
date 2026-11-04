@@ -130,7 +130,12 @@ final class SettingsModel {
         var list = entries
         let item = list.remove(at: source)
         var index = destination > source ? destination - 1 : destination
-        if let firstPinned = list.firstIndex(where: \.pinned) { index = min(index, firstPinned) }
+        // Never after the locked run at the right end (the clock and Control
+        // Center). A locked Apple item in the middle (Time Machine, VPN…)
+        // doesn't stop others passing it: clamping at the first locked row
+        // turned a move to the right into one to the left.
+        let end = list.lastIndex(where: { !$0.pinned }).map { $0 + 1 } ?? 0
+        index = min(index, end)
         index = max(0, min(index, list.count))
         guard index != source else { return }
         list.insert(item, at: index)

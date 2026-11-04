@@ -157,6 +157,25 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 
 ---
 
+## 2026-11-04 · 0.1.5：云端会话（审查、修复、CI）
+
+- **环境**：Claude Code 云端会话，Linux 容器，没有 Mac、没有连上作者的电脑。
+  在 Docker `swift:6.4-noble` 里跑 YoungBarCore 单元测试；app 本身交给新增的
+  GitHub Actions `xcode-27`（macOS 27.0.1、Xcode 27.1、Swift 6.4）编译。**没有任何真机验证**，
+  状态见 STATUS 2.4。分支 `claude/modest-albattani-ov9mnb`，没有合并、没有发布。
+- **用户要求**：新增里只做「空收纳条引导收图标」「设置标出放不下」「收纳条淡入」；
+  修 Issue #4 的重影并回复；加 Actions；审查代码；写自检；整理代码。
+  「多套配置」这次不做。
+- **代码整理**：main.swift 1507 行按功能拆成 main / ControlPanel / Shelf / LayoutActions /
+  SettingsBridge（拆分脚本逐行核对），后来又加了 EngineSync。
+- **审查**：六个只读代理分块审读 f76d1e7（生命周期、收纳条、设置、快捷键与配置、更新器与脚本、
+  引擎用法与自检），每条结论回到代码里核对后才改。最重要的几条：
+  `reveal(items:)` 只有 `conceal(items:)` 收得回（排序、改显示方式、导入都会把图标留在菜单栏）；
+  引擎从没被告知后来启动/退出的应用（新应用的图标被藏、退出的隐藏应用留在收纳条）；
+  隐藏生效时新注册的菜单栏图标被 macOS 停在屏幕外，需要接纳窗口；
+  导入配置里不合法的快捷键数值会导致每次启动崩溃。
+- **Issue #4**：在 GitHub 上回复了原因（0.1.3 的空白占位 + 这次的外观跟随菜单栏）并关闭。
+
 ## 附录：0.1.0 及之前的状态板（原 `docs/STATUS.md`，2026-10-24 前）
 
 > 2026-10-29 从 `STATUS.md` 原样移来，只把标题降了一级。当前状态见 `STATUS.md`。

@@ -100,13 +100,12 @@ YoungBar does **not** capture the screen and does **not** need Screen & System A
 
 The current verification matrix is in [docs/STATUS.md](docs/STATUS.md); the iBar Pro 1.4.6 comparison is in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
 
-Known gaps: multi-display is handled in code but untested (no second display available), drag-reordering inside the strip, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
+Known gaps: multi-display is handled in code but untested (no second display available), dragging inside the strip has only been tested with three icons and no scrolling, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
 
 ## Roadmap
 
 - Multi-display verification.
 - Profiles and per-app or per-situation rules (on battery, external display).
-- Drag to reorder inside the strip.
 
 ## License and credits
 

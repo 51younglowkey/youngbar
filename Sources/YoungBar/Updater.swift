@@ -229,8 +229,12 @@ extension BarApp {
         // A check the user started owns the window and the result.
         if updateWindow?.isVisible == true { return }
         lastAutoUpdateCheck = Date()
-        // Offline or GitHub busy: keep what we knew, try again tomorrow.
-        guard let release = try? await fetchLatestRelease() else { return }
+        // Offline (often just after waking) or GitHub busy: keep what we
+        // knew and try again on the next hourly look, not a day later.
+        guard let release = try? await fetchLatestRelease() else {
+            lastAutoUpdateCheck = nil
+            return
+        }
         availableUpdate = isNewer(release) ? release : nil
         applyUpdateNotice()
     }

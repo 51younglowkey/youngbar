@@ -77,26 +77,42 @@ extension BarApp {
         settings?.show()
     }
 
-    func renderWindow(force: Bool = false) {
+    /// The Menu Bar page's rows, in bar order.
+    func barEntries() -> [BarEntry] {
         let keys = previewOnly ? LayoutOrder.unique(savedOrder) : orderedKeys()
-        let entries = keys.map { key in
+        return keys.map { key in
             let id = catalog[key]?.id ?? ItemID(rawValue: key)
             return BarEntry(key: key, name: name(for: key), image: fallbackImage(for: key),
                             mode: modes[key] ?? 0,
-                            pinned: MenuBarPolicy.isPinnedSystemItem(id) || MenuBarPolicy.isPinnedAppleHost(id.bundleID))
+                            pinned: MenuBarPolicy.isPinnedSystemItem(id) || MenuBarPolicy.isPinnedAppleHost(id.bundleID),
+                            covered: overflowKeys.contains(key))
         }
+    }
+
+    /// Pushes the current state into the settings window. Skipped while the
+    /// window is closed — `showWindow` renders in full (`force`) when it
+    /// opens — so actions and refresh ticks don't rebuild rows nobody sees.
+    func renderWindow(force: Bool = false) {
+        guard let settings, force || settings.isVisible else { return }
         let message: String
         if !AXIsProcessTrusted() { message = L10n.t("需要辅助功能权限", "Accessibility permission required") }
         else if !feedback.isEmpty { message = feedback }
         else { message = "" }
-        settings?.update(entries: entries, message: message,
-                         axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled,
-                         customIcon: customIconImage, options: options,
-                         hotKey: hotKeyDisplay, hasHotKey: hotKey != nil, hasNotch: notchVisibleMinX != nil)
+        settings.update(entries: barEntries(), message: message,
+                        axTrusted: AXIsProcessTrusted(), launchAtLogin: launchAtLoginEnabled,
+                        loginNeedsApproval: launchAtLoginNeedsApproval,
+                        customIcon: customIconImage, options: options,
+                        hotKey: hotKeyDisplay, hasHotKey: hotKey != nil, hasNotch: notchVisibleMinX != nil)
     }
 
     var launchAtLoginEnabled: Bool {
         SMAppService.mainApp.status == .enabled
+    }
+
+    /// Registered, but macOS waits for the user to allow it in System
+    /// Settings → General → Login Items; the switch reads off meanwhile.
+    var launchAtLoginNeedsApproval: Bool {
+        SMAppService.mainApp.status == .requiresApproval
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -110,6 +126,13 @@ extension BarApp {
             }
         } catch {
             feedback = L10n.t("开机自启动设置失败：\(error.localizedDescription)", "Launch-at-login failed: \(error.localizedDescription)")
+        }
+        // Registering can succeed (or throw) and still leave the login item
+        // switched off in System Settings: say so and take the user there.
+        if enabled && launchAtLoginNeedsApproval {
+            feedback = L10n.t("还差一步：在「系统设置 → 通用 → 登录项」里允许 YoungBar",
+                              "One more step: allow YoungBar in System Settings → General → Login Items")
+            SMAppService.openSystemSettingsLoginItems()
         }
         renderWindow(force: true)
     }

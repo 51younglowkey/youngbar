@@ -10,8 +10,11 @@ struct BarEntry {
     let key: String
     let name: String
     let image: NSImage?
-    let mode: Int
+    var mode: Int
     let pinned: Bool
+    /// Set to Show, but the bar has no room: macOS holds it in « (or it sits
+    /// under the notch), so for now it opens from the strip.
+    var covered = false
 }
 
 /// The settings window. Sidebar and detail are SwiftUI (`SettingsView.swift`); this
@@ -193,19 +196,20 @@ final class BarSettings: NSObject {
     func languageChanged() { window.title = (model.page ?? .layout).title }
 
     func update(entries: [BarEntry], message: String, axTrusted: Bool,
-                launchAtLogin: Bool, customIcon: NSImage?, options: [String: Int],
+                launchAtLogin: Bool, loginNeedsApproval: Bool, customIcon: NSImage?, options: [String: Int],
                 hotKey: String, hasHotKey: Bool, hasNotch: Bool) {
         if model.hotKeyDisplay != hotKey { model.hotKeyDisplay = hotKey }
         if model.hasHotKey != hasHotKey { model.hasHotKey = hasHotKey }
         if model.hasNotch != hasNotch { model.hasNotch = hasNotch }
         // `update` runs on every refresh tick; only touch what changed so an
         // open picker or a drag in progress is not rebuilt underneath the user.
-        let signature: (BarEntry) -> String = { "\($0.key)|\($0.name)|\($0.mode)|\($0.pinned)" }
+        let signature: (BarEntry) -> String = { "\($0.key)|\($0.name)|\($0.mode)|\($0.pinned)|\($0.covered)" }
         if model.entries.map(signature) != entries.map(signature) { model.entries = entries }
         if model.options != options { model.options = options }
         if model.message != message { model.message = message }
         if model.axTrusted != axTrusted { model.axTrusted = axTrusted }
         if model.launchAtLogin != launchAtLogin { model.launchAtLogin = launchAtLogin }
+        if model.loginNeedsApproval != loginNeedsApproval { model.loginNeedsApproval = loginNeedsApproval }
         if model.customIcon !== customIcon { model.customIcon = customIcon }
         let theme = ThemeColor(rawValue: options[.themeColor] ?? 0) ?? .blue
         glass.tintColor = theme != .clear ? theme.accent.withAlphaComponent(0.10) : nil

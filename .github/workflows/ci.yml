@@ -25,7 +25,7 @@ jobs:
     container: swift:6.4-noble
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # On Linux Package.swift only declares YoungBarCore and its tests.
       - run: swift test --disable-sandbox
 
@@ -35,7 +35,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Toolchain
         run: |
           sw_vers

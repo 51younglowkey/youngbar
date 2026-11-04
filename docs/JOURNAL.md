@@ -212,6 +212,13 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - **改动**：README（中英）开头和「安装」写明只支持 macOS 27 及以上（Apple 芯片），「工作原理与取舍」说明原因；INSTALL 加「Requirements」，权限一节不再说「Accessibility on older macOS」（读起来像支持旧系统）；FAQ 加第 6 条；0.1.5 更新日志加「要求 / Requirements」（app 跳过这两个区块，只在 GitHub 上显示）；AGENTS 第 1 节列出最低系统写在哪几处。
 - **install.sh**：下载前检查系统版本，低于 27 时中英文提示后退出。之前没有这道检查：旧系统上会照样下载、装好，打开时才被 macOS 拒绝（按 `LSMinimumSystemVersion` 推断，手头没有旧系统实测）。只在 Linux 上用假的 `sw_vers` 测过，见 STATUS 2.4。
 
+## 2026-11-04 晚 · 0.1.5 发布前的云端准备
+
+- 用户要求一路做到发布 0.1.5，需要在 Mac 上做的写清楚交给本地对话。云端做不了的：真机自检、用 `YoungBar Local Signing` 证书打包、推公开仓库和建 Release。
+- `YOUNGBAR_OVERFLOWTEST`：上次菜单栏没挤满，`settingsMarksOverflow:true` 是拿空集比空集。改为记 `crowded`，没挤满时不给 `passed`、写 `inconclusive`。
+- `install-script.yml` 加「旧系统拒绝」一步，并让私有仓库的 main 改了 `install.sh` 时也跑（云端手动触发 workflow 被拒：403 Resource not accessible by integration）。**更正**：第一版用 `codesign -dvv` 的 `CDHash=` 判断已装的 app 没变，可 `-dvv` 不输出这一行，这一步在调用安装脚本之前就失败了（[run 5](https://github.com/51younglowkey/youngbar-dev/actions/runs/41928689069)）；Linux 上的试跑用的是自己写的假 `codesign`，没发现。改成比对可执行文件的 SHA-256 后通过（run 7）。
+- 读代码发现一个疑似问题，没实测：隐藏的应用在隐藏生效时重开，macOS 把它的图标停在屏幕外；之后在设置里改成「显示」，`setMode` 不开接纳窗口，图标可能回不来。写进 STATUS 2.4「剩下的发布步骤」第 3 步，由 Mac 上验证后再决定修不修。
+
 ## 附录：0.1.0 及之前的状态板（原 `docs/STATUS.md`，2026-10-24 前）
 
 > 2026-10-29 从 `STATUS.md` 原样移来，只把标题降了一级。当前状态见 `STATUS.md`。

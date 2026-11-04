@@ -123,7 +123,7 @@
 | 启动与更新流程 | 🟡 新安装跟随系统语言（老用户不变）；0.1.0/0.1.1 升级上来也走引导和更新内容；版本号在第一次刷新后才记下；新功能引导按准确版本匹配（0.1.5 三页）；登录项需要批准时提示并打开设置；自动检查失败一小时后重试 | 单元测试 `PreferredLanguageTests`；模拟升级：`defaults write studio.wuyiyang.youngbar lastLaunchedVersion 0.1.4` 后启动 |
 | 更新器 | 🟡 不装比本机系统要求更新的版本；换包脚本保留旧版直到新版打开成功；等退出 10 分钟；下载中再点不重来；清理临时文件；package.sh 无证书时不打包 | `YOUNGBAR_UPDATETEST=1` + `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`（发布 0.1.5 之后）；`make package` 在没有证书的环境应失败 |
 | 安装脚本（install.sh） | ✅ 先解压、检查新 app，再动已安装的那份；ad-hoc 包不装；已安装的是作者签名时要求同一证书 | CI `install-script.yml`，macOS 27、从没见过作者证书的机器：全新安装线上 0.1.4 并启动、覆盖更新、ad-hoc 包被拒且已装的那份不动、ad-hoc 副本不满足已装那份的 designated requirement。退出正在运行的 YoungBar（AppleScript）那一段没测 |
-| 安装脚本：系统低于 27 先退出 | ✅（逻辑）下载之前读 `sw_vers -productVersion`，主版本低于 27 或读不到时，用中英文说明「只支持 macOS 27 及以上（Apple 芯片）」后退出，不下载、不改动。**在 macOS 上还没跑过**：推到公开仓库后 `install-script.yml`（macOS 27）会经过这段 | 2026-11-04 在 Linux 上用假的 `sw_vers` 和 `curl`，dash 与 bash --posix 各跑一遍：12.4、15.7.1、26.3、`abc`、没有 `sw_vers` 都在调用 curl 之前退出（退出码 1）；27.0、27.1、28.0 通过检查、走到 curl；按 README 的 `cat install.sh \| sh` 方式结果相同 |
+| 安装脚本：系统低于 27 先退出 | ✅ 下载之前读 `sw_vers -productVersion`，主版本低于 27 或读不到时，用中英文说明「只支持 macOS 27 及以上（Apple 芯片）」后退出，不下载、不改动。真的旧系统没有试过（手头没有），macOS 27 上是用假的 `sw_vers` 扮演 26.3 | `install-script.yml` 在私有仓库 main 上（[run 7](https://github.com/51younglowkey/youngbar-dev/actions/runs/41928879110)，macOS 27 机器）：新脚本全新安装、覆盖更新线上 0.1.4 都通过；假装 26.3 时输出中英文提示、假的 `curl` 没被调用、已装那份可执行文件的 SHA-256 不变、YoungBar 仍在运行；ad-hoc 包和别的签名照旧被拒。2026-11-04 在 Linux 上用假的 `sw_vers` 和 `curl`，dash 与 bash --posix 各跑一遍：12.4、15.7.1、26.3、`abc`、没有 `sw_vers` 都在调用 curl 之前退出（退出码 1）；27.0、27.1、28.0 通过检查、走到 curl；按 README 的 `cat install.sh \| sh` 方式结果相同 |
 | 自检本身 | 🟡 menutest / concealtest 收回显示的图标、恢复原模式；spacingtest 写回本机原值；临时模式只在内存里 | 跑完各自检后 `defaults export studio.wuyiyang.youngbar` 与之前对比 |
 | 代码整理 | ✅ main.swift 1507 行拆成 main / ControlPanel / Shelf / LayoutActions / SettingsBridge / EngineSync；拆分时逐行核对没有丢行 | CI 编译通过 |
 
@@ -162,6 +162,25 @@
 | 正式版第一次启动（模拟从 0.1.4 升级） | ✅ 使用引导（授权显示已授权）→ 更新内容（有「••• 不再掉到菜单栏下面」，没有说明和校验）→ 新功能 1/3–3/3 → 正常结束，`lastLaunchedVersion` 记成 0.1.5。按钮是用辅助功能按的，不是鼠标点的 | 窗口截图、窗口文字 |
 
 另外观察到：`engine.conceal(items:)` 之后 ••• 要等下一次刷新才靠回图标，中间有一段空白；约 8 秒后的截图已经归位。
+
+**剩下的发布步骤**（2026-11-04 晚，云端整理；在作者的 Mac 上按顺序做，做完一项在上面「清单结果」里补一行）：
+
+准备：`git pull origin main`；`defaults export studio.wuyiyang.youngbar ~/Desktop/youngbar-before-0.1.5.plist` 备份；`TESTHOOKS=1 sh Scripts/build.sh` 后重启 YoungBar。每项自检按 AGENTS 第 5 节单独启动，跑完和备份比对。
+
+1. **「放不下」**：先把菜单栏挤满（多开几个带菜单栏图标的应用，或在「系统设置 → 控制中心」临时把几项改成在菜单栏显示），直到刘海旁出现 «；再跑 `YOUNGBAR_OVERFLOWTEST`（加 `YOUNGBAR_OVERFLOW_HOLD=5`，截菜单栏和设置「菜单栏」页）。要 `crowded:true`、`passed:true`；`crowded:false` 说明还没挤满。测完把临时改的设置和应用恢复。
+2. **隐藏的应用退出再打开**：把一个没有文档的菜单栏小工具（上次用 `com.steipete.codexbar`）在设置里设为「隐藏」，跑 `YOUNGBAR_LAUNCHTEST=<bundle id>`：要 `mode:1`、`holdsAssertion:true`、`onBarAfterLaunch:false`、`inStripAfterLaunch:true`、`passed:true`。然后从收纳条点它：应该闪一下（接纳窗口），再在收纳条旁打开它的菜单。
+3. **疑似问题：隐藏的应用重开后改成「显示」**（云端读代码发现，没实测）：第 2 步重开之后、从收纳条点它之前，在设置里把它改成「显示」，看图标会不会回到菜单栏。`LayoutActions.setMode` 只调 `engine.setModel`，`EngineSync.appLaunched` 对隐藏的应用不开接纳窗口，所以它的图标可能一直停在屏幕外，直到应用再重开。真不出来就修：`setMode` 改成显示时，这个应用在运行、有菜单栏图标、引擎持有断言、快照里却没有它的位置，就调一次 `engine.openAdoptionWindow(for:)`（同 `Shelf.swift` 从收纳条点开时的处理）；重测；`RELEASE-0.1.5.md` 的「修复 / Fixed」各加一句（两半条数要一致，`swift test` 会查）。最后把这个应用恢复成原来的显示方式。
+4. **系统浅色**：`osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false'` 后跑 `YOUNGBAR_APPEARANCETEST`（要 `passed:true`），截菜单栏，再改回深色。
+5. **全屏**（要作者本人）：全屏一个应用，鼠标移到顶部让菜单栏滑下，确认能点到 ••• 并打开收纳条。
+6. **发布**：
+   - `swift test --disable-sandbox`；本节「清单结果」和 JOURNAL 记上 1–5；提交、推 `origin main`，等 CI 变绿。
+   - `make package`（要 `YoungBar Local Signing` 证书）→ `dist/YoungBar-0.1.5.zip` 与 `.sha256`；`strings build/YoungBar.app/Contents/MacOS/YoungBar | grep YOUNGBAR_` 没有 `*TEST`；`codesign -dvv build/YoungBar.app` 是 `Authority=YoungBar Local Signing`。打包会换掉 `build/YoungBar.app`，之后重启 YoungBar。
+   - `git tag -a v0.1.5 -m "YoungBar 0.1.5"`，`git push origin v0.1.5`，`git push public main v0.1.5`。
+   - 标题照 `gh release view v0.1.4 --repo 51younglowkey/youngbar` 的格式：`gh release create v0.1.5 dist/YoungBar-0.1.5.zip dist/YoungBar-0.1.5.zip.sha256 --repo 51younglowkey/youngbar --title … --notes-file docs/RELEASE-0.1.5.md`，不能是草稿或预发布。
+   - 确认 `https://github.com/51younglowkey/youngbar/releases/latest` 指向 v0.1.5；公开仓库的 CI 和 `install-script.yml`（`gh run list --repo 51younglowkey/youngbar`）变绿。
+7. **发布后**：
+   - 端到端：`TESTHOOKS=1 sh Scripts/build.sh`，`YOUNGBAR_UPDATETEST=1 YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`：找到 0.1.5、安装、重新打开（新 PID），`build/YoungBar.app` 的可执行文件与发布包相同、没有测试钩子；之后 `sh Scripts/build.sh` 并重启。
+   - defaults 与备份比对；STATUS 顶部改成「0.1.5 (6)（已发布）」，2.3 那样写上 Release 链接、SHA-256、端到端结果；JOURNAL 记一笔；提交、推 `origin main`。
 
 ## 3. 验证边界（不许含糊）
 

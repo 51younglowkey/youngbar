@@ -127,7 +127,7 @@
 - 收纳条拖动中途如果正好重建，这次拖动会丢；只保留了滚动位置。
 - 换包失败只写在 `update.log`，下次启动不提示。
 - `YOUNGBAR_DIAGNOSTICS=1` 时每次刷新逐项读 AX 位置（只影响开着诊断时的 CPU）。
-- 自检收尾关窗口仍按「测试前屏幕上没有窗口」判断，不比较窗口号；gear / about 测试结束后窗口没关。
+- 自检收尾关窗口仍按「测试前屏幕上没有窗口」判断，不比较窗口号（gear / about 测试结束后现在会关掉自己打开的窗口）。
 - 收纳条里调的顺序不会推到菜单栏上（这是现在的设计，注释已改正）。
 
 **发布前在 Mac 上的清单**（`TESTHOOKS=1 sh Scripts/build.sh` 之后，每项单独 `open --env …=1 build/YoungBar.app`，结果在 `~/Library/Application Support/YoungBar/*.json`）：

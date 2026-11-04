@@ -1027,6 +1027,8 @@ extension BarApp {
         result["passed"] = (result["shelfOpened"] as? Bool == true)
             && (result["settingsOpened"] as? Bool == true)
         if expanded { closeShelf() }
+        // Leave the screen as the test found it.
+        settings?.close()
         writeJSON(result, name: "geartest.json")
     }
 
@@ -1177,6 +1179,7 @@ extension BarApp {
             }
         }
         result["passed"] = about != nil
+        about?.close()
         writeJSON(result, name: "abouttest.json")
     }
 

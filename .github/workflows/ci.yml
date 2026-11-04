@@ -31,6 +31,8 @@ jobs:
 
   app-macos:
     name: App build (macOS 27 SDK)
+    # The private repo pays for macOS minutes: branch pushes skip this job; PRs, main and manual runs keep it.
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     # GitHub's Xcode 27 image (preview): the macOS 27 SDK the app needs.
     runs-on: xcode-27
     timeout-minutes: 45

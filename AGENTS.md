@@ -8,6 +8,7 @@
 - 代码在 `Sources/YoungBar/`，依赖在 `Vendor/`（Dimble 的 PelmetCore / PelmetEngine，GPLv3）。
 - 记录在 `docs/STATUS.md`（只写当前验证状态；历史在 `docs/JOURNAL.md`）与 `docs/IBAR-FEATURES.md`（iBar 对照表）。独立之前的轮次记在 Leorea 的 `docs/JOURNAL.md`。
 - 不要依赖仓库外的路径（例如原来的 `../../app`、`../../projects`）。
+- 日常开发在私有仓库 `51younglowkey/youngbar-dev`（本地 remote 叫 `origin`）；公开仓库 `51younglowkey/youngbar`（本地 remote 叫 `public`）只在发布时接收 main 和对应 tag，例如 `git push public main v0.1.5`。公开仓库不要改成私有。代码和 README 里的仓库地址（`Updater.swift`、`install.sh`）继续指向公开仓库，不要改成 dev。按 GPLv3，每个发布出去的版本，在公开仓库都要有对应 tag 的源码。
 
 ## 2. 构建与运行
 
@@ -18,7 +19,7 @@ swift test --disable-sandbox           # YoungBarCore 单元测试（改代码�
 open build/YoungBar.app
 ```
 
-- CI：`.github/workflows/ci.yml` 每次推送在 Linux 上跑单元测试，在 GitHub 的 `xcode-27` 机器（macOS 27 SDK，Swift 6.4）上编译测试版和正式版并跑 `Scripts/verify.sh`。CI **只证明能编译**，不碰菜单栏；真机行为仍要按第 5 节自检。`install-script.yml` 在 `install.sh` 改动、发布新版本时和每周一次，在 macOS 27 上用 README 的一键安装装线上最新版，再覆盖更新一次：证明脚本和发布包的签名对得上（AppleScript 退出那一段不测）。
+- CI：`.github/workflows/ci.yml` 每次推送在 Linux 上跑单元测试，在 GitHub 的 `xcode-27` 机器（macOS 27 SDK，Swift 6.4）上编译测试版和正式版并跑 `Scripts/verify.sh`。CI **只证明能编译**，不碰菜单栏；真机行为仍要按第 5 节自检。`install-script.yml` 在 `install.sh` 改动、发布新版本时和每周一次，在 macOS 27 上用 README 的一键安装装线上最新版，再覆盖更新一次：证明脚本和发布包的签名对得上（AppleScript 退出那一段不测）。私有仓库里分支推送只跑 Linux 单元测试；要 macOS 编译证据就开（草稿）PR 或手动触发 CI；`install-script.yml` 只在公开仓库自动跑。
 - 没有 Mac 时（例如云端会话）：`Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test --disable-sandbox` 可以在 `swift:6.4-noble` 容器里跑；YoungBarCore 里导入 CoreGraphics 要写成 `#if canImport(CoreGraphics)`。
 - 只需要命令行工具（Swift 6.4），不需要 Xcode。**不要用 `@State` 等 SwiftUI 宏**：它们的编译插件只随 Xcode 提供，CLT 上会编不过；视图状态放进 `SettingsModel` / `GuideModel`（`@Observable` 可以用，Observation 宏插件在 CLT 里）。
 
@@ -94,7 +95,7 @@ Vendor/
 - 自检会动真实菜单栏：点击、隐藏、拖动。**结束后必须恢复原状态**；测试打开的面板/菜单要关闭。
 - 改状态数字时同步更新 `docs/STATUS.md`；结论变了追加「更正第 N 轮」，不改历史条目。
 - 提交前：`sh Scripts/build.sh` 通过；`git status` 只包含预期文件。
-- **提交作者一律是 51Young**（项目的硬性要求）：作者和提交者都是 `51Young <193584257+51younglowkey@users.noreply.github.com>`；不用 Claude 署名，也不加 `Co-Authored-By: Claude…`、`Claude-Session:` 之类的尾注。云端会话是新克隆的，第一次提交前先在仓库里 `git config user.name` / `git config user.email` 设好，提交后用 `git log --format='%an <%ae> | %cn'` 看一眼。
+- **提交作者一律是 51Young**（项目的硬性要求）：作者和提交者都是 `51Young <193584257+51younglowkey@users.noreply.github.com>`；不用 Claude 署名，也不加 `Co-Authored-By: Claude…`、`Claude-Session:` 之类的尾注。云端会话是新克隆的，第一次提交前先在仓库里 `git config user.name` / `git config user.email` 设好，提交后用 `git log --format='%an <%ae> | %cn'` 看一眼。`.claude/settings.json` 关掉了 Claude 的署名，但云端会话同时挂两个仓库时不读这个文件，那时要自己保证。
 
 ## 6. UI 与设计
 

@@ -1421,6 +1421,13 @@ extension BarApp {
         let crowded = await engine.freshSnapshot()
         result["framesAllShown"] = frames(crowded)
         result["overflowAllShown"] = overflowKeys.sorted()
+        // Nothing went under « or the notch: the bar never filled, and the
+        // checks below would hold for an empty set. Say so instead of passing.
+        let wasCrowded = !overflowKeys.isEmpty
+        result["crowded"] = wasCrowded
+        if !wasCrowded {
+            result["inconclusive"] = "the bar did not fill up with every icon shown: open more menu-bar apps (or show more items from Control Center) and run again"
+        }
         // Settings → Menu Bar marks exactly those rows "No room".
         let covered = barEntries().filter(\.covered).map(\.key)
         result["coveredInSettings"] = covered.sorted()
@@ -1432,7 +1439,7 @@ extension BarApp {
         closeShelf()
         // YOUNGBAR_OVERFLOW_HOLD=<seconds> keeps the crowded bar up for a screenshot.
         if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_OVERFLOW_HOLD"] ?? "") {
-            writeJSON(["crowded": true], name: "overflow-hold.json")
+            writeJSON(["crowded": wasCrowded], name: "overflow-hold.json")
             try? await Task.sleep(for: .seconds(hold))
         }
         modes = originalModes
@@ -1449,6 +1456,11 @@ extension BarApp {
         result["restored"] = modes == originalModes
         result["concealedAfter"] = after.concealed.map(\.sectionKey.rawValue).sorted()
         result["overflowAfter"] = overflowKeys.sorted()
+        if wasCrowded {
+            result["passed"] = (result["settingsMarksOverflow"] as? Bool == true)
+                && (result["stripListsOverflow"] as? Bool == true)
+                && (result["restored"] as? Bool == true)
+        }
     }
 
     /// Opt-in (`YOUNGBAR_EXTRASTEST=1`): What's New opens with the bundled

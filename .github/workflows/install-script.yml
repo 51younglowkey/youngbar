@@ -3,9 +3,9 @@
 #
 # The README one-liner against the live release, on a Mac that has never
 # seen the author's certificate: a fresh install, an update over the
-# installed copy, and the two refusals (an ad-hoc build; another signer than
-# the installed copy's). Runs when the script changes, when a release is
-# published, and once a week.
+# installed copy, and the refusals (a Mac older than macOS 27; an ad-hoc
+# build; another signer than the installed copy's). Runs when the script
+# changes, when a release is published, and once a week.
 name: Install script
 
 on:
@@ -29,8 +29,13 @@ permissions:
 jobs:
   install:
     name: install.sh against the latest release (macOS 27)
-    # This tests the public repo's release, so it only runs by itself there.
-    if: github.repository == '51younglowkey/youngbar' || github.event_name == 'workflow_dispatch'
+    # This tests the public repo's release, so it runs by itself there. In
+    # the dev repo only when main changes the script (or this file): the
+    # change gets a real Mac before it is published.
+    if: >-
+      github.repository == '51younglowkey/youngbar'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     # The release needs macOS 27 to open.
     runs-on: xcode-27
     timeout-minutes: 15
@@ -51,6 +56,24 @@ jobs:
           for i in $(seq 1 20); do pgrep -xq YoungBar && break; sleep 0.5; done
           pgrep -xl YoungBar
           codesign -dvv /Applications/YoungBar.app 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier)='
+      - name: Refuses a Mac older than macOS 27 before downloading anything
+        run: |
+          # This runner is macOS 27, so a stand-in sw_vers plays an older Mac
+          # and a stand-in curl records whether anything was fetched.
+          stub="$(mktemp -d)"
+          printf '#!/bin/sh\necho 26.3\n' > "$stub/sw_vers"
+          printf '#!/bin/sh\ntouch "%s/curl-called"\nexit 1\n' "$stub" > "$stub/curl"
+          chmod +x "$stub/sw_vers" "$stub/curl"
+          before="$(codesign -dvv /Applications/YoungBar.app 2>&1 | grep '^CDHash=')"
+          if out="$(PATH="$stub:$PATH" sh Scripts/install.sh 2>&1)"; then
+            echo "$out"; echo "install.sh went ahead on macOS 26.3"; exit 1
+          fi
+          echo "$out"
+          echo "$out" | grep -q 'needs macOS 27 or later'
+          if [ -e "$stub/curl-called" ]; then echo "install.sh downloaded on macOS 26.3"; exit 1; fi
+          after="$(codesign -dvv /Applications/YoungBar.app 2>&1 | grep '^CDHash=')"
+          [ "$before" = "$after" ] || { echo "the installed copy changed"; exit 1; }
+          pgrep -xl YoungBar
       - name: Refuses an ad-hoc build and leaves the installed copy alone
         run: |
           work="$(mktemp -d)"

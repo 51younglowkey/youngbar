@@ -40,12 +40,12 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 ## Features
 
 - **Three states per item**: Visible, Hidden, Always Hidden (⌥-click to include Always Hidden in the strip).
-- **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything.
+- **Instant strip**: each hidden item is shown by its app's own icon (system items by their SF Symbol); opening the strip never reveals anything. An empty strip lists the icons on your bar: click one to tuck it in.
 - **Open in place**: clicking a third-party item in the strip presses it through Accessibility while it stays hidden, so its menu or panel opens beside the strip without the bar shifting or the pointer moving. System items are revealed and clicked with the pointer hidden.
 - **Reorder**: ⌘-drag in the real menu bar and drag a row in the Menu Bar page; right-click a row for left/right moves. Icons in the strip can be dragged sideways too, without the bar flickering.
 - **Keyboard first**: press ⌘ twice to open the strip (change it in General to a key combination, or ⌥ / ⌃ pressed twice). The icons are numbered 1–9: press a number to open one, or ← → and Return; Esc closes.
 - **New icons to the strip** (optional): an app's icon that appears in the bar for the first time goes straight to the strip; system icons are left alone.
-- **Icons that don't fit**: when the bar is full, macOS 27 moves icons into a « beside the notch. YoungBar lists those in the strip too, and they leave it by themselves once there is room. The ••• control stays visible instead of following them under the notch.
+- **Icons that don't fit**: when the bar is full, macOS 27 moves icons into a « beside the notch. YoungBar lists those in the strip too and tags them "No room" on the Menu Bar page; they leave the strip by themselves once there is room. The ••• control stays visible instead of following them under the notch.
 - **Menu Bar page**: every item in menu-bar order with Shown / Hidden / Always Hidden segmented choices; Date and Control Center keep their macOS-fixed position but can be hidden.
 - **Settings window**: System Settings-style sidebar and grouped forms (SwiftUI inside an AppKit window); the menu-bar logic stays in AppKit.
 - **Appearance**: system / light / dark; blue, pink and yellow palettes with matched OKLCH lightness/saturation, plus a neutral clear one; a theme-tinted glass window with the theme character in the sidebar; one strip opacity slider (30–100%).
@@ -100,13 +100,12 @@ YoungBar does **not** capture the screen and does **not** need Screen & System A
 
 The current verification matrix is in [docs/STATUS.md](docs/STATUS.md); the iBar Pro 1.4.6 comparison is in [docs/IBAR-FEATURES.md](docs/IBAR-FEATURES.md).
 
-Known gaps: multi-display is handled in code but untested (no second display available), drag-reordering inside the strip, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
+Known gaps: multi-display is handled in code but untested (no second display available), dragging inside the strip has only been tested with three icons and no scrolling, and a real-trackpad pass on the SwiftUI settings. Launch-at-login has been registered but still needs a true logout/login test.
 
 ## Roadmap
 
 - Multi-display verification.
 - Profiles and per-app or per-situation rules (on battery, external display).
-- Drag to reorder inside the strip.
 
 ## License and credits
 

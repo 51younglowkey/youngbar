@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 YoungBar contributors
 // SPDX-License-Identifier: GPL-3.0-only
 
+#if canImport(CoreGraphics)
 import CoreGraphics
+#else
+import Foundation // CGFloat / CGRect on Linux, where only the core is built and tested
+#endif
 
 /// Items the user set to Show that nobody can see. When the bar is full,
 /// macOS 27 puts a « at its left end and moves the items that don't fit
@@ -18,8 +22,10 @@ public enum Overflow {
         let list = Array(frames)
         var result = Set<String>()
         for (i, a) in list.enumerated() {
+            // Same bar only: a copy on a display above or below can share x.
             for (j, b) in list.enumerated() where j != i
-                && min(a.value.maxX, b.value.maxX) - max(a.value.minX, b.value.minX) > tolerance {
+                && min(a.value.maxX, b.value.maxX) - max(a.value.minX, b.value.minX) > tolerance
+                && min(a.value.maxY, b.value.maxY) - max(a.value.minY, b.value.minY) > 0 {
                 result.insert(a.key)
                 break
             }

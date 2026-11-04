@@ -31,8 +31,33 @@ final class UpdateIntroModel {
 
     /// The tour that goes with this version; none for a version without one.
     var steps: [TourStep] {
-        guard version.hasPrefix("0.1.4") else { return [] }
-        return [
+        // The exact version: a prefix would replay 0.1.4's tour for 0.1.40.
+        switch AppVersion(version)?.description {
+        case "0.1.5": return tour015
+        case "0.1.4": return tour014
+        default: return []
+        }
+    }
+
+    var tour015: [TourStep] {
+        [
+            TourStep(symbol: "tray.and.arrow.down", kind: .plain,
+                     title: t("收纳条空着时，点图标收进来", "Tuck icons in from an empty strip"),
+                     detail: t("收纳条里还没有图标时，打开它会列出菜单栏上的图标。点一下就收进来，可以接着点，按 Esc 完成。",
+                               "When the strip is empty, opening it lists the icons on your menu bar. Click one to tuck it in, keep going, and press Esc when you're done.")),
+            TourStep(symbol: "menubar.rectangle", kind: .plain,
+                     title: t("标出菜单栏放不下的图标", "See what didn't fit"),
+                     detail: t("菜单栏太挤时，macOS 会把放不下的图标收进 «。设置的「菜单栏」页会给它们标上「放不下」，它们也会出现在收纳条里。",
+                               "When the bar is full, macOS moves what doesn't fit into «. The Menu Bar page in Settings tags those icons \"No room\", and they show up in the strip.")),
+            TourStep(symbol: "circle.lefthalf.filled", kind: .plain,
+                     title: t("••• 和菜单栏一个颜色", "••• matches your menu bar"),
+                     detail: t("不管 YoungBar 设成浅色还是深色，菜单栏上的 ••• 都跟着菜单栏本身的颜色，不会再看不清。",
+                               "Whatever look you pick for YoungBar, the ••• follows the menu bar itself, so it stays easy to see.")),
+        ]
+    }
+
+    var tour014: [TourStep] {
+        [
             TourStep(symbol: "command", kind: .shortcut,
                      title: t("连按两下 ⌘ 打开收纳条", "Press ⌘ twice for the strip"),
                      detail: t("快速按两下 ⌘ 就能打开收纳条，不用去点 •••。在设置的「通用」里可以换成别的快捷键。",

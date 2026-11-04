@@ -12,10 +12,9 @@ import YoungBarCore
 /// Accessibility permission YoungBar already has allows.
 extension BarApp {
     var hotKey: HotKeyCombo? {
-        // A code of -1 means the user cleared the shortcut.
-        guard let code = options[.hotKeyCode] else { return .standard }
-        guard code >= 0 else { return nil }
-        return HotKeyCombo(keyCode: UInt32(code), modifiers: UInt32(options[.hotKeyModifiers] ?? 0))
+        // -1 means the user cleared the shortcut; a saved pair that isn't a
+        // real shortcut (a hand-edited file) means the default, not a crash.
+        HotKeyCombo.saved(code: options[.hotKeyCode], modifiers: options[.hotKeyModifiers])
     }
 
     var hotKeyDisplay: String {
@@ -151,6 +150,7 @@ extension BarApp {
             kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10", kVK_F11: "F11", kVK_F12: "F12",
         ]
         if let name = special[Int(keyCode)] { return name }
+        guard let code = UInt16(exactly: keyCode) else { return "#\(keyCode)" }
         // The ASCII-capable layout: with a Chinese input method active the
         // current source has no key layout of its own.
         guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
@@ -161,7 +161,7 @@ extension BarApp {
         var characters = [UniChar](repeating: 0, count: 4)
         let status = data.withUnsafeBytes { raw -> OSStatus in
             guard let layout = raw.bindMemory(to: UCKeyboardLayout.self).baseAddress else { return -1 }
-            return UCKeyTranslate(layout, UInt16(keyCode), UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()),
+            return UCKeyTranslate(layout, code, UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()),
                                   OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeys, characters.count, &length, &characters)
         }
         guard status == noErr, length > 0 else { return "#\(keyCode)" }

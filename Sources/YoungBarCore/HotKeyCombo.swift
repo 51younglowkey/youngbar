@@ -50,6 +50,29 @@ public struct HotKeyCombo: Equatable, Sendable {
     }
 
     public func display(keyName: String) -> String { modifierSymbols + keyName }
+
+    public static let modifierMask: UInt32 = command | shift | option | control
+
+    /// A saved pair (Ints from user defaults or a layout file) that is a real
+    /// shortcut: a key of the keyboard (virtual codes 0–127) or a double tap,
+    /// Carbon modifier bits only, and usable. Anything else is nil: a negative
+    /// or huge number would trap when converted, and a bare letter would be
+    /// swallowed system-wide.
+    public static func savedPair(code: Int, modifiers: Int) -> HotKeyCombo? {
+        guard let key = UInt32(exactly: code), key <= 0x7F || key == doubleTapKeyCode,
+              let mask = UInt32(exactly: modifiers), mask & ~modifierMask == 0 else { return nil }
+        let combo = HotKeyCombo(keyCode: key, modifiers: mask)
+        return combo.isUsable ? combo : nil
+    }
+
+    /// The shortcut `hotKeyCode` / `hotKeyModifiers` describe: none saved is
+    /// the default (⌘⌘), -1 is "no shortcut", a pair that isn't a real
+    /// shortcut falls back to the default.
+    public static func saved(code: Int?, modifiers: Int?) -> HotKeyCombo? {
+        guard let code else { return .standard }
+        if code == -1 { return nil }
+        return savedPair(code: code, modifiers: modifiers ?? 0) ?? .standard
+    }
 }
 
 /// Spots a modifier pressed twice on its own: down and up quickly, twice,
@@ -64,14 +87,20 @@ public struct DoubleTapDetector: Sendable {
 
     private var down: (modifier: UInt32, at: Double)?
     private var lastTap: (modifier: UInt32, at: Double)?
+    /// The modifiers held before the latest change: a tap starts from none.
+    private var previous: UInt32 = 0
 
     public init(target: UInt32?) { self.target = target }
 
     /// `modifiers` is the Carbon mask held after the change. Returns the
     /// modifier on its second tap.
     public mutating func flagsChanged(_ modifiers: UInt32, at time: Double) -> UInt32? {
+        let held = previous
+        previous = modifiers
         let candidates = target.map { [$0] } ?? [HotKeyCombo.command, HotKeyCombo.option, HotKeyCombo.control]
         if candidates.contains(modifiers) {
+            // Down to ⌘ alone from ⌘⇧ (the end of ⌘⇧Z) is not a press of ⌘.
+            guard held == 0 else { reset(); return nil }
             if let lastTap, lastTap.modifier != modifiers { self.lastTap = nil }
             down = (modifiers, time)
             return nil

@@ -85,14 +85,22 @@ extension BarApp {
             let text = await diagnosticsReport()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = L10n.t("诊断信息已复制", "Diagnostics copied")
-            alert.informativeText = L10n.t("可以直接粘贴到评论区或群里。内容如下：", "Paste it into a comment or chat. It reads:")
-                + "\n\n" + text
-            alert.addButton(withTitle: L10n.t("好", "OK"))
-            alert.runModal()
+            // The alert is modal. Run from inside this task it would hold the
+            // main actor, so no other task ran until OK: an item opened from
+            // the strip stayed on the bar, refreshes stopped. From the run
+            // loop, they go on.
+            perform(#selector(showDiagnosticsAlert(_:)), with: text as NSString, afterDelay: 0)
         }
+    }
+
+    @objc func showDiagnosticsAlert(_ text: NSString) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L10n.t("诊断信息已复制", "Diagnostics copied")
+        alert.informativeText = L10n.t("可以直接粘贴到评论区或群里。内容如下：", "Paste it into a comment or chat. It reads:")
+            + "\n\n" + (text as String)
+        alert.addButton(withTitle: L10n.t("好", "OK"))
+        alert.runModal()
     }
 
     nonisolated static func sysctl(_ name: String) -> String {
@@ -142,5 +150,30 @@ extension BarApp {
         \(L10n.t("始终隐藏", "Always hidden")) (\(always.count)): \(list(always))
         \(L10n.t("被 « 收走", "In macOS «")) (\(covered.count)): \(list(covered))
         """
+    }
+}
+
+extension BarApp {
+    // Read-only accessors for the opt-in diagnostics snapshot.
+    var diagnosticsStarted: Bool { started }
+    var diagnosticsExpanded: Bool { expanded }
+    var diagnosticsFeedback: String { feedback }
+
+    func diagnosticsItems(snapshot: EngineSnapshot?) -> [Diagnostics.Item] {
+        orderedKeys().map { key in
+            // Only the live snapshot has a trustworthy frame: catalog entries
+            // keep the last seen frame even after an item is concealed.
+            let frame = snapshot?.items.first { $0.id.sectionKey.rawValue == key }?.frame
+            return Diagnostics.Item(
+                key: key,
+                name: name(for: key),
+                x: frame.map { Double($0.minX) },
+                y: frame.map { Double($0.minY) },
+                width: frame.map { Double($0.width) },
+                height: frame.map { Double($0.height) },
+                axX: axPosition(for: key).map { Double($0.x) },
+                mode: modes[key] ?? 0
+            )
+        }
     }
 }

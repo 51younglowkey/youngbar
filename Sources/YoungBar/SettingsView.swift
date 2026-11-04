@@ -64,6 +64,8 @@ final class SettingsModel {
     var entries: [BarEntry] = []
     var options: [String: Int] = [:]
     var launchAtLogin = false
+    /// Registered, but switched off in System Settings → Login Items.
+    var loginNeedsApproval = false
     var axTrusted = false
     var message = ""
     var customIcon: NSImage?
@@ -107,9 +109,7 @@ final class SettingsModel {
 
     func setMode(_ key: String, _ mode: Int) {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return }
-        let entry = entries[index]
-        entries[index] = BarEntry(key: entry.key, name: entry.name, image: entry.image,
-                                  mode: mode, pinned: entry.pinned)
+        entries[index].mode = mode
         send(.mode(key, mode))
     }
 
@@ -130,7 +130,12 @@ final class SettingsModel {
         var list = entries
         let item = list.remove(at: source)
         var index = destination > source ? destination - 1 : destination
-        if let firstPinned = list.firstIndex(where: \.pinned) { index = min(index, firstPinned) }
+        // Never after the locked run at the right end (the clock and Control
+        // Center). A locked Apple item in the middle (Time Machine, VPN…)
+        // doesn't stop others passing it: clamping at the first locked row
+        // turned a move to the right into one to the left.
+        let end = list.lastIndex(where: { !$0.pinned }).map { $0 + 1 } ?? 0
+        index = min(index, end)
         index = max(0, min(index, list.count))
         guard index != source else { return }
         list.insert(item, at: index)
@@ -307,10 +312,16 @@ struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                Toggle(L10n.t("登录时打开", "Open at login"), isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { model.launchAtLogin },
-                    set: { model.launchAtLogin = $0; model.send(.login($0)) }))
-                    .settingsFrame("login", model)
+                    set: { model.launchAtLogin = $0; model.send(.login($0)) })) {
+                    Text(L10n.t("登录时打开", "Open at login"))
+                    if model.loginNeedsApproval {
+                        Text(L10n.t("还需要在「系统设置 → 通用 → 登录项」里允许；打开开关会带你过去",
+                                    "Still needs your OK in System Settings → General → Login Items; turning this on takes you there"))
+                    }
+                }
+                .settingsFrame("login", model)
                 // Form drops geometry modifiers on its pickers, so the row
                 // is wrapped to give the self-test a frame.
                 LabeledContent(L10n.t("语言", "Language")) {
@@ -450,7 +461,7 @@ struct LayoutPane: View {
             // nothing to list, so it is granted right here.
             if !model.axTrusted {
                 Section {
-                    PermissionRow(title: L10n.t("辅助功能", "Accessibility"),
+                    PermissionRow(title: L10n.t("设备控制与数据访问", "Device Control and Data Access"),
                                   detail: L10n.t("读取、隐藏和排序菜单栏图标", "Read, hide and reorder menu-bar items"),
                                   granted: model.axTrusted) { model.send(.permission("accessibility")) }
                 } header: {
@@ -474,10 +485,19 @@ struct LayoutPane: View {
             } header: {
                 Text(L10n.t("按菜单栏中的顺序，从左到右", "In menu-bar order, left to right"))
             } footer: {
-                Text(L10n.t("把一行拖到另一行上即可换到那个位置，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
-                            "Drag a row onto another, or right-click it, to reorder. Locked items stay where macOS puts them but can be hidden. Always Hide items appear in the strip only when you ⌥-click •••."))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    // What a change just did ("macOS did not accept the
+                    // order"…), here where the change was made.
+                    if !model.message.isEmpty {
+                        Text(model.message)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.primary)
+                    }
+                    Text(L10n.t("把一行拖到另一行上即可换到那个位置，也可以右键选择移动。带锁的项目由 macOS 固定位置，但仍可隐藏。「始终隐藏」的项目只在按住 ⌥ 点击 ••• 时出现在收纳条中。",
+                                "Drag a row onto another, or right-click it, to reorder. Locked items stay where macOS puts them but can be hidden. Always Hide items appear in the strip only when you ⌥-click •••."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -529,6 +549,9 @@ struct LayoutRow: View {
                 Text(entry.name)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                if entry.covered {
+                    CoveredTag()
+                }
             }
         }
         .settingsFrame("row:\(entry.key)", model)
@@ -557,6 +580,23 @@ struct LayoutRow: View {
                 Button(L10n.t("移到最右", "Move to Far Right")) { model.move(from: index, to: model.entries.count) }
             }
         }
+    }
+}
+
+/// A row set to Show that the bar has no room for: macOS moved it into «
+/// (or it sits under the notch), so for now it opens from the strip.
+struct CoveredTag: View {
+    var body: some View {
+        Text(L10n.t("放不下", "No room"))
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(.quaternary))
+            .fixedSize()
+            .help(L10n.t("菜单栏太挤，macOS 把它收进了 «。现在可以从收纳条打开它；隐藏几个别的图标，它就会回到菜单栏。",
+                         "The menu bar is full, so macOS moved it into «. Open it from the strip for now; hide a few other icons and it comes back."))
+            .accessibilityLabel(L10n.t("菜单栏放不下，已在收纳条里", "No room in the menu bar; in the strip for now"))
     }
 }
 

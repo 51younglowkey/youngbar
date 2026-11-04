@@ -75,6 +75,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// The first nine icons show their number (unless turned off), however
     /// the strip was opened: the number keys work after a click too.
     var shelfNumbered = false
+    /// The strip opened with nothing in it, so it offers the bar's own icons
+    /// to tuck in until it closes.
+    var shelfAdding = false
+    /// One apply of tucked-in icons at a time (`applyTuckIns`); a click
+    /// during it asks for another round.
+    var tuckInApplying = false
+    var tuckInPending = false
     var shelfButtons: [NSButton] = []
     var shelfIconColor: NSColor = .white
     /// Items set to Show that sit under the notch, so nobody sees them.

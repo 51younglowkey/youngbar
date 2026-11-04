@@ -39,6 +39,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// A re-apply after an engine event is pending; they come 10 s apart at most.
     var reapplyScheduled = false
     var lastReapplyAt = Date.distantPast
+    /// Recent event-driven re-applies, and the layout they stopped on after
+    /// three in two minutes (the engine couldn't settle on it).
+    var eventReapplies: [Date] = []
+    var reapplyPausedFor: String?
+    /// Background engine work (EngineSync) is running. Refresh walks wait for
+    /// it; clicks and the shortcut don't (that is what `busy` is for).
+    var syncing = false
+    /// Mode choices made while `busy`, applied when it clears; the last one per row wins.
+    var pendingModes: [String: Int] = [:]
+    /// Running apps as last seen, to tell launches and quits apart (KVO on
+    /// `runningApplications`), and bundles whose item never landed in an
+    /// adoption window (not tried again this session).
+    var runningAppsObservation: NSKeyValueObservation?
+    var knownRunningPIDs: Set<pid_t> = []
+    var adoptionMissed: Set<String> = []
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
     var options: [String: Int] = {
@@ -293,25 +308,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
         RunLoop.main.add(tick, forMode: .common)
         timer = tick
         let center = NSWorkspace.shared.notificationCenter
-        // A launching app adds its item a moment after the launch notice.
-        workspaceObservers.append(center.addObserver(
-            forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
-            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            let pid = app?.processIdentifier ?? 0
-            let bundle = app?.bundleIdentifier
-            Task { @MainActor in
-                self?.appLaunched(pid: pid, bundle: bundle)
-                self?.refreshSoon()
-            }
-        })
-        workspaceObservers.append(center.addObserver(
-            forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                self?.appTerminated()
-                self?.refreshSoon()
-            }
-        })
-        for name in [NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+        // Launches and quits reach the engine through the running-apps list
+        // (EngineSync), which menu-bar-only apps are in too; these notices
+        // only bring the next walk forward. A launching app adds its item a
+        // moment after the launch notice.
+        watchRunningApplications()
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification,
+                     NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.refreshSoon() }
             })
@@ -344,7 +347,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func refresh() async {
-        guard !busy, !refreshing, AXIsProcessTrusted(), AssessmentMode.isAvailable else { return }
+        guard !busy, !refreshing, !syncing, AXIsProcessTrusted(), AssessmentMode.isAvailable else { return }
         if doubleTapNeedsTrust { registerHotKey() }
         refreshing = true
         lastRefreshAt = Date()
@@ -480,9 +483,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
         shelfState = nil
         Task {
             for _ in 0..<100 where busy { try? await Task.sleep(for: .milliseconds(100)) }
-            busy = true
+            // Still busy after 10 s: apply anyway, but leave the flag to its owner.
+            let owned = !busy
+            if owned { busy = true }
             await engine.setModel(currentModel())
-            busy = false
+            if owned { busy = false }
             renderWindow()
         }
     }
@@ -491,7 +496,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// real bar. Whenever the visible items disagree with their saved order,
     /// rewrite just those slots to the actual left-to-right order and persist.
     func reconcileVisibleOrder(_ snapshot: EngineSnapshot) {
-        guard !busy else { return }
+        guard !busy, !syncing else { return }
         // Only icons set to Show and in sight: a Hidden one out for a moment
         // (opened from the strip, Show all) keeps its place in the strip's
         // order, and a pile in macOS's « has no order to learn from.

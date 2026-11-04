@@ -81,6 +81,12 @@ extension BarApp {
         options[.onboarded] = kept.onboarded
         // What this Mac's defaults actually hold, not what another Mac had.
         options[.iconSpacing] = kept.spacing
+        // The file's shortcut wasn't a real one: keep this Mac's (it would
+        // otherwise fall back to the default ⌘⌘).
+        if file.refusedOptions.contains(Option.hotKeyCode.rawValue) {
+            options[.hotKeyCode] = kept.hotKeyCode
+            options[.hotKeyModifiers] = kept.hotKeyModifiers
+        }
         L10n.current = Language(rawValue: options[.language] ?? 0) ?? .chinese
         settings?.languageChanged()
         applyAppearance()

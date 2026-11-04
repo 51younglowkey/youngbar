@@ -57,6 +57,9 @@ extension BarApp {
             shelfPanel = panel
         }
         let wasOpen = expanded && shelfPanel?.isVisible == true
+        // A fresh open starts scrolled to the left (icons 1–9 in view); the
+        // old content would carry its scroll position into the rebuild.
+        if !wasOpen { shelfPanel?.contentView = nil }
         expanded = true
         shelfAnchored = false
         shelfSelection = selectFirst ? 0 : nil
@@ -120,7 +123,9 @@ extension BarApp {
         let order = orderedKeys()
         let excluded = Set(order.filter { key in
             guard let item = catalog[key] else { return true }
+            // A helper with no bundle of its own can't be hidden.
             return item.id.bundleID == Bundle.main.bundleIdentifier
+                || item.hostIsBundleless
                 || !MenuBarPolicy.isSectionManageable(item.id)
                 || MenuBarPolicy.isPinnedSystemItem(item.id)
                 || MenuBarPolicy.isPinnedAppleHost(item.id.bundleID)
@@ -346,10 +351,12 @@ extension BarApp {
         Task {
             repeat {
                 tuckInPending = false
-                for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
-                busy = true
+                for _ in 0..<100 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+                // Still busy after 10 s: apply anyway, but leave the flag to its owner.
+                let owned = !busy
+                if owned { busy = true }
                 await engine.setModel(currentModel())
-                busy = false
+                if owned { busy = false }
             } while tuckInPending
             tuckInApplying = false
             await refresh()
@@ -430,7 +437,16 @@ extension BarApp {
             defer { busy = false }
             await engine.reveal(items: [item.id])
             shownUntil[item.id] = Date().addingTimeInterval(revealSeconds)
-            let snapshot = await settledSnapshot(for: [item.id])
+            var snapshot = await settledSnapshot(for: [item.id])
+            // An app started while YoungBar hid it: macOS parked its item
+            // off screen, and a reveal doesn't bring it back. Let it land now,
+            // once (hidden icons show for a moment) — not at every launch.
+            if snapshot.items.first(where: { $0.id.sectionKey == item.id.sectionKey })?.frame == nil,
+               MenuBarPolicy.systemItem(for: item.id) == nil, let bundle = item.id.bundleID,
+               await engine.holdsAssertion {
+                _ = await engine.openAdoptionWindow(for: bundle)
+                snapshot = await settledSnapshot(for: [item.id])
+            }
             positionControlBesideMenuIcons(in: snapshot)
             guard let frame = snapshot.items.first(where: { $0.id.sectionKey == item.id.sectionKey })?.frame else {
                 // The saved entry can outlive its menu-bar item (app updated or

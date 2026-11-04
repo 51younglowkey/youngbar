@@ -25,7 +25,6 @@
 - 退出的应用不再留在收纳条
 - 导入配置不会再导致闪退
 - ••• 不再抢键盘焦点
-- 全屏应用里不再浮着 •••
 
 ## 说明
 
@@ -59,7 +58,6 @@
 - Apps that quit no longer linger in the strip
 - Importing a layout can no longer crash YoungBar
 - ••• no longer takes keyboard focus
-- No floating ••• over full-screen apps
 
 ## Notes
 

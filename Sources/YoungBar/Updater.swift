@@ -137,8 +137,10 @@ extension BarApp {
         let model = updateModel ?? UpdateModel()
         if updateWindow == nil {
             model.install = { [weak self] in self?.installUpdate() }
-            model.cancel = { [weak self] in
+            model.cancel = { [weak self, weak model] in
                 self?.updateTask?.cancel()
+                // Cancelled for good: the next check starts fresh.
+                model?.state = .checking
                 self?.updateWindow?.orderOut(nil)
             }
             model.openPage = { [weak self] in
@@ -162,7 +164,16 @@ extension BarApp {
             updateModel = model
             updateWindow = window
         }
-        guard updateTask == nil || model.state != .installing else { return }
+        // Downloading or installing already (the window was only closed):
+        // show it again instead of starting over.
+        switch model.state {
+        case .downloading, .installing:
+            updateWindow?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        default:
+            break
+        }
         model.current = currentVersion
         model.state = .checking
         updateWindow?.center()
@@ -292,6 +303,10 @@ extension BarApp {
             return L10n.t("网络连接失败：\(error.localizedDescription)", "Network error: \(error.localizedDescription)")
         case ReleaseInfo.ParseError.missingAsset(let name):
             return L10n.t("最新的发布里缺少 \(name)。", "The latest release has no \(name).")
+        case let error as CocoaError:
+            return L10n.t("本机文件操作失败：\(error.localizedDescription)", "A file operation on this Mac failed: \(error.localizedDescription)")
+        case let error as POSIXError:
+            return L10n.t("本机文件操作失败：\(error.localizedDescription)", "A file operation on this Mac failed: \(error.localizedDescription)")
         default:
             return L10n.t("读不懂 GitHub 返回的版本信息。", "Couldn't read the release information from GitHub.")
         }
@@ -303,13 +318,28 @@ extension BarApp {
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("YoungBar-update-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-        let (checksumData, _) = try await URLSession.shared.data(from: release.checksumURL)
+        do {
+            return try await downloadAndVerify(release, into: work, progress: progress)
+        } catch {
+            // Failed or cancelled: nothing of this attempt stays behind.
+            try? FileManager.default.removeItem(at: work)
+            throw error
+        }
+    }
+
+    func downloadAndVerify(_ release: ReleaseInfo, into work: URL,
+                           progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        let (checksumData, checksumResponse) = try await URLSession.shared.data(from: release.checksumURL)
+        guard (checksumResponse as? HTTPURLResponse)?.statusCode == 200 else {
+            throw UpdateError.message(L10n.t("校验文件下载失败，请稍后再试。", "Couldn't download the checksum file. Try again later."))
+        }
         guard let expected = ReleaseInfo.expectedDigest(fromChecksumFile: String(decoding: checksumData, as: UTF8.self)) else {
             throw UpdateError.message(L10n.t("校验文件格式不对，已停止安装。", "The checksum file is malformed; nothing was installed."))
         }
         let delegate = DownloadDelegate(progress: progress)
         let (downloaded, response) = try await URLSession.shared.download(from: release.zipURL, delegate: delegate)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: downloaded)
             throw UpdateError.message(L10n.t("下载失败，请稍后再试。", "The download failed. Try again later."))
         }
         let zip = work.appendingPathComponent("YoungBar.zip")
@@ -332,6 +362,15 @@ extension BarApp {
         guard info?["CFBundleIdentifier"] as? String == Bundle.main.bundleIdentifier,
               (info?["CFBundleShortVersionString"] as? String).flatMap(AppVersion.init) == release.version else {
             throw UpdateError.message(L10n.t("下载的 app 版本信息不对，已停止安装。", "The downloaded app isn't the expected version; nothing was installed."))
+        }
+        // A release for a newer macOS than this one would install and then
+        // fail to open, with the old app already gone.
+        if let minimum = (info?["LSMinimumSystemVersion"] as? String).flatMap(AppVersion.init) {
+            let os = ProcessInfo.processInfo.operatingSystemVersion
+            if let current = AppVersion("\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"), current < minimum {
+                throw UpdateError.message(L10n.t("YoungBar \(release.version) 需要 macOS \(minimum) 或更新的系统，没有安装。",
+                                                 "YoungBar \(release.version) needs macOS \(minimum) or later, so it wasn't installed."))
+            }
         }
         guard Self.signedLikeThisApp(app) else {
             throw UpdateError.message(L10n.t(
@@ -368,27 +407,39 @@ extension BarApp {
         }
         let log = Diagnostics.url.deletingLastPathComponent().appendingPathComponent("update.log")
         try? FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // The old bundle is kept until the new one has opened: a move that
+        // fails, or an app that won't launch, puts it back. The wait is long
+        // (10 min) because an open menu or panel delays the quit, and giving
+        // up then meant quitting later without installing or reopening.
         let script = """
         pid="$1"; new="$2"; app="$3"; log="$4"
         work="$(dirname "$new")"
         i=0
         while kill -0 "$pid" 2>/dev/null; do
-          i=$((i + 1)); [ $i -gt 240 ] && { echo "$(date) gave up: YoungBar did not quit" >> "$log"; exit 1; }
+          i=$((i + 1)); [ $i -gt 2400 ] && { echo "$(date) gave up: YoungBar did not quit" >> "$log"; exit 1; }
           sleep 0.25
         done
-        if mv "$app" "$work/previous.app"; then
-          if mv "$new" "$app"; then
-            rm -rf "$work/previous.app"
-            echo "$(date) installed $(defaults read "$app/Contents/Info" CFBundleShortVersionString 2>/dev/null) at $app" >> "$log"
+        if ! mv "$app" "$work/previous.app"; then
+          echo "$(date) failed to move the old app aside; nothing changed" >> "$log"
+          open "$app"; exit 1
+        fi
+        if ! mv "$new" "$app"; then
+          if mv "$work/previous.app" "$app"; then
+            echo "$(date) failed to move the new app in; kept the old one" >> "$log"
           else
-            mv "$work/previous.app" "$app"
-            echo "$(date) failed to move the new app; kept the old one" >> "$log"
+            echo "$(date) failed to move the new app in, and to put the old one back: it is at $work/previous.app" >> "$log"
           fi
-        else
-          echo "$(date) failed to move the old app aside" >> "$log"
+          open "$app"; exit 1
         fi
         xattr -dr com.apple.quarantine "$app" 2>/dev/null
-        open "$app"
+        if open "$app"; then
+          echo "$(date) installed $(defaults read "$app/Contents/Info" CFBundleShortVersionString 2>/dev/null) at $app" >> "$log"
+          rm -rf "$(dirname "$work")"
+        else
+          echo "$(date) the new app did not open; putting the old one back" >> "$log"
+          rm -rf "$app" && mv "$work/previous.app" "$app"
+          open "$app"
+        fi
         """
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")

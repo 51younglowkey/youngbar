@@ -68,6 +68,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_EMPTYSHELFTEST"] == "1" {
             await runEmptyShelfTest()
         }
+        if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_LAUNCHTEST"], !bundle.isEmpty {
+            await runLaunchTest(bundle: bundle)
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTIONTEST"] == "1" {
             await runNoAssertionTest()
         }
@@ -297,20 +300,30 @@ extension BarApp {
     /// iBar's 小间隙, reads it back, then removes both keys again.
     func runSpacingTest() {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        let keys = ["NSStatusItemSelectionPadding", "NSStatusItemSpacing"]
+        // This Mac's own values (nil: not set), put back however the test ends.
+        let originals = keys.map { try? readDefaults(["-currentHost", "read", "-g", $0]) }
+        result["originals"] = originals.map { $0 ?? "(unset)" }
         do {
             try runDefaults(["-currentHost", "write", "-g", "NSStatusItemSelectionPadding", "3"])
             try runDefaults(["-currentHost", "write", "-g", "NSStatusItemSpacing", "3"])
             result["paddingReadBack"] = try readDefaults(["-currentHost", "read", "-g", "NSStatusItemSelectionPadding"])
             result["spacingReadBack"] = try readDefaults(["-currentHost", "read", "-g", "NSStatusItemSpacing"])
-            try runDefaults(["-currentHost", "remove", "-g", "NSStatusItemSelectionPadding"])
-            try runDefaults(["-currentHost", "remove", "-g", "NSStatusItemSpacing"])
-            result["restored"] = true
             result["passed"] = (result["paddingReadBack"] as? String) == "3"
                 && (result["spacingReadBack"] as? String) == "3"
         } catch {
             result["error"] = error.localizedDescription
             result["passed"] = false
         }
+        for (key, original) in zip(keys, originals) {
+            if let original {
+                try? runDefaults(["-currentHost", "write", "-g", key, original])
+            } else {
+                try? runDefaults(["-currentHost", "delete", "-g", key])
+            }
+        }
+        let after = keys.map { try? readDefaults(["-currentHost", "read", "-g", $0]) }
+        result["restored"] = after == originals
         let url = Diagnostics.url.deletingLastPathComponent().appendingPathComponent("spacingtest.json")
         if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: url, options: .atomic)
@@ -443,8 +456,9 @@ extension BarApp {
         let original = modes[key] ?? 0
         result["target"] = key
         result["originalMode"] = original
+        // In memory only (currentModel reads it): a crash mid-test must not
+        // leave the temporary mode saved.
         modes[key] = 1
-        UserDefaults.standard.set(modes, forKey: "itemModes")
         await engine.conceal()
         await engine.setModel(currentModel())
         try? await Task.sleep(for: .milliseconds(700))
@@ -491,7 +505,9 @@ extension BarApp {
         shownUntil[item.id] = nil
         modes[key] = original
         UserDefaults.standard.set(modes, forKey: "itemModes")
-        await engine.conceal()
+        // The click went through the reveal path: release that item, which
+        // a plain conceal() leaves out.
+        await engine.conceal(releasing: [item.id])
         await engine.setModel(currentModel())
         try? await Task.sleep(for: .milliseconds(700))
         result["restoredMode"] = modes[key] == original
@@ -673,7 +689,6 @@ extension BarApp {
         let originals = keys.map { modes[$0] ?? 0 }
         result["originals"] = originals
         for key in keys { modes[key] = 1 }
-        UserDefaults.standard.set(modes, forKey: "itemModes")
         await engine.conceal()
         await engine.setModel(currentModel())
         try? await Task.sleep(for: .milliseconds(900))
@@ -1075,8 +1090,8 @@ extension BarApp {
             let pid = NSWorkspace.shared.runningApplications
                 .first { $0.bundleIdentifier == "com.better365.iFanOffline" }?.processIdentifier
             result["fanWindowsBefore"] = pid.map { targetWindows(pid: $0).count } ?? 0
+            let originalFan = modes[fanKey]
             modes[fanKey] = 1
-            UserDefaults.standard.set(modes, forKey: "itemModes")
             await engine.conceal()
             await engine.setModel(currentModel())
             try? await Task.sleep(for: .milliseconds(600))
@@ -1101,7 +1116,11 @@ extension BarApp {
                 try? await Task.sleep(for: .milliseconds(500))
                 result["fanWindowsAfterCleanup"] = pid.map { targetWindows(pid: $0).count } ?? 0
             }
-            modes[fanKey] = 1
+            // Released whether or not the click happened, and back to the
+            // user's own mode (not forced to Hidden).
+            shownUntil[fan.id] = nil
+            await engine.conceal(items: [fan.id])
+            modes[fanKey] = originalFan
             UserDefaults.standard.set(modes, forKey: "itemModes")
             await engine.conceal()
             await engine.setModel(currentModel())
@@ -1110,9 +1129,8 @@ extension BarApp {
 
         if let menuKey = catalog.first(where: { $0.value.id.bundleID == "com.apple.TextInputMenuAgent" })?.key,
            let menuItem = catalog[menuKey] {
-            let original = modes[menuKey] ?? 0
+            let original = modes[menuKey]
             modes[menuKey] = 1
-            UserDefaults.standard.set(modes, forKey: "itemModes")
             await engine.conceal()
             await engine.setModel(currentModel())
             try? await Task.sleep(for: .milliseconds(600))
@@ -1129,6 +1147,8 @@ extension BarApp {
                 result["menuConcealedWhileOpen"] = (await engine.freshSnapshot()).concealed.contains(menuItem.id)
                 postEscape()
             }
+            shownUntil[menuItem.id] = nil
+            await engine.conceal(items: [menuItem.id])
             modes[menuKey] = original
             UserDefaults.standard.set(modes, forKey: "itemModes")
             await engine.conceal()
@@ -1382,8 +1402,8 @@ extension BarApp {
         // Shown items re-sync the saved order to the bar; put it back after.
         let originalOrder = savedOrder
         let hiddenKeys = modes.filter { $0.value == 1 }.map(\.key)
+        // In memory only: YOUNGBAR_OVERFLOW_HOLD can keep this state a while.
         for key in hiddenKeys { modes[key] = 0 }
-        UserDefaults.standard.set(modes, forKey: "itemModes")
         busy = true
         await engine.conceal()
         await engine.setModel(currentModel())
@@ -1856,9 +1876,8 @@ extension BarApp {
             result["orderRestored"] = savedOrder == originalOrder
             result["concealedAfter"] = after.concealed.map(\.sectionKey.rawValue).sorted()
         }
+        // In memory only, until the restore below.
         for (key, mode) in modes where mode == 1 { modes[key] = 0 }
-        UserDefaults.standard.set(modes, forKey: "itemModes")
-        UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
         busy = true
         await engine.conceal()
         await engine.setModel(currentModel())
@@ -1906,6 +1925,44 @@ extension BarApp {
             && (result["inStripAtOnce"] as? Bool == true) && (result["concealed"] as? Bool == true)
             && (result["stillOpen"] as? Bool == true) && (result["restored"] as? Bool == true)
             && (result["alphaAfterOpen"] as? Double ?? 0) > 0.99
+    }
+
+    /// Opt-in (`YOUNGBAR_LAUNCHTEST=<bundle id>`): quits that app and opens it
+    /// again, then checks its icon is back. Pick a menu-bar utility with no
+    /// documents (it really quits). With anything hidden, macOS parks a new
+    /// registration off screen; EngineSync has to adopt it. A Show icon must
+    /// be back on the bar; a Hidden one must not be.
+    func runLaunchTest(bundle: String) async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "bundle": bundle]
+        defer { writeJSON(result, name: "launchtest.json") }
+        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }),
+              let url = app.bundleURL else {
+            result["skipped"] = "not running"
+            return
+        }
+        let key = catalog.first { $0.value.id.bundleID == bundle }?.key
+        let mode = key.flatMap { modes[$0] } ?? 0
+        result["key"] = key ?? ""
+        result["mode"] = mode
+        // Without an assertion nothing parks, and the case isn't tested.
+        result["holdsAssertion"] = await engine.holdsAssertion
+        _ = app.terminate()
+        for _ in 0..<40 where !app.isTerminated { try? await Task.sleep(for: .milliseconds(250)) }
+        result["quit"] = app.isTerminated
+        try? await Task.sleep(for: .seconds(1))
+        let started = Date()
+        result["reopened"] = NSWorkspace.shared.open(url)
+        // The launch handler waits up to 6 s for the item, then adopts it.
+        var onBar = false
+        for _ in 0..<30 {
+            try? await Task.sleep(for: .milliseconds(500))
+            onBar = await engine.freshSnapshot().items.contains { $0.id.bundleID == bundle && $0.frame != nil }
+            if onBar && mode == 0 { break }
+        }
+        result["secondsUntilBack"] = onBar ? Date().timeIntervalSince(started) : -1
+        result["onBarAfterLaunch"] = onBar
+        result["inStripAfterLaunch"] = shelfKeys().contains { catalog[$0]?.id.bundleID == bundle }
+        result["passed"] = (result["quit"] as? Bool == true) && (mode == 0 ? onBar : !onBar)
     }
 
     /// The button for `key` sending `action`, anywhere under `view`.

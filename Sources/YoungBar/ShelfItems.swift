@@ -48,8 +48,11 @@ final class PassThroughImageView: NSImageView {
 }
 
 /// Reordering in the strip changes the saved order only: hidden icons are
-/// not in the bar, so nothing is revealed or dragged there. They take the
-/// new order the next time they show.
+/// not in the bar, so nothing is revealed or dragged there, and the strip
+/// keeps that order. (It is not pushed to the bar: an icon set back to Show
+/// returns where macOS keeps it, and the saved order follows the bar again.
+/// One shown only for a moment — opened from the strip, Show all — keeps
+/// its strip place; see `reconcileVisibleOrder`.)
 extension BarApp {
     static let shelfSlot: CGFloat = 40
     static let shelfInset: CGFloat = 8

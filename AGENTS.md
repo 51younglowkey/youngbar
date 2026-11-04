@@ -5,6 +5,7 @@
 ## 1. 项目边界
 
 - 只做 macOS 27 的菜单栏收纳工具：隐藏 / 展开 / 排序 / 原地打开 / 快捷键 / 外观。
+- 最低系统 **macOS 27**（Apple 芯片；macOS 27 不支持 Intel），对外统一说「只支持 macOS 27 及以上」。写在 `Info.plist` 的 `LSMinimumSystemVersion`、`Package.swift` 与 `Vendor/*/Package.swift` 的 `platforms`、`Scripts/install.sh` 开头的检查，以及 README（中英）、`docs/INSTALL.md`、`docs/FAQ.md` 第 6 条、更新日志的「要求 / Requirements」；要改就一起改。
 - 代码在 `Sources/YoungBar/`，依赖在 `Vendor/`（Dimble 的 PelmetCore / PelmetEngine，GPLv3）。
 - 记录在 `docs/STATUS.md`（只写当前验证状态；历史在 `docs/JOURNAL.md`）与 `docs/IBAR-FEATURES.md`（iBar 对照表）。独立之前的轮次记在 Leorea 的 `docs/JOURNAL.md`。
 - 不要依赖仓库外的路径（例如原来的 `../../app`、`../../projects`）。

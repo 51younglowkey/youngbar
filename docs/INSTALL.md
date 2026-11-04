@@ -3,6 +3,12 @@
 YoungBar is distributed directly from GitHub. It is not notarized by Apple, so
 macOS will warn on first launch. This is expected for a small open-source app.
 
+## Requirements
+
+macOS 27 or later, on an Apple silicon Mac (macOS 27 doesn't run on Intel Macs).
+macOS 26 and earlier are not supported: macOS refuses to open the app there,
+and the install script stops before downloading anything.
+
 ## 1. Download
 
 Download `YoungBar-<version>.zip` from the latest GitHub Release, unzip it,
@@ -29,7 +35,7 @@ Because the build is ad-hoc or self-signed:
 
 Open YoungBar → **设置** → **权限**, then:
 
-- **Device Control and Data Access** (Accessibility on older macOS):
+- **Device Control and Data Access** (the pane called Accessibility before macOS 27):
   enable YoungBar. Without it the strip is empty.
 YoungBar does not use Screen Recording: the strip shows app icons, not menu-bar
 screenshots. Only the Accessibility permission above is required.

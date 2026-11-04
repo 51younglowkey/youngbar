@@ -4,7 +4,7 @@
 
 [中文](README.md) | **English**
 
-A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.
+A keyboard-first menu bar organizer for **macOS 27 and later only** (Apple silicon Macs). Hide the icons you do not need, open them from one compact strip, and click through to their native menus — without the menu bar flashing or reflowing.
 
 ![YoungBar settings](docs/images/readme-general.png)
 
@@ -15,6 +15,8 @@ A keyboard-first menu bar organizer for **macOS 27**. Hide the icons you do not 
 </p>
 
 ## Install
+
+**Requirements**: macOS 27 or later on an Apple silicon Mac (macOS 27 doesn't run on Intel Macs). macOS 26 and earlier (12, 13, 14, 15 and so on) are not supported: the app won't open there, and the install command stops with a message before changing anything. See [How it works](#how-it-works-and-the-trade-offs) for why.
 
 1. Download the latest `YoungBar-<version>.zip` from [Releases](../../releases/latest).
 2. Unzip it and move `YoungBar.app` into `/Applications`.
@@ -92,6 +94,7 @@ YoungBar does **not** capture the screen and does **not** need Screen & System A
 
 ## How it works (and the trade-offs)
 
+- **macOS 27 and later only**: hiding and ordering both rest on macOS 27's menu bar (the assessment interface below, and the item positions macOS 27's `MenuBarAgent` keeps); the engine was written and verified for macOS 27 only. Earlier versions would need a different way to hide and order icons — it isn't a matter of changing a version number.
 - Hiding uses the private `MenuBarClientCore` assessment interface. It works on macOS 27 but is not a public API and may break on future releases. This app cannot be shipped on the App Store.
 - The strip shows app icons, not the items' live menu-bar content: a concealed item is not drawn by macOS 27, so there is nothing current to show. Items whose value you watch belong in the visible part of the bar.
 - There is no menu-bar screenshot capture or cache.

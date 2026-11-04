@@ -174,10 +174,40 @@ extension BarApp {
         }
         control.rightClick = { [weak self] in self?.showConfigurationMenu() }
         panel.contentView = control
-        panel.makeKeyAndOrderFront(nil)
         controlPanel = panel
         controlButton = control
+        syncControlAppearance()
+        panel.makeKeyAndOrderFront(nil)
         applyUpdateNotice()
+    }
+
+    /// What the menu bar itself looks like. It isn't YoungBar's appearance:
+    /// the user can force Light or Dark for YoungBar's windows, and the bar
+    /// follows the wallpaper. YoungBar's own (blank) status item sits in the
+    /// bar, so its button carries the bar's look — when macOS set that look
+    /// on the status bar window. If the button only inherited YoungBar's
+    /// forced choice, the system setting is the better answer.
+    var menuBarAppearance: NSAppearance? {
+        let systemDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+        let system = NSAppearance(named: systemDark ? .darkAqua : .aqua)
+        guard let button = statusItem?.button, let window = button.window else { return system }
+        var view: NSView? = button
+        while let current = view {
+            if current.appearance != nil { return button.effectiveAppearance }
+            view = current.superview
+        }
+        if window.appearance != nil || NSApp.appearance == nil { return button.effectiveAppearance }
+        return system
+    }
+
+    /// The ••• is drawn in YoungBar's own panel, which would otherwise take
+    /// YoungBar's appearance and could end up white on a light bar (or black
+    /// on a dark one). Cheap: runs on every refresh and appearance change.
+    func syncControlAppearance() {
+        guard let panel = controlPanel, let target = menuBarAppearance else { return }
+        guard panel.appearance?.name != target.name else { return }
+        panel.appearance = target
+        controlButton?.needsDisplay = true
     }
 
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
@@ -261,10 +291,12 @@ extension BarApp {
         guard panel.runModal() == .OK, let url = panel.url,
               let source = NSImage(contentsOf: url) else { return }
         let target = NSImage(size: NSSize(width: 36, height: 36))
+        let box = NSRect(x: 0, y: 0, width: 36, height: 36)
         target.lockFocus()
         NSColor.clear.setFill()
-        NSRect(x: 0, y: 0, width: 36, height: 36).fill()
-        source.draw(in: NSRect(x: 0, y: 0, width: 36, height: 36),
+        box.fill()
+        // Scaled to fit, not stretched: a wide or tall picture keeps its shape.
+        source.draw(in: ImageFit.aspectFit(source.size, in: box),
                     from: .zero, operation: .sourceOver, fraction: 1)
         target.unlockFocus()
         guard let tiff = target.tiffRepresentation,

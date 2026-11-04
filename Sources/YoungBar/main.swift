@@ -128,6 +128,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
             return
         }
         #endif
+        if options[.language] == nil {
+            // A fresh install starts in the Mac's language. An update from a
+            // version that never saved one keeps Chinese, its old default.
+            let chinese = !needsGuide || PreferredLanguage.isChinese(Locale.preferredLanguages)
+            options[.language] = (chinese ? Language.chinese : Language.english).rawValue
+            UserDefaults.standard.set(options, forKey: "barOptions")
+        }
         L10n.current = Language(rawValue: options[.language] ?? 0) ?? .chinese
         UserDefaults.standard.set(true, forKey: "sessionActive")
         if Diagnostics.isEnabled {
@@ -235,6 +242,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func applyAppearance() {
         let mode = AppearanceMode(rawValue: options[.appearanceMode] ?? 0) ?? .system
         NSApp.appearance = mode.appearance
+        // YoungBar's windows take the chosen look; the ••• keeps the bar's.
+        syncControlAppearance()
         NSApp.applicationIconImage = themeIcon(themeColor)
         applyUpdateNotice()
     }
@@ -270,6 +279,15 @@ final class BarApp: NSObject, NSApplicationDelegate {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.reinstallControlIfNeeded()
+                self?.refreshSoon()
+            }
+        })
+        // Dark Mode switched: the bar changes its look at once, so does the •••
+        // (and again on the next walks, once the status item has caught up).
+        workspaceObservers.append(DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncControlAppearance()
                 self?.refreshSoon()
             }
         })
@@ -324,6 +342,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         remember(snapshot)
         overflowKeys = computeOverflow(outOfSightKeys(snapshot))
         positionControlBesideMenuIcons(in: snapshot)
+        // The wallpaper or Dark Mode may have changed the bar's look.
+        syncControlAppearance()
         if expanded { populateShelf() }
         // The settings model only matters while its window is on screen;
         // `showWindow` renders in full when it opens.

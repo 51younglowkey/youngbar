@@ -64,6 +64,8 @@ final class SettingsModel {
     var entries: [BarEntry] = []
     var options: [String: Int] = [:]
     var launchAtLogin = false
+    /// Registered, but switched off in System Settings → Login Items.
+    var loginNeedsApproval = false
     var axTrusted = false
     var message = ""
     var customIcon: NSImage?
@@ -107,9 +109,7 @@ final class SettingsModel {
 
     func setMode(_ key: String, _ mode: Int) {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return }
-        let entry = entries[index]
-        entries[index] = BarEntry(key: entry.key, name: entry.name, image: entry.image,
-                                  mode: mode, pinned: entry.pinned)
+        entries[index].mode = mode
         send(.mode(key, mode))
     }
 
@@ -307,10 +307,16 @@ struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                Toggle(L10n.t("登录时打开", "Open at login"), isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { model.launchAtLogin },
-                    set: { model.launchAtLogin = $0; model.send(.login($0)) }))
-                    .settingsFrame("login", model)
+                    set: { model.launchAtLogin = $0; model.send(.login($0)) })) {
+                    Text(L10n.t("登录时打开", "Open at login"))
+                    if model.loginNeedsApproval {
+                        Text(L10n.t("还需要在「系统设置 → 通用 → 登录项」里允许；打开开关会带你过去",
+                                    "Still needs your OK in System Settings → General → Login Items; turning this on takes you there"))
+                    }
+                }
+                .settingsFrame("login", model)
                 // Form drops geometry modifiers on its pickers, so the row
                 // is wrapped to give the self-test a frame.
                 LabeledContent(L10n.t("语言", "Language")) {
@@ -529,6 +535,9 @@ struct LayoutRow: View {
                 Text(entry.name)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                if entry.covered {
+                    CoveredTag()
+                }
             }
         }
         .settingsFrame("row:\(entry.key)", model)
@@ -557,6 +566,23 @@ struct LayoutRow: View {
                 Button(L10n.t("移到最右", "Move to Far Right")) { model.move(from: index, to: model.entries.count) }
             }
         }
+    }
+}
+
+/// A row set to Show that the bar has no room for: macOS moved it into «
+/// (or it sits under the notch), so for now it opens from the strip.
+struct CoveredTag: View {
+    var body: some View {
+        Text(L10n.t("放不下", "No room"))
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(.quaternary))
+            .fixedSize()
+            .help(L10n.t("菜单栏太挤，macOS 把它收进了 «。现在可以从收纳条打开它；隐藏几个别的图标，它就会回到菜单栏。",
+                         "The menu bar is full, so macOS moved it into «. Open it from the strip for now; hide a few other icons and it comes back."))
+            .accessibilityLabel(L10n.t("菜单栏放不下，已在收纳条里", "No room in the menu bar; in the strip for now"))
     }
 }
 

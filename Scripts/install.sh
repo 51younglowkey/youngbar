@@ -56,7 +56,7 @@ YoungBar $version is installed at $app.
 Next:
   1. Allow Device Control and Data Access (Accessibility) when the guide asks.
   2. Choose icons to hide in Settings → Menu Bar.
-  3. Click ••• or press ⌃⌥B to open the strip.
+  3. Click ••• or press ⌘ twice to open the strip.
 
 YoungBar has no Dock icon; it lives in the menu bar.
 TEXT

@@ -94,6 +94,7 @@ Vendor/
 - 自检会动真实菜单栏：点击、隐藏、拖动。**结束后必须恢复原状态**；测试打开的面板/菜单要关闭。
 - 改状态数字时同步更新 `docs/STATUS.md`；结论变了追加「更正第 N 轮」，不改历史条目。
 - 提交前：`sh Scripts/build.sh` 通过；`git status` 只包含预期文件。
+- **提交作者一律是 51Young**（项目的硬性要求）：作者和提交者都是 `51Young <193584257+51younglowkey@users.noreply.github.com>`；不用 Claude 署名，也不加 `Co-Authored-By: Claude…`、`Claude-Session:` 之类的尾注。云端会话是新克隆的，第一次提交前先在仓库里 `git config user.name` / `git config user.email` 设好，提交后用 `git log --format='%an <%ae> | %cn'` 看一眼。
 
 ## 6. UI 与设计
 

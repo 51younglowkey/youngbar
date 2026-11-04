@@ -19,6 +19,32 @@ permissions:
   contents: read
 
 jobs:
+  commit-identity:
+    name: Commit author and attribution
+    # Private repo only: a contributor's pull request on the public repo keeps their own name.
+    if: github.repository == '51younglowkey/youngbar-dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check the commits this event brings in
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            base="$PR_BASE"
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base="$BEFORE"
+          else
+            # A new branch or a manual run: all-zero or empty `before`.
+            base="origin/main"
+          fi
+          sh Scripts/check-commits.sh "$base..HEAD"
+
   core-linux:
     name: Unit tests (Linux, Swift 6.4)
     runs-on: ubuntu-24.04

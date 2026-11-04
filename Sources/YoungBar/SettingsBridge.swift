@@ -167,8 +167,11 @@ extension BarApp {
         }
         do {
             if level == 0 {
-                try runDefaults(["-currentHost", "remove", "-g", "NSStatusItemSelectionPadding"])
-                try runDefaults(["-currentHost", "remove", "-g", "NSStatusItemSpacing"])
+                // `delete` is the documented verb; a key that isn't there is
+                // the default already, so its error doesn't count.
+                for key in ["NSStatusItemSelectionPadding", "NSStatusItemSpacing"] {
+                    try? runDefaults(["-currentHost", "delete", "-g", key])
+                }
             } else {
                 let value = level == 1 ? 5 : level == 2 ? 3 : 0
                 try runDefaults(["-currentHost", "write", "-g", "NSStatusItemSelectionPadding", String(value)])

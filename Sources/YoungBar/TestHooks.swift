@@ -62,6 +62,12 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_AUTOUPDATETEST"] == "1" {
             await runAutoUpdateTest()
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_APPEARANCETEST"] == "1" {
+            await runAppearanceTest()
+        }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_EMPTYSHELFTEST"] == "1" {
+            await runEmptyShelfTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTIONTEST"] == "1" {
             await runNoAssertionTest()
         }
@@ -1031,7 +1037,11 @@ extension BarApp {
         result["revealedOnOpen"] = revealed
         result["visibleBefore"] = visibleBefore
         result["visibleAfter"] = visibleAfter
-        result["passed"] = expanded && elapsed < 400 && revealed == 0 && visibleAfter == visibleBefore
+        // The fade-in must end fully opaque (a strip stuck half-transparent is a bug).
+        try? await Task.sleep(for: .milliseconds(250))
+        let alpha = Double(shelfPanel?.alphaValue ?? 0)
+        result["alphaAfterFade"] = alpha
+        result["passed"] = expanded && elapsed < 400 && revealed == 0 && visibleAfter == visibleBefore && alpha > 0.99
         closeShelf()
         writeJSON(result, name: "shelfopen.json")
     }
@@ -1383,6 +1393,10 @@ extension BarApp {
         let crowded = await engine.freshSnapshot()
         result["framesAllShown"] = frames(crowded)
         result["overflowAllShown"] = overflowKeys.sorted()
+        // Settings → Menu Bar marks exactly those rows "No room".
+        let covered = barEntries().filter(\.covered).map(\.key)
+        result["coveredInSettings"] = covered.sorted()
+        result["settingsMarksOverflow"] = Set(covered) == overflowKeys
         showShelf()
         let stripKeys = shelfButtons.compactMap { $0.identifier?.rawValue }
         result["stripKeysAllShown"] = stripKeys
@@ -1763,6 +1777,144 @@ extension BarApp {
                 return
             }
         }
+    }
+
+    // MARK: - 0.1.5 checks
+
+    /// Opt-in (`YOUNGBAR_APPEARANCETEST=1`): the ••• must take the menu bar's
+    /// look whatever YoungBar's own appearance setting is. Steps the setting
+    /// through System / Light / Dark in memory only, then restores it.
+    /// `YOUNGBAR_APPEARANCE_HOLD=<seconds>` holds each step for a screenshot
+    /// (`screencapture -x -R <control frame>`).
+    func runAppearanceTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "appearancetest.json") }
+        func look(_ appearance: NSAppearance?) -> String {
+            guard let appearance else { return "none" }
+            return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? "dark" : "light"
+        }
+        // Whether macOS set the bar's look somewhere between the status
+        // item's button and its window (else the button inherits YoungBar's).
+        var explicit = false
+        var view: NSView? = statusItem.button
+        while let current = view, !explicit { explicit = current.appearance != nil; view = current.superview }
+        result["barLookSetBySystem"] = explicit || statusItem.button?.window?.appearance != nil
+        result["systemStyle"] = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") ?? "Light"
+        let original = options[.appearanceMode]
+        let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_APPEARANCE_HOLD"] ?? "")
+        var steps: [[String: Any]] = []
+        var passed = controlPanel != nil
+        for mode in AppearanceMode.allCases {
+            options[.appearanceMode] = mode.rawValue
+            applyAppearance()
+            try? await Task.sleep(for: .milliseconds(400))
+            let bar = look(menuBarAppearance)
+            let control = look(controlPanel?.effectiveAppearance)
+            steps.append(["mode": mode.rawValue, "app": look(NSApp.effectiveAppearance),
+                          "statusButton": look(statusItem.button?.effectiveAppearance),
+                          "bar": bar, "control": control,
+                          "controlFrame": controlPanel.map { NSStringFromRect($0.frame) } ?? ""])
+            if bar == "none" || control != bar { passed = false }
+            if let hold { try? await Task.sleep(for: .seconds(hold)) }
+        }
+        options[.appearanceMode] = original
+        applyAppearance()
+        result["steps"] = steps
+        // The control's look must not change with YoungBar's own setting.
+        result["controlIgnoresSetting"] = Set(steps.compactMap { $0["control"] as? String }).count == 1
+        result["restored"] = options[.appearanceMode] == original
+        result["passed"] = passed && (result["controlIgnoresSetting"] as? Bool == true)
+    }
+
+    /// Opt-in (`YOUNGBAR_EMPTYSHELFTEST=1`): with nothing hidden, the strip
+    /// opens offering the bar's icons; clicking one tucks it in at once and
+    /// the strip stays open. Every Hidden icon is shown for the test (Always
+    /// Hidden ones stay hidden); saved modes and order are put back after.
+    func runEmptyShelfTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "emptyshelftest.json") }
+        await refresh()
+        let originalModes = modes
+        let originalOrder = savedOrder
+        func restore() async {
+            closeShelf()
+            for _ in 0..<50 where busy || tuckInApplying { try? await Task.sleep(for: .milliseconds(100)) }
+            modes = originalModes
+            UserDefaults.standard.set(modes, forKey: "itemModes")
+            UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
+            // Shown icons re-sync the saved order to the bar; put it back.
+            savedOrder = originalOrder
+            UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
+            busy = true
+            await engine.conceal()
+            await engine.setModel(currentModel())
+            busy = false
+            try? await Task.sleep(for: .milliseconds(1200))
+            await refresh()
+            let after = await engine.freshSnapshot()
+            result["restored"] = modes == originalModes
+            result["orderRestored"] = savedOrder == originalOrder
+            result["concealedAfter"] = after.concealed.map(\.sectionKey.rawValue).sorted()
+        }
+        for (key, mode) in modes where mode == 1 { modes[key] = 0 }
+        UserDefaults.standard.set(modes, forKey: "itemModes")
+        UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
+        busy = true
+        await engine.conceal()
+        await engine.setModel(currentModel())
+        busy = false
+        try? await Task.sleep(for: .milliseconds(1500))
+        await refresh()
+        closeShelf()
+        includeAlwaysHidden = false
+        showShelf()
+        try? await Task.sleep(for: .milliseconds(300))
+        let offered = tuckInCandidates()
+        result["stripKeysAtOpen"] = shelfKeys()
+        result["adding"] = shelfAdding
+        result["offered"] = offered
+        result["alphaAfterOpen"] = Double(shelfPanel?.alphaValue ?? 0)
+        result["stripHeight"] = Double(shelfPanel?.frame.height ?? 0)
+        guard shelfKeys().isEmpty else {
+            // Showing every icon crowded the bar: the covered ones fill the strip.
+            result["skipped"] = "the strip is not empty with every icon shown"
+            await restore()
+            return
+        }
+        // A third-party app's icon, so putting it back is a plain show.
+        let target = offered.first { catalog[$0]?.id.bundleID.map { !$0.hasPrefix("com.apple.") } ?? false } ?? offered.first
+        guard let target, let content = shelfPanel?.contentView,
+              let button = findButton(in: content, key: target, action: #selector(tuckInFromShelf(_:))) else {
+            result["skipped"] = offered.isEmpty ? "nothing offered" : "no button for the offered icon"
+            await restore()
+            return
+        }
+        result["target"] = target
+        tuckInFromShelf(button)
+        result["inStripAtOnce"] = shelfKeys().contains(target)
+        for _ in 0..<40 where tuckInApplying { try? await Task.sleep(for: .milliseconds(100)) }
+        try? await Task.sleep(for: .milliseconds(800))
+        await refresh()
+        let snapshot = await engine.freshSnapshot()
+        result["modeAfter"] = modes[target] ?? 0
+        result["concealed"] = snapshot.concealed.contains { $0.sectionKey.rawValue == target }
+        result["stillOpen"] = expanded
+        result["stillOffering"] = shelfAdding
+        result["stripButtons"] = shelfButtons.compactMap { $0.identifier?.rawValue }
+        await restore()
+        result["passed"] = (result["adding"] as? Bool == true) && !offered.isEmpty
+            && (result["inStripAtOnce"] as? Bool == true) && (result["concealed"] as? Bool == true)
+            && (result["stillOpen"] as? Bool == true) && (result["restored"] as? Bool == true)
+            && (result["alphaAfterOpen"] as? Double ?? 0) > 0.99
+    }
+
+    /// The button for `key` sending `action`, anywhere under `view`.
+    func findButton(in view: NSView, key: String, action: Selector) -> NSButton? {
+        if let button = view as? NSButton, button.identifier?.rawValue == key, button.action == action { return button }
+        for subview in view.subviews {
+            if let found = findButton(in: subview, key: key, action: action) { return found }
+        }
+        return nil
     }
 }
 #endif

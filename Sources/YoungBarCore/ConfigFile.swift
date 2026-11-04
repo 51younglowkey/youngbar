@@ -14,6 +14,14 @@ public struct ConfigFile: Codable, Equatable, Sendable {
     public var itemModes: [String: Int]
     public var itemOrder: [String]
     public var options: [String: Int]
+    /// Options the file had but `decode` refused (a shortcut that isn't a
+    /// real one). Not part of the file: the importer keeps this Mac's own
+    /// values for them instead of falling back to the defaults.
+    public var refusedOptions: Set<String> = []
+
+    enum CodingKeys: String, CodingKey {
+        case format, app, exportedAt, itemModes, itemOrder, options
+    }
 
     public init(itemModes: [String: Int], itemOrder: [String], options: [String: Int],
                 exportedAt: Date = Date()) {
@@ -50,12 +58,13 @@ public struct ConfigFile: Codable, Equatable, Sendable {
         file.itemOrder = LayoutOrder.unique(file.itemOrder)
         file.options = file.options.filter { knownOptions.contains($0.key) }
         // A hand-edited shortcut that isn't a real one (negative, out of
-        // range, no ⌘/⌥/⌃) would crash or swallow a letter: drop the pair,
-        // and the Mac's current shortcut stays.
+        // range, no ⌘/⌥/⌃) would crash or swallow a letter: drop the pair
+        // and say so (`refusedOptions`), so the Mac's current one stays.
         if let code = file.options["hotKeyCode"], code != -1,
            HotKeyCombo.savedPair(code: code, modifiers: file.options["hotKeyModifiers"] ?? 0) == nil {
             file.options["hotKeyCode"] = nil
             file.options["hotKeyModifiers"] = nil
+            file.refusedOptions = ["hotKeyCode", "hotKeyModifiers"]
         }
         return file
     }

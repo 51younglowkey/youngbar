@@ -143,11 +143,11 @@ extension BarApp {
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
-        // Not `.fullScreenAuxiliary`: in a full-screen space the menu bar
-        // hides, and the control floated over the app's own toolbar,
-        // catching its clicks. There the blank status item still opens the
-        // strip when the bar slides down.
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        // `.fullScreenAuxiliary` stays: without it a full-screen space had
+        // nothing to click at all (while anything is hidden macOS doesn't
+        // draw YoungBar's own item). The cost, still open: the control
+        // floats over the app when the full-screen menu bar is hidden.
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false

@@ -67,7 +67,7 @@ Vendor/
 
 - 更新器（`Updater.swift`）：启动 10 秒后、之后每天一次后台查 GitHub（始终开启，没有开关）；有新版本只在右键菜单第一行加「有新版本」（和控件的提示文字），菜单栏上不加圆点（用户要求），**不自动安装**。点「检查更新」时立即查。安装：下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
 - **引擎的两种「显示」**：`reveal(_ sections)` 由 `conceal()` 收回；`reveal(items:)` **只有** `conceal(items:)` / `conceal(releasing:)` 收得回，`conceal()` 不管它。没收回的单个图标会一直留在菜单栏，改成隐藏也藏不住（0.1.4 及之前排序、改显示方式、导入都踩过）。每个 `reveal(items:)` 都要有配对的收回；清空 `shownUntil` 时用 `conceal(releasing: 那些项)`。
-- **引擎不会自己知道外面发生了什么**：运行中的应用要 `setRunningBundles` 推给它（启动/退出时，EngineSync）；隐藏生效时 macOS 把新注册的菜单栏图标停在屏幕外，要 `openAdoptionWindow` 才会落位（会闪一下，只对确实有菜单栏图标且没出现的应用开）；`engine.events` 要读，断言被撤掉时重新 `setModel`。
+- **引擎不会自己知道外面发生了什么**：运行中的应用要 `setRunningBundles` 推给它（EngineSync 用 KVO 盯 `runningApplications`；`didLaunchApplicationNotification` 不保证覆盖只有菜单栏图标的应用）；隐藏生效时 macOS 把新注册的菜单栏图标停在屏幕外，要 `openAdoptionWindow` 才会落位（会闪一下：只对「显示」的应用在启动时开，「隐藏」的等第一次按它时再开）；`engine.events` 要读，断言被撤掉时重新 `setModel`，但同一布局反复失败要停（藏不住的图标会让引擎一直重建断言）。后台同步用 `syncing` 标记，不要用 `busy`（`busy` 会让点击和快捷键直接被忽略）。
 - 「全部隐藏」是 `bulkHiddenKeys`：叠在保存的模式上（只含应用图标，不含系统图标），收纳条列出它们，`currentModel()` 带上它们，「全部显示」「恢复」或改任何一个图标时清掉。
 - ••• 的颜色：控件面板的 `appearance` 取 YoungBar 状态项按钮的外观（菜单栏本身），不跟 `NSApp.appearance`（用户在 YoungBar 里选的外观）。
 - 刷新：每次刷新是一次完整 AX 遍历，耗 CPU。收纳条/设置打开或有定时展开时 1 秒一次，空闲 4 秒一次；应用启动退出、唤醒、显示器变化立即刷新。设置窗口不可见时不要重建它的模型。

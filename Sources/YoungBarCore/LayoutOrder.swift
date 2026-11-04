@@ -43,6 +43,20 @@ public enum LayoutOrder {
         return after ? a == b + 1 : a + 1 == b
     }
 
+    /// Whether the dragged icon `moved` now sits right next to `target`, on
+    /// the side asked for (right of it when `after`), with no other drawn
+    /// icon in between. Judged by frames: an app with several icons has one
+    /// key for all of them, so its order position says nothing about which
+    /// icon moved.
+    public static func landedBeside(_ moved: CGRect, target: CGRect, after: Bool, others: [CGRect]) -> Bool {
+        if after {
+            guard moved.midX > target.midX else { return false }
+            return !others.contains { $0.midX > target.midX && $0.midX < moved.midX }
+        }
+        guard moved.midX < target.midX else { return false }
+        return !others.contains { $0.midX > moved.midX && $0.midX < target.midX }
+    }
+
     /// `key` moved to just before `before`; an empty or unknown `before`
     /// moves it to the end.
     public static func moving(_ key: String, before: String, in order: [String]) -> [String] {

@@ -22,13 +22,20 @@ extension BarApp {
     func setMode(key: String, mode: Int) {
         guard !busy else {
             // Another change is still being applied. The row already shows
-            // this one, so apply it right after instead of dropping it.
+            // this one, so apply it right after instead of dropping it — the
+            // last click on a row wins, however the waits line up.
+            let waiting = pendingModes[key] != nil
+            pendingModes[key] = mode
+            guard !waiting else { return }
             Task {
                 for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
-                if busy { renderWindow(force: true) } else { setMode(key: key, mode: mode) }
+                guard let latest = pendingModes.removeValue(forKey: key) else { return }
+                if busy { renderWindow(force: true) } else { setMode(key: key, mode: latest) }
             }
             return
         }
+        // A click that went straight through replaces any that was waiting.
+        pendingModes[key] = nil
         guard (modes[key] ?? 0) != mode else { renderWindow(); return }
         modes[key] = mode
         UserDefaults.standard.set(modes, forKey: "itemModes")
@@ -99,15 +106,23 @@ extension BarApp {
     }
 
     /// The dragged item sits right next to the target, on the side the move
-    /// asked for, among the icons drawn on the bar (YoungBar's own blank
+    /// asked for, with no other drawn icon between (YoungBar's own blank
     /// item aside). "Left of the target" alone is also true of a refused
-    /// move to the right.
+    /// move to the right. An app with several icons has one key for all of
+    /// them: the pair of icons nearest each other is the one that counts.
     func moveLanded(_ item: ItemID, beside target: ItemID, after: Bool, in snapshot: EngineSnapshot) -> Bool {
-        let drawn = snapshot.items
-            .filter { $0.frame != nil && $0.id.bundleID != Bundle.main.bundleIdentifier }
-            .sorted { ($0.frame?.minX ?? 0) < ($1.frame?.minX ?? 0) }
-            .map { $0.id.sectionKey.rawValue }
-        return LayoutOrder.isAdjacent(item.sectionKey.rawValue, to: target.sectionKey.rawValue, after: after, in: drawn)
+        let drawn = snapshot.items.filter { $0.frame != nil && $0.id.bundleID != Bundle.main.bundleIdentifier }
+        let movedFrames = drawn.filter { $0.id.sectionKey == item.sectionKey }.compactMap(\.frame)
+        let targetFrames = drawn.filter { $0.id.sectionKey == target.sectionKey }.compactMap(\.frame)
+        var best: (moved: CGRect, target: CGRect)?
+        for m in movedFrames {
+            for t in targetFrames where best == nil || abs(m.midX - t.midX) < abs(best!.moved.midX - best!.target.midX) {
+                best = (m, t)
+            }
+        }
+        guard let best else { return false }
+        let others = drawn.compactMap(\.frame).filter { $0 != best.moved && $0 != best.target }
+        return LayoutOrder.landedBeside(best.moved, target: best.target, after: after, others: others)
     }
 
     /// "Hide all (app icons)": every app icon set to Show joins the Hidden
@@ -161,7 +176,10 @@ extension BarApp {
         shownUntil.removeAll()
         bulkHiddenKeys = Set(catalog.values.compactMap { item -> String? in
             let key = item.id.sectionKey.rawValue
-            guard (modes[key] ?? 0) == 0, let bundle = item.id.bundleID, bundle != Bundle.main.bundleIdentifier,
+            // A helper with no bundle of its own can't be hidden by the
+            // assertion: asking would only make the engine re-swap.
+            guard (modes[key] ?? 0) == 0, !item.hostIsBundleless,
+                  let bundle = item.id.bundleID, bundle != Bundle.main.bundleIdentifier,
                   MenuBarPolicy.isSectionManageable(item.id),
                   MenuBarPolicy.systemItem(for: item.id) == nil,
                   !MenuBarPolicy.isPinnedSystemItem(item.id),
@@ -209,13 +227,15 @@ extension BarApp {
     }
 
     /// Hands the current layout to the engine again: after an app launched or
-    /// quit, or when the engine reports a dropped assertion. Waits for a
-    /// change in progress and gives up if it doesn't end.
+    /// quit, or when the engine reports a dropped assertion. Background work:
+    /// it holds `syncing`, not `busy`, so a click or the shortcut meanwhile
+    /// still works; refresh walks wait for it. Waits for a change in
+    /// progress and gives up if it doesn't end.
     func reapplyModel() async {
-        for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
-        guard started, !busy, !quitting else { return }
-        busy = true
+        for _ in 0..<50 where busy || syncing { try? await Task.sleep(for: .milliseconds(100)) }
+        guard started, !busy, !syncing, !quitting else { return }
+        syncing = true
         await engine.setModel(currentModel())
-        busy = false
+        syncing = false
     }
 }

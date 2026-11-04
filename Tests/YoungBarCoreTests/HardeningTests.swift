@@ -123,6 +123,48 @@ import Testing
     }
 }
 
+@Suite struct LandedBesideTests {
+    func icon(_ x: CGFloat) -> CGRect { CGRect(x: x, y: 0, width: 24, height: 24) }
+
+    @Test func rightBeforeTheTarget() {
+        #expect(LayoutOrder.landedBeside(icon(100), target: icon(130), after: false, others: [icon(10), icon(200)]))
+    }
+
+    @Test func anotherIconInBetweenMeansItDidNotLand() {
+        #expect(!LayoutOrder.landedBeside(icon(100), target: icon(160), after: false, others: [icon(130)]))
+    }
+
+    @Test func wrongSideIsNotLanded() {
+        #expect(!LayoutOrder.landedBeside(icon(200), target: icon(130), after: false, others: []))
+        #expect(LayoutOrder.landedBeside(icon(200), target: icon(170), after: true, others: [icon(100)]))
+        #expect(!LayoutOrder.landedBeside(icon(100), target: icon(170), after: true, others: []))
+    }
+
+    @Test func aSiblingFarAwayDoesNotCount() {
+        // An app with two icons: one dragged next to the target, the other
+        // still on the left. Only the frames between the pair matter.
+        #expect(LayoutOrder.landedBeside(icon(300), target: icon(330), after: false, others: [icon(40), icon(400)]))
+    }
+}
+
+@Suite struct RefusedOptionTests {
+    @Test func aRefusedShortcutIsReported() throws {
+        let known: Set<String> = ["language", "hotKeyCode", "hotKeyModifiers"]
+        let bad = ConfigFile(itemModes: [:], itemOrder: [], options: ["language": 1, "hotKeyCode": 11, "hotKeyModifiers": 0])
+        let decoded = try ConfigFile.decode(bad.encoded(), knownOptions: known)
+        #expect(decoded.refusedOptions == ["hotKeyCode", "hotKeyModifiers"])
+        let good = ConfigFile(itemModes: [:], itemOrder: [], options: ["language": 1])
+        #expect(try ConfigFile.decode(good.encoded(), knownOptions: known).refusedOptions.isEmpty)
+    }
+
+    @Test func refusedOptionsAreNotWrittenToTheFile() throws {
+        var file = ConfigFile(itemModes: [:], itemOrder: [], options: [:])
+        file.refusedOptions = ["hotKeyCode"]
+        let text = String(decoding: try file.encoded(), as: UTF8.self)
+        #expect(!text.contains("refused"))
+    }
+}
+
 @Suite struct OtherDisplayTests {
     @Test func aCopyOnAnotherBarIsNotTrapped() {
         // Same x, but one bar sits a display above (CG y grows downwards).

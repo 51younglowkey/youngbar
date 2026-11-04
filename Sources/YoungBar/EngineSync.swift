@@ -20,7 +20,8 @@ import YoungBarCore
 ///   registered menu-bar item off screen, out of every walk. The engine
 ///   adopts it in a short window without the assertion (hidden icons show
 ///   for a moment). Only for an app that really has an item and is set to
-///   Show (or is new); a Hidden one is adopted when it is first pressed.
+///   Show (or is new); a Hidden one stays listed through `parkedKeys` and is
+///   adopted when it is first pressed.
 /// - Events: a torn-down assertion or failed activation is only fixed by the
 ///   next converge, so the layout is re-applied — at most every 10 s, and
 ///   not again once the same layout failed three times in two minutes (an
@@ -69,7 +70,12 @@ extension BarApp {
             // strip, so a relaunch doesn't flash every hidden icon.
             let keys = catalog.filter { $0.value.id.bundleID == bundle }.map(\.key)
             if !keys.isEmpty, keys.allSatisfy({ (modes[$0] ?? 0) > 0 || bulkHiddenKeys.contains($0) }) {
+                // Parked, the item is in no engine snapshot: without this it
+                // would be neither on the bar nor in the strip or Settings,
+                // and nothing could press it.
+                parkedKeys.formUnion(keys)
                 await reapplyModel()
+                await refresh()
                 return
             }
             for _ in 0..<50 where busy || syncing { try? await Task.sleep(for: .milliseconds(100)) }
@@ -94,6 +100,10 @@ extension BarApp {
     /// An app quit: its concealed items stop counting (no dead tiles).
     func appTerminated() {
         guard started, !quitting else { return }
+        let running = runningBundleIDs()
+        parkedKeys = parkedKeys.filter { key in
+            catalog[key]?.id.bundleID.map(running.contains) ?? false
+        }
         Task {
             await engine.setRunningBundles(runningBundleIDs())
             await reapplyModel()

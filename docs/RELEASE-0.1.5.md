@@ -26,6 +26,7 @@
 - 导入配置不会再导致闪退
 - ••• 不再抢键盘焦点
 - ••• 不再掉到菜单栏下面
+- 隐藏的应用重开后不再从收纳条消失
 
 ## 要求
 
@@ -36,6 +37,7 @@
 
 - 菜单栏上的 ••• 现在跟着菜单栏本身的颜色，和 YoungBar 设置里的「外观」无关
 - 隐藏生效时新打开一个带菜单栏图标的应用，隐藏的图标会闪一下：这是让 macOS 把它的图标放回菜单栏
+- 各个桌面的壁纸明暗不同时，••• 的颜色跟随 YoungBar 启动时所在的桌面，切桌面后不会变；重启 YoungBar 可以重新取色
 
 # English
 
@@ -65,6 +67,7 @@
 - Importing a layout can no longer crash YoungBar
 - ••• no longer takes keyboard focus
 - ••• no longer drops below the menu bar
+- Hidden apps stay in the strip after a relaunch
 
 ## Requirements
 
@@ -75,6 +78,7 @@
 
 - The ••• on the menu bar now follows the bar itself, whatever Appearance you choose in YoungBar
 - Opening an app with a menu-bar icon while icons are hidden makes them flash once: that is macOS putting the new icon on the bar
+- With light and dark wallpapers on different desktops, the ••• keeps the colour of the desktop YoungBar started on; restarting YoungBar picks it up again
 
 ## 校验 / Checksum
 

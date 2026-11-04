@@ -54,6 +54,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var runningAppsObservation: NSKeyValueObservation?
     var knownRunningPIDs: Set<pid_t> = []
     var adoptionMissed: Set<String> = []
+    /// Items of Hidden apps started while an assertion holds: macOS parks them
+    /// off screen, out of every engine snapshot, until an adoption window.
+    var parkedKeys: Set<String> = []
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
     var options: [String: Int] = {
@@ -414,7 +417,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
         var present: Set<String> = []
         for item in snapshot.items { present.insert(item.id.sectionKey.rawValue) }
         for id in snapshot.concealed { present.insert(id.sectionKey.rawValue) }
-        presentKeys = present
+        // Landed since (any adoption window lands them all): the engine has it.
+        parkedKeys.subtract(present)
+        presentKeys = present.union(parkedKeys)
 
         var orderChanged = false
         // Nothing is "new" on the very first run: every icon is.

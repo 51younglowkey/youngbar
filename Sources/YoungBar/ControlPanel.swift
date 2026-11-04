@@ -196,20 +196,14 @@ extension BarApp {
     /// What the menu bar itself looks like. It isn't YoungBar's appearance:
     /// the user can force Light or Dark for YoungBar's windows, and the bar
     /// follows the wallpaper. YoungBar's own (blank) status item sits in the
-    /// bar, so its button carries the bar's look — when macOS set that look
-    /// on the status bar window. If the button only inherited YoungBar's
-    /// forced choice, the system setting is the better answer.
+    /// bar, and its button carries the bar's look whatever YoungBar forces,
+    /// though no view up to the window has an `appearance` of its own. The
+    /// system setting is no substitute: with system Light on a dark wallpaper
+    /// it drew a dark ••• on a dark bar.
     var menuBarAppearance: NSAppearance? {
+        if let button = statusItem?.button, button.window != nil { return button.effectiveAppearance }
         let systemDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
-        let system = NSAppearance(named: systemDark ? .darkAqua : .aqua)
-        guard let button = statusItem?.button, let window = button.window else { return system }
-        var view: NSView? = button
-        while let current = view {
-            if current.appearance != nil { return button.effectiveAppearance }
-            view = current.superview
-        }
-        if window.appearance != nil || NSApp.appearance == nil { return button.effectiveAppearance }
-        return system
+        return NSAppearance(named: systemDark ? .darkAqua : .aqua)
     }
 
     /// The ••• is drawn in YoungBar's own panel, which would otherwise take

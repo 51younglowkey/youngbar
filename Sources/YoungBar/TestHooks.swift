@@ -68,6 +68,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_EMPTYSHELFTEST"] == "1" {
             await runEmptyShelfTest()
         }
+        if let seconds = Double(ProcessInfo.processInfo.environment["YOUNGBAR_BARLOOKTEST"] ?? "") {
+            await runBarLookTest(seconds: seconds)
+        }
         if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_LAUNCHTEST"], !bundle.isEmpty {
             await runLaunchTest(bundle: bundle)
         }
@@ -1907,6 +1910,35 @@ extension BarApp {
         result["passed"] = passed && (result["controlIgnoresSetting"] as? Bool == true)
     }
 
+    /// Opt-in (`YOUNGBAR_BARLOOKTEST=<seconds>`): records every change in what
+    /// the status item's button and the ••• report, for that long, while the
+    /// desktops are switched from outside (wallpapers can differ per desktop).
+    func runBarLookTest(seconds: Double) async {
+        func look(_ appearance: NSAppearance?) -> String {
+            guard let appearance else { return "none" }
+            return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? "dark" : "light"
+        }
+        var samples: [[String: Any]] = []
+        var last = ""
+        let started = Date()
+        while Date().timeIntervalSince(started) < seconds {
+            let button = statusItem.button
+            let state: [String: String] = [
+                "button": look(button?.effectiveAppearance),
+                "window": look(button?.window?.effectiveAppearance),
+                "control": look(controlPanel?.effectiveAppearance),
+                "app": look(NSApp.effectiveAppearance),
+            ]
+            let line = state.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+            if line != last {
+                samples.append(["t": (Date().timeIntervalSince(started) * 10).rounded() / 10, "state": line])
+                last = line
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        writeJSON(["at": ISO8601DateFormatter().string(from: Date()), "samples": samples], name: "barlooktest.json")
+    }
+
     /// Opt-in (`YOUNGBAR_EMPTYSHELFTEST=1`): with nothing hidden, the strip
     /// opens offering the bar's icons; clicking one tucks it in at once and
     /// the strip stays open. Every Hidden icon is shown for the test (Always
@@ -2022,8 +2054,14 @@ extension BarApp {
         }
         result["secondsUntilBack"] = onBar ? Date().timeIntervalSince(started) : -1
         result["onBarAfterLaunch"] = onBar
-        result["inStripAfterLaunch"] = shelfKeys().contains { catalog[$0]?.id.bundleID == bundle }
-        result["passed"] = (result["quit"] as? Bool == true) && (mode == 0 ? onBar : !onBar)
+        let inStrip = shelfKeys().contains { catalog[$0]?.id.bundleID == bundle }
+        let inSettings = barEntries().contains { catalog[$0.key]?.id.bundleID == bundle }
+        result["inStripAfterLaunch"] = inStrip
+        result["inSettingsAfterLaunch"] = inSettings
+        // Off the bar is only right if it can still be reached: a parked icon
+        // once dropped out of the strip and Settings as well.
+        result["passed"] = (result["quit"] as? Bool == true) && inSettings
+            && (mode == 0 ? onBar : !onBar && inStrip)
     }
 
     /// The button for `key` sending `action`, anywhere under `view`.

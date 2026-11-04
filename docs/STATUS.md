@@ -3,9 +3,7 @@
 > 只写**当前**状态和它的证据。0.1.0 及之前的阶段记录（截图缓存、旧 AppKit 设置窗口等）
 > 已原样移到 [`JOURNAL.md`](JOURNAL.md) 附录。
 >
-> 最后核对：**2026-11-01 06:25 +00:00**，版本 **0.1.4 (5)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
->
-> main：**0.1.5 (6)，未发布**（2026-11-04 云端会话，PR #9 合并）。只有单元测试和 CI 的证据，**没有在真机上跑过**，见 2.4。
+> 最后核对：**2026-11-04 23:55 +00:00**，版本 **0.1.5 (6)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 
 ## 1. 构建
 
@@ -98,7 +96,11 @@
 
 边界：老用户如果从没改过快捷键，升级后默认从 ⌃⌥B 变成连按两下 ⌘（改过的保留）。数字键之外的拖动只在 3 个图标、收纳条不滚动时测过。自动收纳只用「假装新图标」测过，没有真的装一个新应用。去掉的选项：老用户之前存的值会被忽略（例如开过「始终显示收纳条」的人升级后不再常开）。`YOUNGBAR_SETTINGSUITEST`（真实鼠标走设置窗口）本轮没有重跑。
 
-## 2.4 0.1.5（main，未发布，2026-11-04）
+## 2.4 0.1.5（2026-11-04 已发布）
+
+> [Release v0.1.5](https://github.com/51younglowkey/youngbar/releases/tag/v0.1.5)：`YoungBar-0.1.5.zip` + `.sha256`（SHA-256 `5ea54fe852d925d94b5d916eb135067016f0e596d45a8e04c8f09d5b7dd64e38`），tag 指向 `e31b540`，`releases/latest` 指向它。签名 `Authority=YoungBar Local Signing`，满足 0.1.4 发布包的 designated requirement；`strings` 里没有 `*TEST`。端到端：测试版假装 0.1.4 → 找到 0.1.5 → 下载、校验、安装、重新打开（新 PID）；`build/YoungBar.app` 的可执行文件与发布包的 SHA-256 相同（`1d61ba04…`），没有测试钩子；`update.log` 记了这次安装；defaults 与备份无差异。公开仓库 [CI](https://github.com/51younglowkey/youngbar/actions/runs/41936556967) 和发布事件触发的 [安装检查](https://github.com/51younglowkey/youngbar/actions/runs/41936560897) 都通过（推 tag 触发的那次安装检查显示 cancelled，其余两次通过）。
+
+> 下面先是云端开发时的记录，再是 Mac 上的两轮清单结果。
 
 > 在云端 Linux 机器上做的：**跑不了 app，也没有你的 Mac**。证据只有两种：
 > ① YoungBarCore 单元测试 **70 passed**（Linux 上 Docker `swift:6.4-noble`，和 CI 的 macOS 上都跑）；
@@ -178,24 +180,7 @@
 
 这一轮的代码改动：`EngineSync.swift` + `main.swift`（`parkedKeys`：隐藏生效时重开的隐藏应用留在收纳条和设置里）；`ControlPanel.swift`（`menuBarAppearance` 只用状态项按钮的外观，不再退回系统设置）；`TestHooks.swift`（`YOUNGBAR_LAUNCHTEST` 要求找得到、新增 `YOUNGBAR_BARLOOKTEST`）；`RELEASE-0.1.5.md`。
 
-**剩下的发布步骤**（2026-11-04 晚，云端整理；在作者的 Mac 上按顺序做，做完一项在上面「清单结果」里补一行）：
-
-准备：`git pull origin main`；`defaults export studio.wuyiyang.youngbar ~/Desktop/youngbar-before-0.1.5.plist` 备份；`TESTHOOKS=1 sh Scripts/build.sh` 后重启 YoungBar。每项自检按 AGENTS 第 5 节单独启动，跑完和备份比对。
-
-1. **「放不下」**：先把菜单栏挤满（多开几个带菜单栏图标的应用，或在「系统设置 → 控制中心」临时把几项改成在菜单栏显示），直到刘海旁出现 «；再跑 `YOUNGBAR_OVERFLOWTEST`（加 `YOUNGBAR_OVERFLOW_HOLD=5`，截菜单栏和设置「菜单栏」页）。要 `crowded:true`、`passed:true`；`crowded:false` 说明还没挤满。测完把临时改的设置和应用恢复。
-2. **隐藏的应用退出再打开**：把一个没有文档的菜单栏小工具（上次用 `com.steipete.codexbar`）在设置里设为「隐藏」，跑 `YOUNGBAR_LAUNCHTEST=<bundle id>`：要 `mode:1`、`holdsAssertion:true`、`onBarAfterLaunch:false`、`inStripAfterLaunch:true`、`passed:true`。然后从收纳条点它：应该闪一下（接纳窗口），再在收纳条旁打开它的菜单。
-3. **疑似问题：隐藏的应用重开后改成「显示」**（云端读代码发现，没实测）：第 2 步重开之后、从收纳条点它之前，在设置里把它改成「显示」，看图标会不会回到菜单栏。`LayoutActions.setMode` 只调 `engine.setModel`，`EngineSync.appLaunched` 对隐藏的应用不开接纳窗口，所以它的图标可能一直停在屏幕外，直到应用再重开。真不出来就修：`setMode` 改成显示时，这个应用在运行、有菜单栏图标、引擎持有断言、快照里却没有它的位置，就调一次 `engine.openAdoptionWindow(for:)`（同 `Shelf.swift` 从收纳条点开时的处理）；重测；`RELEASE-0.1.5.md` 的「修复 / Fixed」各加一句（两半条数要一致，`swift test` 会查）。最后把这个应用恢复成原来的显示方式。
-4. **系统浅色**：`osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false'` 后跑 `YOUNGBAR_APPEARANCETEST`（要 `passed:true`），截菜单栏，再改回深色。
-5. **全屏**（要作者本人）：全屏一个应用，鼠标移到顶部让菜单栏滑下，确认能点到 ••• 并打开收纳条。
-6. **发布**：
-   - `swift test --disable-sandbox`；本节「清单结果」和 JOURNAL 记上 1–5；提交、推 `origin main`，等 CI 变绿。
-   - `make package`（要 `YoungBar Local Signing` 证书）→ `dist/YoungBar-0.1.5.zip` 与 `.sha256`；`strings build/YoungBar.app/Contents/MacOS/YoungBar | grep YOUNGBAR_` 没有 `*TEST`；`codesign -dvv build/YoungBar.app` 是 `Authority=YoungBar Local Signing`。打包会换掉 `build/YoungBar.app`，之后重启 YoungBar。
-   - `git tag -a v0.1.5 -m "YoungBar 0.1.5"`，`git push origin v0.1.5`，`git push public main v0.1.5`。
-   - 标题照 `gh release view v0.1.4 --repo 51younglowkey/youngbar` 的格式：`gh release create v0.1.5 dist/YoungBar-0.1.5.zip dist/YoungBar-0.1.5.zip.sha256 --repo 51younglowkey/youngbar --title … --notes-file docs/RELEASE-0.1.5.md`，不能是草稿或预发布。
-   - 确认 `https://github.com/51younglowkey/youngbar/releases/latest` 指向 v0.1.5；公开仓库的 CI 和 `install-script.yml`（`gh run list --repo 51younglowkey/youngbar`）变绿。
-7. **发布后**：
-   - 端到端：`TESTHOOKS=1 sh Scripts/build.sh`，`YOUNGBAR_UPDATETEST=1 YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`：找到 0.1.5、安装、重新打开（新 PID），`build/YoungBar.app` 的可执行文件与发布包相同、没有测试钩子；之后 `sh Scripts/build.sh` 并重启。
-   - defaults 与备份比对；STATUS 顶部改成「0.1.5 (6)（已发布）」，2.3 那样写上 Release 链接、SHA-256、端到端结果；JOURNAL 记一笔；提交、推 `origin main`。
+发布步骤已在 2026-11-04 全部做完，结果见本节开头和上面的第二轮清单；步骤原文在提交 `e31b540` 的这个文件里。
 
 ## 3. 验证边界（不许含糊）
 
@@ -212,6 +197,7 @@
 
 ## 4. 下一步
 
-1. 有第二块显示器时验证：控件、收纳条位置、点开隐藏项。
-2. 从收纳条点开被 « 收走的项。
-3. 重启验证图标间隙；登出验证开机自启动。
+1. 各桌面壁纸明暗不同时，让 ••• 跟上当前桌面（见 2.4「没有处理」；要先找到切桌面后读得到真实菜单栏外观的办法）。
+2. 有第二块显示器时验证：控件、收纳条位置、点开隐藏项。
+3. 从收纳条点开被 « 收走的项。
+4. 重启验证图标间隙；登出验证开机自启动。

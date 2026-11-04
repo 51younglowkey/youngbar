@@ -231,6 +231,14 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - **CodexBar 崩溃过一次**（23:10:08，退出重开约 18 秒后）：`-[NSConcreteFileHandle readDataOfLength:]` 抛异常，在它自己的代码里，看调用栈和 YoungBar 无关。自检跑到一半它没了就看不到图标，排查时先看 `~/Library/Logs/DiagnosticReports`。
 - 操作上的坑：右键打开设置时鼠标经过 ••• 会悬停打开收纳条，要自己关；`ywins` 里 0×0 的窗口要过滤掉，否则坐标会算到屏幕角上（这次右键点错过两次，没有按下任何菜单项）；zsh 里没匹配到的通配符会让整段命令中止，这时 YoungBar 可能已经退出了。
 
+## 2026-11-04 晚 · 0.1.5 发布
+
+- `make package` 后先拿本地 `dist/YoungBar-0.1.4.zip` 的 designated requirement 验新包（`codesign --verify -R=…`）：对得上，才公开。签名对不上的版本，所有已安装的更新器都会拒绝。
+- 打 tag，`git push origin v0.1.5`，`git push public main v0.1.5`（公开仓库从 `28573fe` 快进到 `e31b540`，16 个提交，`check-commits.sh` 0 个不合规），`gh release create`。之后 `releases/latest` 指向 v0.1.5。
+- 公开仓库 CI 和发布事件触发的安装检查都通过；推 tag 触发的那次安装检查显示 cancelled。
+- 端到端升级和结果见 STATUS 2.4 开头。之后 `sh Scripts/build.sh` 并重启，defaults 与备份无差异。
+- 还没做：Issue #4 下说一声 0.1.5 已修颜色；小红书那位用户的反馈也要等对方升级后才知道解决没有（原因是推断，见 2.4 第一行）。
+
 ## 附录：0.1.0 及之前的状态板（原 `docs/STATUS.md`，2026-10-24 前）
 
 > 2026-10-29 从 `STATUS.md` 原样移来，只把标题降了一级。当前状态见 `STATUS.md`。

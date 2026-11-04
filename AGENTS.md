@@ -18,7 +18,7 @@ swift test --disable-sandbox           # YoungBarCore 单元测试（改代码�
 open build/YoungBar.app
 ```
 
-- CI：`.github/workflows/ci.yml` 每次推送在 Linux 上跑单元测试，在 GitHub 的 `xcode-27` 机器（macOS 27 SDK，Swift 6.4）上编译测试版和正式版并跑 `Scripts/verify.sh`。CI **只证明能编译**，不碰菜单栏；真机行为仍要按第 5 节自检。
+- CI：`.github/workflows/ci.yml` 每次推送在 Linux 上跑单元测试，在 GitHub 的 `xcode-27` 机器（macOS 27 SDK，Swift 6.4）上编译测试版和正式版并跑 `Scripts/verify.sh`。CI **只证明能编译**，不碰菜单栏；真机行为仍要按第 5 节自检。`install-script.yml` 在 `install.sh` 改动、发布新版本时和每周一次，在 macOS 27 上用 README 的一键安装装线上最新版，再覆盖更新一次：证明脚本和发布包的签名对得上（AppleScript 退出那一段不测）。
 - 没有 Mac 时（例如云端会话）：`Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test --disable-sandbox` 可以在 `swift:6.4-noble` 容器里跑；YoungBarCore 里导入 CoreGraphics 要写成 `#if canImport(CoreGraphics)`。
 - 只需要命令行工具（Swift 6.4），不需要 Xcode。**不要用 `@State` 等 SwiftUI 宏**：它们的编译插件只随 Xcode 提供，CLT 上会编不过；视图状态放进 `SettingsModel` / `GuideModel`（`@Observable` 可以用，Observation 宏插件在 CLT 里）。
 

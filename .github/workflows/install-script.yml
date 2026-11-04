@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 YoungBar contributors
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# The README one-liner against the live release, on a Mac that has never
+# seen the author's certificate: a fresh install, then an update over the
+# installed copy (the certificate pin). Runs when the script changes, when a
+# release is published, and once a week.
+name: Install script
+
+on:
+  push:
+    paths: [Scripts/install.sh, .github/workflows/install-script.yml]
+  pull_request:
+    paths: [Scripts/install.sh, .github/workflows/install-script.yml]
+  release:
+    types: [published]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: install-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install.sh against the latest release (macOS 27)
+    # The release needs macOS 27 to open.
+    runs-on: xcode-27
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fresh install
+        run: |
+          sh Scripts/install.sh
+          # Opened and still running: the signature is good enough to launch.
+          for i in $(seq 1 20); do pgrep -xq YoungBar && break; sleep 0.5; done
+          pgrep -xl YoungBar
+      - name: Update over the installed copy (same certificate)
+        run: |
+          # Stopped here rather than through AppleScript: a runner can't
+          # answer an Automation prompt.
+          pkill -9 -x YoungBar || true
+          sh Scripts/install.sh
+          for i in $(seq 1 20); do pgrep -xq YoungBar && break; sleep 0.5; done
+          pgrep -xl YoungBar
+          for app in /Applications/YoungBar.app "$HOME/Applications/YoungBar.app"; do
+            if [ -d "$app" ]; then codesign -dv "$app" 2>&1 | grep -E '^(Identifier|Authority|Signature|TeamIdentifier)='; fi
+          done
+      - name: Quit YoungBar
+        if: always()
+        run: pkill -9 -x YoungBar || true

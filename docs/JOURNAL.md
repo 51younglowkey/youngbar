@@ -206,6 +206,12 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 - **真机清单**：结果在 STATUS 2.4 的「清单结果」。修了两处过时的自检（`YOUNGBAR_BULKTEST` 没清 `bulkHiddenKeys`；`YOUNGBAR_INTERACTIONTEST` 的 `concealedAfterTest` 永远是 false），产品代码没动。
 - **跑自检时卡住过一次**：`YOUNGBAR_CONCEALTEST` 写完结果后，驱动脚本停了约一小时，直到被用户打断，下一项没开始、测试版没退出。原因没查到：之后同样的退出请求 0 秒完成。教训：驱动自检的脚本每一步都要有超时。
 
+## 2026-11-04 · 对外统一说「只支持 macOS 27」
+
+- **起因**：很多人问 12.4 这类旧系统能不能用。核对：0.1.0 起每个版本的 `Info.plist` 都是 `LSMinimumSystemVersion` 27.0，`Package.swift` 和 `Vendor/` 两个包的 `platforms` 也是 macOS 27；引擎只有 macOS 27 一套实现（`AgentBarEngine`）。macOS 27 只支持 Apple 芯片，所以 Intel Mac 也用不了。
+- **改动**：README（中英）开头和「安装」写明只支持 macOS 27 及以上（Apple 芯片），「工作原理与取舍」说明原因；INSTALL 加「Requirements」，权限一节不再说「Accessibility on older macOS」（读起来像支持旧系统）；FAQ 加第 6 条；0.1.5 更新日志加「要求 / Requirements」（app 跳过这两个区块，只在 GitHub 上显示）；AGENTS 第 1 节列出最低系统写在哪几处。
+- **install.sh**：下载前检查系统版本，低于 27 时中英文提示后退出。之前没有这道检查：旧系统上会照样下载、装好，打开时才被 macOS 拒绝（按 `LSMinimumSystemVersion` 推断，手头没有旧系统实测）。只在 Linux 上用假的 `sw_vers` 测过，见 STATUS 2.4。
+
 ## 附录：0.1.0 及之前的状态板（原 `docs/STATUS.md`，2026-10-24 前）
 
 > 2026-10-29 从 `STATUS.md` 原样移来，只把标题降了一级。当前状态见 `STATUS.md`。

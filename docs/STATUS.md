@@ -123,6 +123,7 @@
 | 启动与更新流程 | 🟡 新安装跟随系统语言（老用户不变）；0.1.0/0.1.1 升级上来也走引导和更新内容；版本号在第一次刷新后才记下；新功能引导按准确版本匹配（0.1.5 三页）；登录项需要批准时提示并打开设置；自动检查失败一小时后重试 | 单元测试 `PreferredLanguageTests`；模拟升级：`defaults write studio.wuyiyang.youngbar lastLaunchedVersion 0.1.4` 后启动 |
 | 更新器 | 🟡 不装比本机系统要求更新的版本；换包脚本保留旧版直到新版打开成功；等退出 10 分钟；下载中再点不重来；清理临时文件；package.sh 无证书时不打包 | `YOUNGBAR_UPDATETEST=1` + `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.4 YOUNGBAR_UPDATE_INSTALL=1`（发布 0.1.5 之后）；`make package` 在没有证书的环境应失败 |
 | 安装脚本（install.sh） | ✅ 先解压、检查新 app，再动已安装的那份；ad-hoc 包不装；已安装的是作者签名时要求同一证书 | CI `install-script.yml`，macOS 27、从没见过作者证书的机器：全新安装线上 0.1.4 并启动、覆盖更新、ad-hoc 包被拒且已装的那份不动、ad-hoc 副本不满足已装那份的 designated requirement。退出正在运行的 YoungBar（AppleScript）那一段没测 |
+| 安装脚本：系统低于 27 先退出 | ✅（逻辑）下载之前读 `sw_vers -productVersion`，主版本低于 27 或读不到时，用中英文说明「只支持 macOS 27 及以上（Apple 芯片）」后退出，不下载、不改动。**在 macOS 上还没跑过**：推到公开仓库后 `install-script.yml`（macOS 27）会经过这段 | 2026-11-04 在 Linux 上用假的 `sw_vers` 和 `curl`，dash 与 bash --posix 各跑一遍：12.4、15.7.1、26.3、`abc`、没有 `sw_vers` 都在调用 curl 之前退出（退出码 1）；27.0、27.1、28.0 通过检查、走到 curl；按 README 的 `cat install.sh \| sh` 方式结果相同 |
 | 自检本身 | 🟡 menutest / concealtest 收回显示的图标、恢复原模式；spacingtest 写回本机原值；临时模式只在内存里 | 跑完各自检后 `defaults export studio.wuyiyang.youngbar` 与之前对比 |
 | 代码整理 | ✅ main.swift 1507 行拆成 main / ControlPanel / Shelf / LayoutActions / SettingsBridge / EngineSync；拆分时逐行核对没有丢行 | CI 编译通过 |
 

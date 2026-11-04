@@ -27,6 +27,11 @@
 - ••• 不再抢键盘焦点
 - ••• 不再掉到菜单栏下面
 
+## 要求
+
+- macOS 27 或更新，Apple 芯片的 Mac；更早的系统（macOS 26 及以前）打不开
+- 设备控制与数据访问（辅助功能）权限；不需要屏幕录制
+
 ## 说明
 
 - 菜单栏上的 ••• 现在跟着菜单栏本身的颜色，和 YoungBar 设置里的「外观」无关
@@ -60,6 +65,11 @@
 - Importing a layout can no longer crash YoungBar
 - ••• no longer takes keyboard focus
 - ••• no longer drops below the menu bar
+
+## Requirements
+
+- macOS 27 or later on an Apple silicon Mac; it won't open on earlier versions (macOS 26 and before)
+- Device Control and Data Access (Accessibility) permission; no Screen Recording
 
 ## Notes
 

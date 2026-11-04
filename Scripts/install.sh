@@ -4,13 +4,27 @@
 #
 # Installs (or updates to) the latest YoungBar release:
 #   curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh
-# YOUNGBAR_VERSION=0.1.1 pins a version.
+# YOUNGBAR_VERSION=0.1.1 pins a version. Every release needs macOS 27 or
+# later, on an Apple silicon Mac.
 #
 # Everything runs inside main(), called on the last line: a download cut
 # off half-way through `curl | sh` defines nothing and runs nothing.
 set -eu
 
 main() {
+    # Every release needs macOS 27 or later (Apple silicon only: macOS 27
+    # has no Intel version). Say so before downloading anything: on an
+    # older system the app would install and then macOS would refuse to
+    # open it.
+    os="$(sw_vers -productVersion 2>/dev/null)" || os=""
+    major="${os%%.*}"
+    case "$major" in ''|*[!0-9]*) major=0 ;; esac
+    if [ "$major" -lt 27 ]; then
+        echo "YoungBar needs macOS 27 or later, on an Apple silicon Mac. This Mac runs ${os:+macOS }${os:-an unknown system}; nothing was changed." >&2
+        echo "YoungBar 只支持 macOS 27 及以上（Apple 芯片的 Mac）。这台 Mac 是 ${os:+macOS }${os:-未知系统}，没有做任何改动。" >&2
+        exit 1
+    fi
+
     repo="https://github.com/51younglowkey/youngbar"
     version="${YOUNGBAR_VERSION:-}"
     if [ -z "$version" ]; then

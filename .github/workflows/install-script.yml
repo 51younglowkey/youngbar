@@ -64,14 +64,14 @@ jobs:
           printf '#!/bin/sh\necho 26.3\n' > "$stub/sw_vers"
           printf '#!/bin/sh\ntouch "%s/curl-called"\nexit 1\n' "$stub" > "$stub/curl"
           chmod +x "$stub/sw_vers" "$stub/curl"
-          before="$(codesign -dvv /Applications/YoungBar.app 2>&1 | grep '^CDHash=')"
+          before="$(shasum -a 256 /Applications/YoungBar.app/Contents/MacOS/YoungBar)"
           if out="$(PATH="$stub:$PATH" sh Scripts/install.sh 2>&1)"; then
             echo "$out"; echo "install.sh went ahead on macOS 26.3"; exit 1
           fi
           echo "$out"
           echo "$out" | grep -q 'needs macOS 27 or later'
           if [ -e "$stub/curl-called" ]; then echo "install.sh downloaded on macOS 26.3"; exit 1; fi
-          after="$(codesign -dvv /Applications/YoungBar.app 2>&1 | grep '^CDHash=')"
+          after="$(shasum -a 256 /Applications/YoungBar.app/Contents/MacOS/YoungBar)"
           [ "$before" = "$after" ] || { echo "the installed copy changed"; exit 1; }
           pgrep -xl YoungBar
       - name: Refuses an ad-hoc build and leaves the installed copy alone

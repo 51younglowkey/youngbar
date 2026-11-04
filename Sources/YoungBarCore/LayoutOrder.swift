@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 YoungBar contributors
 // SPDX-License-Identifier: GPL-3.0-only
 
+#if canImport(CoreGraphics)
 import CoreGraphics
+#else
+import Foundation // CGFloat / CGRect on Linux, where only the core is built and tested
+#endif
 
 /// The saved left-to-right order of menu-bar items, as section keys.
 public enum LayoutOrder {

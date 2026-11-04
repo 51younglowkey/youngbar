@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 YoungBar contributors
 // SPDX-License-Identifier: GPL-3.0-only
 
+#if canImport(CoreGraphics)
 import CoreGraphics
+#else
+import Foundation // CGFloat / CGRect on Linux, where only the core is built and tested
+#endif
 
 /// Items the user set to Show that nobody can see. When the bar is full,
 /// macOS 27 puts a « at its left end and moves the items that don't fit

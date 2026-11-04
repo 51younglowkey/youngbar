@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 YoungBar contributors
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Builds what can be built without a person at the Mac. Nothing here touches
+# a real menu bar: the live self-tests (TESTHOOKS=1, see AGENTS.md §5) still
+# have to run on a Mac with Accessibility granted.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core-linux:
+    name: Unit tests (Linux, Swift 6.4)
+    runs-on: ubuntu-24.04
+    container: swift:6.4-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # On Linux Package.swift only declares YoungBarCore and its tests.
+      - run: swift test --disable-sandbox
+
+  app-macos:
+    name: App build (macOS 27 SDK)
+    # GitHub's Xcode 27 image (preview): the macOS 27 SDK the app needs.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version || true
+          swift --version
+      - name: Unit tests
+        run: swift test --disable-sandbox
+      - name: Build with self-tests compiled in (TESTHOOKS=1)
+        run: swift build -c release --product YoungBar --disable-sandbox -Xswiftc -DYOUNGBAR_TESTHOOKS --scratch-path .build/testhooks
+      - name: Release bundle and checks (Scripts/verify.sh)
+        # Ad-hoc signed here: the release certificate lives on the author's
+        # Mac, so this bundle is for checking only, never for distribution.
+        run: sh Scripts/verify.sh

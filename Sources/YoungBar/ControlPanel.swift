@@ -136,8 +136,14 @@ extension BarApp {
     func makeControlPanel(at frame: NSRect) {
         let size = NSSize(width: max(34, frame.width), height: max(24, frame.height))
         controlWidth = size.width
+        // Centred in the menu bar, not on the status item's window: macOS
+        // can report that window lower, and the control then hung half
+        // below the bar (user report, 0.1.4).
+        let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: frame.midX, y: frame.midY)) }
+            ?? NSScreen.screens.first
+        let midY = screen.map { $0.frame.maxY - menuBarHeight(of: $0) / 2 } ?? frame.midY
         let hitFrame = NSRect(x: frame.midX - size.width / 2,
-                              y: frame.midY - size.height / 2,
+                              y: midY - size.height / 2,
                               width: size.width, height: size.height)
         let panel = BarControlPanel(contentRect: hitFrame,
                             styleMask: [.borderless, .nonactivatingPanel],
@@ -216,21 +222,40 @@ extension BarApp {
         controlButton?.needsDisplay = true
     }
 
+    /// The menu bar's height on `screen` (taller on a notched built-in).
+    /// When the bar hides itself the visible frame reaches the top: the
+    /// notch's height then, or the status bar's thickness.
+    func menuBarHeight(of screen: NSScreen) -> CGFloat {
+        let height = screen.frame.maxY - screen.visibleFrame.maxY
+        if height >= 20 && height <= 50 { return height }
+        return max(screen.safeAreaInsets.top, NSStatusBar.system.thickness)
+    }
+
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
         guard let panel = controlPanel,
               let screen = panel.screen ?? NSScreen.screens.first else { return }
         // Icons held by macOS's « (or under the notch) are not on the bar;
         // following them would take the control out of sight too.
         let outOfSight = outOfSightKeys(snapshot)
-        let leadingIcon = snapshot.items.compactMap { item -> CGFloat? in
+        // Item frames are in the global top-left space: this screen's bar
+        // runs from `barTop` down.
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+        let barTop = primaryTop - screen.frame.maxY
+        let leadingFrame = snapshot.items.compactMap { item -> CGRect? in
             guard let frame = item.frame,
                   item.id.bundleID != Bundle.main.bundleIdentifier,
                   !outOfSight.contains(item.id.sectionKey.rawValue),
                   frame.minX > screen.frame.midX,
                   frame.minX < screen.frame.maxX else { return nil }
-            return frame.minX
-        }.min()
-        guard let leadingIcon else { return }
+            return frame
+        }.min { $0.minX < $1.minX }
+        guard let leadingFrame else { return }
+        let leadingIcon = leadingFrame.minX
+        // Level with the icons beside it.
+        var y = panel.frame.minY
+        if leadingFrame.minY - barTop > -5, leadingFrame.maxY - barTop < 50 {
+            y = (primaryTop - leadingFrame.midY - panel.frame.height / 2).rounded()
+        }
         let floor = notchVisibleMinX ?? (screen.frame.minX + 12)
         var width = controlWidth
         var x = max(floor, leadingIcon - width - 6)
@@ -247,9 +272,9 @@ extension BarApp {
             width = 22
             x = max(floor, pile)
         }
-        if abs(panel.frame.minX - x) > 1 || abs(panel.frame.width - width) > 0.5 {
+        if abs(panel.frame.minX - x) > 1 || abs(panel.frame.width - width) > 0.5 || abs(panel.frame.minY - y) > 0.5 {
             // Slide with the bar's own shift instead of jumping a beat later.
-            let origin = NSPoint(x: x, y: panel.frame.minY)
+            let origin = NSPoint(x: x, y: y)
             // (`animator()` on this panel never applied the move, leaving
             // the control wherever it was installed.)
             let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && abs(panel.frame.minX - x) < 200

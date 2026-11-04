@@ -74,6 +74,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTIONTEST"] == "1" {
             await runNoAssertionTest()
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_CONTROLYTEST"] == "1" {
+            await runControlLevelTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_TOPSHOT"] == "1" {
             try? await Task.sleep(for: .milliseconds(1800))
             await captureScreen(to: "top-full.png")
@@ -1803,6 +1806,47 @@ extension BarApp {
     }
 
     // MARK: - 0.1.5 checks
+
+    /// Opt-in (`YOUNGBAR_CONTROLYTEST=1`): the control hung half below the
+    /// bar for a user (0.1.4). Drops it by half a bar height, then checks the
+    /// next refresh puts it back level with the icons beside it. If it
+    /// doesn't, the control still goes back to where it was.
+    func runControlLevelTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "controlytest.json") }
+        await refresh()
+        try? await Task.sleep(for: .milliseconds(800))
+        guard let panel = controlPanel, let screen = panel.screen ?? NSScreen.screens.first,
+              let primaryTop = NSScreen.screens.first?.frame.maxY else { return }
+        let original = panel.frame.origin
+        func level() async -> [String: Double] {
+            // Read first: a timed refresh during the snapshot may move it.
+            var values: [String: Double] = ["controlMidY": Double(primaryTop - panel.frame.midY)]
+            let snapshot: EngineSnapshot? = await engine.freshSnapshot()
+            let barTop = primaryTop - screen.frame.maxY
+            let icon = snapshot?.items.compactMap { item -> CGRect? in
+                guard let frame = item.frame, item.id.bundleID != Bundle.main.bundleIdentifier,
+                      frame.minX > panel.frame.maxX, frame.minY - barTop < 50 else { return nil }
+                return frame
+            }.min { $0.minX < $1.minX }
+            if let icon { values["iconMidY"] = Double(icon.midY) }
+            values["barHeight"] = Double(menuBarHeight(of: screen))
+            return values
+        }
+        result["before"] = await level()
+        panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: panel.frame.minY - menuBarHeight(of: screen) / 2))
+        result["dropped"] = await level()
+        await refresh()
+        try? await Task.sleep(for: .milliseconds(1200))
+        let after = await level()
+        result["after"] = after
+        var levelAfter = false
+        if let control = after["controlMidY"], let icon = after["iconMidY"] {
+            levelAfter = abs(control - icon) <= 1.5
+        }
+        result["levelAfter"] = levelAfter
+        if !levelAfter { panel.setFrameOrigin(original) }
+    }
 
     /// Opt-in (`YOUNGBAR_APPEARANCETEST=1`): the ••• must take the menu bar's
     /// look whatever YoungBar's own appearance setting is. Steps the setting

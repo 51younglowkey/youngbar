@@ -144,3 +144,28 @@ extension BarApp {
         """
     }
 }
+
+extension BarApp {
+    // Read-only accessors for the opt-in diagnostics snapshot.
+    var diagnosticsStarted: Bool { started }
+    var diagnosticsExpanded: Bool { expanded }
+    var diagnosticsFeedback: String { feedback }
+
+    func diagnosticsItems(snapshot: EngineSnapshot?) -> [Diagnostics.Item] {
+        orderedKeys().map { key in
+            // Only the live snapshot has a trustworthy frame: catalog entries
+            // keep the last seen frame even after an item is concealed.
+            let frame = snapshot?.items.first { $0.id.sectionKey.rawValue == key }?.frame
+            return Diagnostics.Item(
+                key: key,
+                name: name(for: key),
+                x: frame.map { Double($0.minX) },
+                y: frame.map { Double($0.minY) },
+                width: frame.map { Double($0.width) },
+                height: frame.map { Double($0.height) },
+                axX: axPosition(for: key).map { Double($0.x) },
+                mode: modes[key] ?? 0
+            )
+        }
+    }
+}

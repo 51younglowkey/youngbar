@@ -95,7 +95,7 @@ Vendor/
 - 自检会动真实菜单栏：点击、隐藏、拖动。**结束后必须恢复原状态**；测试打开的面板/菜单要关闭。
 - 改状态数字时同步更新 `docs/STATUS.md`；结论变了追加「更正第 N 轮」，不改历史条目。
 - 提交前：`sh Scripts/build.sh` 通过；`git status` 只包含预期文件。
-- **提交作者一律是 51Young**（项目的硬性要求）：作者和提交者都是 `51Young <193584257+51younglowkey@users.noreply.github.com>`；不用 Claude 署名，也不加 `Co-Authored-By: Claude…`、`Claude-Session:` 之类的尾注。云端会话是新克隆的，第一次提交前先在仓库里 `git config user.name` / `git config user.email` 设好，提交后用 `git log --format='%an <%ae> | %cn'` 看一眼。`.claude/settings.json` 关掉了 Claude 的署名，但云端会话同时挂两个仓库时不读这个文件，那时要自己保证。私有仓库的 CI 用 `Scripts/check-commits.sh` 查每次带来的提交（本地也能跑：`sh Scripts/check-commits.sh origin/main..HEAD`）；github.com 上合并产生的提交由 GitHub 署名，只查作者名。私有仓库是 GitHub 免费版，设不了分支保护：**这个检查红了也能点合并，合并前要自己看**。
+- **提交作者一律是 51Young**（项目的硬性要求）：作者和提交者都是 `51Young <193584257+51younglowkey@users.noreply.github.com>`；不用 Claude 署名，也不加 `Co-Authored-By: Claude…`、`Claude-Session:` 之类的尾注。云端会话是新克隆的，第一次提交前先在仓库里 `git config user.name` / `git config user.email` 设好，提交后用 `git log --format='%an <%ae> | %cn'` 看一眼。`.claude/settings.json` 关掉了 Claude 的署名，但云端会话同时挂两个仓库时不读这个文件，那时要自己保证。私有仓库的 CI 用 `Scripts/check-commits.sh` 查每次带来的提交（本地也能跑：`sh Scripts/check-commits.sh origin/main..HEAD`）；github.com 上合并产生的提交由 GitHub 署名，只查作者名。私有仓库是 GitHub 免费版，设不了分支保护：**这个检查红了也能点合并，合并前要自己看**。网页合并会把作者写成账号的 Gmail，`gh pr merge --author-email` 又不接受 noreply 地址；要合并提交也符合规则，就本地 `git merge --no-ff` 后推送，GitHub 会自动把 PR 标记为已合并。
 
 ## 6. UI 与设计
 

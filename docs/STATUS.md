@@ -105,6 +105,7 @@
 > ② GitHub Actions `xcode-27`（macOS 27.0.1 / Xcode 27.1 / Swift 6.4）**编译通过**：调试版、测试版、正式版打包和 `Scripts/verify.sh`；同一种机器上 install.sh 装线上 0.1.4 通过（`install-script.yml`）。
 > 下表的「状态」除了纯逻辑和安装脚本都是 🟡：代码与编译有证据，**真机行为没有证据**。发布前按表末的清单在 Mac 上跑一遍。
 > 例外：「••• 掉到菜单栏下面」一行是之后在作者的 Mac 上测的，证据写在那一行。
+> **更新（2026-11-04）**：清单已在作者的 Mac 上跑过，结果见表末「清单结果」，以那张表为准；下表的 🟡 是云端当时的状态，没有逐行改。
 
 | 项 | 状态 | 证据 / 怎么验 |
 |---|---|---|
@@ -140,6 +141,26 @@
 4. `YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_OVERFLOWTEST`、`YOUNGBAR_KEYBOARDTEST`、`YOUNGBAR_INTERACTIONTEST`、`YOUNGBAR_CONCEALTEST`、`YOUNGBAR_MENUTEST`、`YOUNGBAR_BULKTEST`、`YOUNGBAR_SETTINGSUITEST`
 5. 全屏一个应用，鼠标移到顶部让菜单栏滑下，确认能点到 •••（已知：菜单栏收起时 ••• 浮在应用上）
 6. 正式版 `sh Scripts/build.sh` 启动一次：先走使用引导，再是 0.1.5 的更新内容和三页新功能
+
+**清单结果**（2026-11-04，main `0766a4e` 加两处自检修正；作者的 Mac：有刘海的内建屏、单屏、1800×1169、菜单栏 40 点、系统深色）。每项跑完比对保存的隐藏模式、顺序和选项，都和跑之前一致：
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| `YOUNGBAR_APPEARANCETEST` | ✅ 系统深色通过。**系统浅色没测**（要改系统设置） | `appearancetest.json`：`passed:true`、`controlIgnoresSetting:true`、`restored:true` |
+| `YOUNGBAR_EMPTYSHELFTEST` | ✅ | `emptyshelftest.json`：`passed:true`、`concealed:true`、`stillOpen:true`、`restored:true`、`alphaAfterOpen:1` |
+| `YOUNGBAR_LAUNCHTEST=com.steipete.codexbar` | ✅ 只测了「显示」的应用。**隐藏时退出再打开、图标闪一下那条手动项没测** | `launchtest.json`：`passed:true`、`secondsUntilBack:1.29`、`mode:0` |
+| `YOUNGBAR_SHELFOPENTEST` | ✅ | `shelfopen.json`：`passed:true`、`openMs:21`、`revealedOnOpen:0`、`alphaAfterFade:1` |
+| `YOUNGBAR_OVERFLOWTEST` | ⚠️ **没测到**：全部显示时菜单栏也没挤满，`overflowAllShown` 是空的，`settingsMarksOverflow:true` 等于没判断。要在图标更多的时候重跑 | `overflowtest.json`：`restored:true` |
+| `YOUNGBAR_KEYBOARDTEST` | ✅ | `keyboardtest.json`：`passed:true`、`frontAppStillFront:true`、`restoredDisplay` 回到默认 |
+| `YOUNGBAR_INTERACTIONTEST` | ✅ 点开和收回通过。**清理不稳**：两次里有一次 Esc 和自检的清理都没关掉有道翻译的弹窗（`menuClosedAfterEscape:false`），手动把焦点切走后关闭。这是自检的收尾，不是产品路径 | `interactiontest.json`：`menuOpened:true`、`clickOpenedTargetUI:true`、`concealedAfterTest:true` |
+| `YOUNGBAR_CONCEALTEST` | ⚠️ **结论不算数**：两次 `menuOpenRole` 都是 `AXWebArea`（探到的是下面的窗口），没有证明菜单真的开着；第二次 iFan 面板也没开（`fanWindowsAfterClick:0`）。这个自检用自己的点击，不走产品路径；产品路径的菜单由 `YOUNGBAR_MENUTEST` 证明 | `concealtest.json`，没有 `passed` 字段 |
+| `YOUNGBAR_MENUTEST` | ✅ 输入法菜单真的打开又关上 | `menutest.json`：`passed:true`、`menuElementRole:AXMenuItem`、`menuClosed:true`、`restoredMode:true` |
+| `YOUNGBAR_BULKTEST` | ✅ 第一次失败是自检过时：没有像 `restoreAppModes` 那样清掉 `bulkHiddenKeys`。改自检后通过，产品代码没动 | `bulktest.json`：`passed:true`，隐藏数 5→8→0→5，`modesUnchanged:true` |
+| `YOUNGBAR_SETTINGSUITEST` | ✅ | `settingsuitest.json`：`modePassed`、`dragPassed`、`contextPassed`、`languagePassed`、`modesRestored`、`orderRestored`、`languageRestored`、`optionsUnchanged` 都是 true |
+| 全屏时菜单栏滑下能点到 ••• | ⬜ **没测** | 第 5 项是手动项 |
+| 正式版第一次启动（模拟从 0.1.4 升级） | ✅ 使用引导（授权显示已授权）→ 更新内容（有「••• 不再掉到菜单栏下面」，没有说明和校验）→ 新功能 1/3–3/3 → 正常结束，`lastLaunchedVersion` 记成 0.1.5。按钮是用辅助功能按的，不是鼠标点的 | 窗口截图、窗口文字 |
+
+另外观察到：`engine.conceal(items:)` 之后 ••• 要等下一次刷新才靠回图标，中间有一段空白；约 8 秒后的截图已经归位。
 
 ## 3. 验证边界（不许含糊）
 

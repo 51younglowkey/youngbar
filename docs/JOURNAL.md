@@ -198,6 +198,14 @@ YoungBar 在 2026-10-23 从 Leorea 的 `youngbar/` 拆成独立仓库（保留�
 
 **更正（2026-11-04）**：上面的「无刘海」写错了。本机读 `NSScreen`：内建屏 `safeAreaInsets.top` 38，有刘海，所以有刘海的内建屏其实测过；外接屏、多显示器、菜单栏自动隐藏仍然没测。
 
+## 2026-11-04 · 开发挪到私有仓库，0.1.5 真机清单
+
+- **迁移**：日常开发挪到私有仓库 `youngbar-dev`（`origin`），公开仓库改叫 `public`，这一轮没有往公开仓库推任何东西。规则在 AGENTS 第 1 节。
+- **合并方式**：`gh pr merge --author-email` 不接受 noreply 地址（`Invalid email address`），网页合并又会把作者写成 Gmail。PR #1、#2 改成本地 `git merge --no-ff` 后推送，作者和提交者都是 51Young，GitHub 自动标记已合并。
+- **提交检查**：PR #2 加了 `Scripts/check-commits.sh`。私有仓库是 GitHub 免费版，API 返回要求升级才能用分支保护和规则集，所以它只能亮红叉，拦不住合并。
+- **真机清单**：结果在 STATUS 2.4 的「清单结果」。修了两处过时的自检（`YOUNGBAR_BULKTEST` 没清 `bulkHiddenKeys`；`YOUNGBAR_INTERACTIONTEST` 的 `concealedAfterTest` 永远是 false），产品代码没动。
+- **跑自检时卡住过一次**：`YOUNGBAR_CONCEALTEST` 写完结果后，驱动脚本停了约一小时，直到被用户打断，下一项没开始、测试版没退出。原因没查到：之后同样的退出请求 0 秒完成。教训：驱动自检的脚本每一步都要有超时。
+
 ## 附录：0.1.0 及之前的状态板（原 `docs/STATUS.md`，2026-10-24 前）
 
 > 2026-10-29 从 `STATUS.md` 原样移来，只把标题降了一级。当前状态见 `STATUS.md`。

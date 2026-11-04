@@ -294,7 +294,7 @@ extension BarApp {
         shownUntil[item.id] = nil
         await engine.conceal(items: [item.id])
         try? await Task.sleep(for: .milliseconds(500))
-        result["concealedAfterTest"] = !(await engine.freshSnapshot()).items.contains { $0.id == item.id }
+        result["concealedAfterTest"] = (await engine.freshSnapshot()).concealed.contains(item.id)
         closeShelf()
         writeInteractionTest(result)
     }
@@ -664,6 +664,8 @@ extension BarApp {
         let shown = await engine.freshSnapshot()
         result["concealedAfterShowAll"] = shown.concealed.count
         result["visibleAfterShowAll"] = shown.items.filter { $0.frame != nil }.count
+        // As `restoreAppModes` does: "Hide all" lasts until it is undone.
+        bulkHiddenKeys = []
         await engine.conceal()
         await engine.setModel(currentModel())
         try? await Task.sleep(for: .milliseconds(400))

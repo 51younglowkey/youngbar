@@ -59,7 +59,10 @@ extension BarApp {
         let wasOpen = expanded && shelfPanel?.isVisible == true
         // A fresh open starts scrolled to the left (icons 1–9 in view); the
         // old content would carry its scroll position into the rebuild.
-        if !wasOpen { shelfPanel?.contentView = nil }
+        if !wasOpen {
+            shelfPanel?.contentView = nil
+            flight.note("strip opened")
+        }
         expanded = true
         shelfAnchored = false
         shelfSelection = selectFirst ? 0 : nil
@@ -101,6 +104,7 @@ extension BarApp {
     }
 
     func closeShelf() {
+        if expanded { flight.note("strip closed") }
         expanded = false
         hoverOpenedAt = nil
         shelfAnchored = false
@@ -523,7 +527,10 @@ extension BarApp {
         guard let point = axPosition(for: key), let control = controlPanel?.frame,
               let screen = controlPanel?.screen ?? NSScreen.screens.first else { return false }
         let near = point.x > screen.frame.midX && abs(point.x - control.midX) < 400
-        if !near { NSLog("YoungBar: \(key) slot at x=\(point.x) is away from the control; revealing instead") }
+        if !near {
+            NSLog("YoungBar: \(key) slot at x=\(point.x) is away from the control; revealing instead")
+            flight.note("\(name(for: key)): slot at x\(Int(point.x)) is away from the ••• at x\(Int(control.minX)); revealing instead")
+        }
         return near
     }
 

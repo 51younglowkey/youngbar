@@ -14,7 +14,7 @@
 | 命令 | `sh Scripts/build.sh` → `build/YoungBar.app` | 构建通过（2026-10-29） |
 | 工具链 | 只需命令行工具：Swift 6.4（CLT 27.0，2026-10-26 安装），**不需要 Xcode** | `swift --version`；包内不再使用 `@State`（宏插件只随 Xcode） |
 | 测试版构建 | `TESTHOOKS=1 sh Scripts/build.sh`：编入 `TestHooks.swift` 的真机自检 | 正式版 `strings` 中 `YOUNGBAR_*TEST` 0 处；`otool -L` 无 ScreenCaptureKit |
-| 单元测试 | `swift test --disable-sandbox`：72 项（排序与落点、溢出判断、快捷键与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值） | 72 passed（2026-11-05，本机 macOS 27）；70 passed（2026-11-04，Linux 与 CI 的 macOS），新增的 2 项还没在 Linux 上跑 |
+| 单元测试 | `swift test --disable-sandbox`：89 项（事件日志、••• 位置检查、排序与落点、溢出判断、快捷键与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值） | 89 passed（2026-11-05，本机 macOS 27，含未发布的飞行记录器）；70 passed（2026-11-04，Linux 与 CI 的 macOS），新增的 2 项还没在 Linux 上跑 |
 | CI（0.1.5 起） | `.github/workflows/ci.yml`：Linux（swift:6.4-noble）跑单元测试；`xcode-27`（macOS 27.0.1、Xcode 27.1、Swift 6.4）跑单元测试、测试版编译（`-DYOUNGBAR_TESTHOOKS`）和 `Scripts/verify.sh`。`install-script.yml`：同一种机器上用 install.sh 装线上最新版、覆盖更新、拒绝 ad-hoc 包、证书比对拒绝别的签名 | Actions 日志里的 `sw_vers` / `swift --version`；见 2.4 |
 | Linux 上的单元测试 | `Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test` 可以在没有 Mac 的地方跑 | Docker `swift:6.4-noble` 与 CI：70 passed |
 | 签名 | 本地 `YoungBar Local Signing` 证书；重建后辅助功能授权保持 | `codesign -dv`；重建后自检仍 `axTrusted:true` |
@@ -25,6 +25,7 @@
 |---|---|---|
 | 空闲 CPU | ✅ 0.32–0.33%（0.1.0：约 1.7%，40 小时累计 41 分钟） | 60 秒 `ps -o time` 差值，两次 |
 | 刷新节奏 | ✅ 收纳条/设置打开或有定时展开时 1 秒；空闲 4 秒；应用启动退出、唤醒、显示器变化立即刷新 | `refreshInterval`、`startRefreshTriggers` |
+| 飞行记录器（未发布） | ✅ `events.log` 分得清 ••• 是 YoungBar 自己移动还是外部移动，重启后保留上一轮；诊断报告带 ••• 的只读检查和最近 60 条事件。只在本机内建屏（单屏）上验证过，多屏和用户机器上还没有实际数据 | `flighttest.json` `passed:true`（2026-11-05） |
 | 快捷键打开收纳条 | ✅ 真实按键 ⌃⌥B 打开，收纳条成为键盘焦点，前台应用不变 | `keyboardtest.json`：`openedByShortcut`、`stripIsKey`、`frontAppStillFront` |
 | 键盘导航 | ✅ 打开即选中第一项；→ 1、←← 绕回 4；Esc 先清搜索再关闭 | `selectionAfterOpen:0`、`selectionAfterRight:1`、`selectionAfterTwoLeft:4`、`queryClearedByEsc`、`closedByEsc` |
 | 搜索 | ✅ 输入 "ifa" 只剩 iFan 且被选中；⌫ 删一字；无匹配显示「没有匹配的项目」 | `matches`、`searchFoundTarget`、`queryAfterDelete:"if"`、`noMatchCount:0`；![搜索](images/shelf-search.png) |

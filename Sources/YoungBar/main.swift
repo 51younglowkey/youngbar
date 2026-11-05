@@ -84,6 +84,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var nameCache: [String: String] = [:]
     var controlPanel: NSPanel?
     var controlButton: BarControlButton?
+    let flight = FlightRecorder()
+    var controlMoveObserver: NSObjectProtocol?
     /// Whether the window server's menu-bar look is used for the •••; cleared
     /// by `checkMenuBarTheme` if it fails its one check at launch.
     var menuBarThemeTrusted = true
@@ -178,6 +180,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
                        "crashed": previousSessionCrashed], name: "launch.json")
         }
         NSApp.setActivationPolicy(.accessory)
+        startFlightRecorder()
         // A previous synthetic drag can leave the global mouse association
         // off; reset it before any UI is shown.
         CGAssociateMouseAndMouseCursorPosition(1)
@@ -264,6 +267,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         guard !previewOnly else { return }
         UserDefaults.standard.set(false, forKey: "sessionActive")
+        flight.note("quit")
+        flight.flush()
         unregisterHotKey()
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
         timer?.invalidate()
@@ -354,6 +359,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func refresh() async {
+        noteTrustIfChanged()
         guard !busy, !refreshing, !syncing, AXIsProcessTrusted(), AssessmentMode.isAvailable else { return }
         if doubleTapNeedsTrust { registerHotKey() }
         refreshing = true

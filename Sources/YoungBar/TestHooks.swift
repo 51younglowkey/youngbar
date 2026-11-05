@@ -80,6 +80,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_CONTROLYTEST"] == "1" {
             await runControlLevelTest()
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_FLIGHTTEST"] == "1" {
+            await runFlightRecorderTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_TOPSHOT"] == "1" {
             try? await Task.sleep(for: .milliseconds(1800))
             await captureScreen(to: "top-full.png")
@@ -1863,6 +1866,81 @@ extension BarApp {
         }
         result["levelAfter"] = levelAfter
         if !levelAfter { panel.setFrameOrigin(original) }
+    }
+
+    /// Opt-in (`YOUNGBAR_FLIGHTTEST=1`): the flight recorder must tell who moved
+    /// the •••. Moves it from outside, far then a little, and checks the log,
+    /// the jump count, the report and the file; YoungBar's own animated way
+    /// back mustn't read as a move from outside. The ••• ends where it was.
+    func runFlightRecorderTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        defer { writeJSON(result, name: "flighttest.json") }
+        // Right after launch the hidden icons are still leaving the bar, and
+        // the ••• isn't where it stays. Wait for it to hold still.
+        var settled: NSPoint?
+        for _ in 0..<15 {
+            await refresh()
+            try? await Task.sleep(for: .milliseconds(1000))
+            if settled == controlPanel?.frame.origin { break }
+            settled = controlPanel?.frame.origin
+        }
+        guard let panel = controlPanel else { return }
+        let original = panel.frame.origin
+        let before = await engine.freshSnapshot()
+        let inPlace = controlCheck(before)
+        let jumpsBefore = flight.recentJumps
+        func logged(_ text: String, last: Int = 12) -> Bool {
+            flight.recent(last).contains { $0.contains(text) }
+        }
+
+        // Far: a jump from outside, then YoungBar's own way back.
+        panel.setFrameOrigin(NSPoint(x: original.x - 300, y: original.y))
+        let misplaced = controlCheck(before)
+        try? await Task.sleep(for: .milliseconds(200))
+        result["farOutsideLogged"] = logged("moved from outside")
+        await refresh()
+        try? await Task.sleep(for: .milliseconds(1200))
+        result["ownMoveLogged"] = logged("follows")
+        result["jumpsCounted"] = flight.recentJumps - jumpsBefore
+
+        // A little: the way back animates, which is when a false "from
+        // outside" would show.
+        panel.setFrameOrigin(NSPoint(x: panel.frame.minX - 30, y: panel.frame.minY))
+        try? await Task.sleep(for: .milliseconds(200))
+        result["smallOutsideLogged"] = logged("moved from outside", last: 2)
+        let marker = "flight test: own move next"
+        flight.note(marker)
+        await refresh()
+        try? await Task.sleep(for: .milliseconds(1200))
+        // The last marker: the log keeps the lines of earlier runs.
+        let lines = flight.recent(60)
+        let afterMarker = lines.suffix(from: (lines.lastIndex { $0.contains(marker) } ?? lines.count - 1) + 1)
+        result["afterMarker"] = Array(afterMarker)
+        result["ownMoveNotOutside"] = !afterMarker.isEmpty && !afterMarker.contains { $0.contains("outside") }
+
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        try? await Task.sleep(for: .milliseconds(300))
+        result["screensLogged"] = logged("screens changed")
+
+        let after = await engine.freshSnapshot()
+        let backInPlace = controlCheck(after)
+        result["checkBefore"] = inPlace?.allPassed ?? false
+        result["checkWhileMisplaced"] = misplaced?.allPassed ?? true
+        result["gapWhileMisplaced"] = misplaced?.gapToIcon ?? -1
+        result["checkAfter"] = backInPlace?.allPassed ?? false
+        result["backInPlace"] = abs(panel.frame.minX - original.x) <= 1 && abs(panel.frame.minY - original.y) <= 1
+        if result["backInPlace"] as? Bool != true { panel.setFrameOrigin(original) }
+
+        let report = await diagnosticsReport()
+        result["report"] = report
+        flight.flush()
+        let file = (try? String(contentsOf: FlightRecorder.url, encoding: .utf8)) ?? ""
+        result["fileHasJump"] = file.contains("JUMP")
+        result["passed"] = ["farOutsideLogged", "ownMoveLogged", "smallOutsideLogged", "ownMoveNotOutside",
+                            "screensLogged", "checkBefore", "checkAfter", "backInPlace", "fileHasJump"]
+            .allSatisfy { result[$0] as? Bool == true }
+            && (result["jumpsCounted"] as? Int ?? 0) >= 2
+            && misplaced?.allPassed == false
     }
 
     /// Opt-in (`YOUNGBAR_APPEARANCETEST=1`): the ••• must take the menu bar's

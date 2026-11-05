@@ -59,9 +59,10 @@ Sources/YoungBar/
   BarSettings.swift     设置窗口的 AppKit 外壳，把 SettingsAction 转给 BarApp
   SettingsView.swift    设置窗口内容（SwiftUI）：侧栏、菜单栏 / 外观 / 通用三页（按使用频率排，打开时总是先显示菜单栏页；未授权时授权按钮也在菜单栏页），Form .grouped
   Theme.swift           配色、主题图（缓存）、控件图标
-  Diagnostics.swift     运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）；「复制诊断信息」的纯文本报告
+  Diagnostics.swift     运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）；「复制诊断信息」的纯文本报告（摘要 + ••• 的只读检查 + 最近 60 条事件）
+  FlightRecorder.swift  飞行记录器：本机 `events.log`（最多 500 行，重启不丢），记 ••• 每次移动和谁移动的（YoungBar 自己 / 外部）、屏幕排列、切桌面、睡眠唤醒、权限、引擎事件。复制诊断信息时带上最近的部分；行文只用英文
   TestHooks.swift       真机自检，只在 TESTHOOKS=1 构建时编译
-Sources/YoungBarCore/   纯逻辑（排序与落点、溢出判断、快捷键组合与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值），有单元测试；Linux 上也能编译
+Sources/YoungBarCore/   纯逻辑（事件日志、••• 位置检查、排序与落点、溢出判断、快捷键组合与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值），有单元测试；Linux 上也能编译
 Tests/YoungBarCoreTests/
 Vendor/
   PelmetCore            菜单栏模型、策略、ItemID、搜索排序（SearchRanker）
@@ -89,6 +90,7 @@ Vendor/
 - 0.1.2 新增：`YOUNGBAR_UPDATETEST`（查 GitHub、记录结果和窗口号；`YOUNGBAR_SIGCHECK_PATH` 检查某个 app 是否与本 app 同证书；`YOUNGBAR_UPDATE_INSTALL=1` 真的安装）。配合 `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.0`（仅测试版）可以端到端升级到线上最新版：它会**替换正在运行的 bundle**（`build/YoungBar.app`），测完要重新 `sh Scripts/build.sh`。
 - 0.1.4 新增：`YOUNGBAR_EXTRASTEST`（更新内容窗口、诊断文本、收纳条图标右键改为始终隐藏再恢复；`YOUNGBAR_EXTRAS_HOLD=秒`）、`YOUNGBAR_AUTOUPDATETEST`（配合 `YOUNGBAR_UPDATE_PRETEND_VERSION`：后台检查→菜单行、不弹窗；`YOUNGBAR_AUTOUPDATE_HOLD=秒`）、`YOUNGBAR_SHELFDRAGTEST`（真实鼠标在收纳条里拖动排序，检查保存顺序、没有 reveal，结束恢复顺序）、`YOUNGBAR_AUTOHIDETEST`（把一个显示中的应用图标当成新图标，检查自动收纳，结束恢复）。`YOUNGBAR_KEYBOARDTEST` 改为真实按键连按两下 ⌘、⌘⇧ / 慢按不触发、数字键、自定义快捷键并恢复；`YOUNGBAR_KEYBOARD_DIGIT=1` 时还会用数字键真的点开一个第三方项的菜单再 Esc。
 - 0.1.5 新增：`YOUNGBAR_APPEARANCETEST`（外观设置依次切到跟随系统 / 浅色 / 深色，检查 ••• 每次都和菜单栏一致；`YOUNGBAR_APPEARANCE_HOLD=秒` 每步停留以便截图）、`YOUNGBAR_EMPTYSHELFTEST`（临时显示所有「隐藏」让收纳条变空，检查提供的图标、点一个收进来、收纳条不关，结束恢复）、`YOUNGBAR_LAUNCHTEST=<bundle id>`（**会真的退出并重开那个应用**，挑没有文档的菜单栏小工具；显示的应用检查图标回来，隐藏的检查不在菜单栏、但在收纳条和设置里）。`YOUNGBAR_BARLOOKTEST=<秒>`：记录这段时间里窗口服务器（`space`、`theme`、`bar`）、状态项按钮和 ••• 读到的外观每一次变化，配合外面切桌面（`osascript -e 'tell application "System Events" to key code 124 using control down'`，123 是向左）；`passed` 要求 ••• 和 `bar` 不一致不超过 2 秒，`launchCheckAtEnd` 是结束时跑一次启动核对的结果；`YOUNGBAR_BARLOOK_DISTRUST=1` 按「核对没过」跑，••• 应该只跟按钮。`YOUNGBAR_SHELFOPENTEST` 多查淡入后不透明度为 1，`YOUNGBAR_OVERFLOWTEST` 多查设置里「放不下」的标记；菜单栏没挤满时 `crowded:false`、不给 `passed`，`inconclusive` 写原因（多开几个带菜单栏图标的应用再跑）。`YOUNGBAR_CONTROLYTEST`：把 ••• 人为下移半个菜单栏，检查下一次刷新回到和图标平齐（`controlytest.json` 的 `levelAfter`）。自检里临时改的显示方式只放内存，不写进 defaults。
+- `YOUNGBAR_FLIGHTTEST`：等 ••• 稳定后，从外部把它远移、近移各一次，检查日志分得清外部移动和 YoungBar 自己的动画移动、大幅移动计数、屏幕变化、诊断报告里的检查结果和 `events.log`；结束时 ••• 回到原位（`flighttest.json`）。测试行会留在 `events.log`，测完退出后删掉这个文件。
 - 0.1.1 新增：`YOUNGBAR_KEYBOARDTEST`（快捷键打开、方向键、Esc、自定义快捷键并恢复）、`YOUNGBAR_HOTKEYPROBE`（多组快捷键各按一次）、`YOUNGBAR_OVERFLOWTEST`（临时显示全部隐藏项制造拥挤，记录被 « 收走的项，恢复模式和顺序；`YOUNGBAR_OVERFLOW_HOLD=秒` 保持拥挤状态以便截图）、`YOUNGBAR_CONFIGTEST`（导出→改→导入）、`YOUNGBAR_SHOWGUIDE` / `YOUNGBAR_SHOWSETTINGS=general|layout|appearance`（打开窗口并把 windowNumber 写进 JSON，配合 `screencapture -l <id>` 截真实窗口）。
 - 本机 shell 可以直接 `screencapture -x -R 700,0,1100,38` 截菜单栏；`cacheDisplay` 的离屏渲染没有窗口背景，深色模式下文字会看不见，不能当外观证据。
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。

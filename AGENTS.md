@@ -54,7 +54,7 @@ Sources/YoungBar/
   HotKey.swift          全局快捷键：组合键走 Carbon；默认「连按两下 ⌘」用全局/本地事件监视器（YoungBarCore 的 DoubleTapDetector）
   NotchOverflow.swift   被 macOS « 收走 / 被刘海挡住的图标；显示器变化时重装控件
   ConfigTransfer.swift  配置导入导出
-  Guide.swift           首次启动引导；每次更新后也会再走一遍（授权那步显示已授权），完成或关闭后接「更新内容 + 新功能引导」
+  Guide.swift           首次启动引导。更新后不再走（用户要求，0.1.6 起）：更新后只显示「更新内容」；更新后权限丢了时，设置窗口的菜单栏页有授权按钮
   Preferences.swift     `Option`：barOptions 的键（磁盘上仍是 [String: Int]）
   BarSettings.swift     设置窗口的 AppKit 外壳，把 SettingsAction 转给 BarApp
   SettingsView.swift    设置窗口内容（SwiftUI）：侧栏、菜单栏 / 外观 / 通用三页（按使用频率排，打开时总是先显示菜单栏页；未授权时授权按钮也在菜单栏页），Form .grouped

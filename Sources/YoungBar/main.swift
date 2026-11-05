@@ -203,10 +203,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let hotKeyRegistered = registerHotKey()
         refreshLoginItemIfMoved()
         startAutoUpdateChecks()
-        // After an update: say so once in Settings, walk through the guide
-        // again (its permission step just shows it is granted), then show
-        // what changed. Decided once, here — the first walk below can change
-        // what `needsGuide` reads.
+        // After an update: say so once in Settings and show what changed. The
+        // guide is for a first launch only. Decided once, here — the first
+        // walk below can change what `needsGuide` reads.
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let lastVersion = UserDefaults.standard.string(forKey: "lastLaunchedVersion")
         let firstRun = needsGuide
@@ -236,10 +235,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             #if YOUNGBAR_TESTHOOKS
             await runLaunchHooks()
             #endif
-            if updated && !firstRun {
-                afterGuide = showNotes
-                showGuide()
-            }
+            if updated && !firstRun { showNotes() }
             // Saved only now: quitting during the first walk shows the
             // update again next time instead of never.
             UserDefaults.standard.set(version, forKey: "lastLaunchedVersion")

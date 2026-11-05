@@ -1,5 +1,9 @@
 # YoungBar 0.1.6 更新日志
 
+## 优化
+
+- 更新后不再重走使用引导
+
 ## 修复
 
 - ••• 跟随当前桌面的菜单栏颜色
@@ -14,6 +18,10 @@
 - 各个桌面的壁纸明暗不同时，切桌面后 ••• 约 1 秒内变成和其他图标一样的颜色，不用再重启 YoungBar
 
 # English
+
+## Improved
+
+- Updates no longer replay the setup guide
 
 ## Fixed
 

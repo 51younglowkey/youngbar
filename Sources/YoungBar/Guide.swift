@@ -39,8 +39,8 @@ struct GuideView: View {
                 }
             }
             GuideStep(number: 1, title: L10n.t("允许「设备控制与数据访问」", "Allow Device Control and Data Access"),
-                      detail: L10n.t("YoungBar 用它读取、隐藏和排序菜单栏图标，不截屏、不联网。授权后这里会自动更新。",
-                                     "YoungBar uses it to read, hide and reorder menu-bar icons. No screenshots, no network. This updates by itself once allowed.")) {
+                      detail: L10n.t("YoungBar 用它读取、隐藏和排序菜单栏图标。授权后这里会自动更新。",
+                                     "YoungBar uses it to read, hide and reorder menu-bar icons. This updates by itself once allowed.")) {
                 if model.axTrusted {
                     Label(L10n.t("已授权", "Allowed"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)

@@ -29,7 +29,7 @@ YoungBar lives in the menu bar (•••); it has no Dock icon.
 
 ### Install with an agent
 
-Send this to ChatGPT, Doubao, Claude, DeepSeek (DSH), or any other agent:
+Send this to an agent that can run commands on your Mac, such as Claude Code, Codex, or DeepSeek (DSH). ChatGPT or Doubao on the web can't run commands; with those, copy the command further down instead:
 
 > Install YoungBar for me: run `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh`
 

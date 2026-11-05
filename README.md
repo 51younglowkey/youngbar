@@ -29,7 +29,7 @@
 
 ### 用 Agent 安装
 
-把下面这句话发给 ChatGPT、豆包、Claude、DeepSeek（DSH）等任意 Agent：
+把下面这句话发给能在你的 Mac 上运行命令的 Agent，比如 Claude Code、Codex 或 DeepSeek（DSH）。网页版 ChatGPT、豆包运行不了命令，用它们的话请直接复制后面的命令：
 
 > 帮我安装 YoungBar：运行 `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | sh`
 

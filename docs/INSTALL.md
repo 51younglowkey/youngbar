@@ -33,7 +33,7 @@ Because the build is ad-hoc or self-signed:
 
 ## 3. Grant permissions
 
-Open YoungBar → **设置** → **权限**, then:
+The first-launch guide asks for this. If you skipped it, open YoungBar's Settings: until the permission is granted, the **Menu Bar** page has an allow button, and so does the ••• right-click menu. Then:
 
 - **Device Control and Data Access** (the pane called Accessibility before macOS 27):
   enable YoungBar. Without it the strip is empty.

@@ -16,7 +16,7 @@
 ```sh
 sh Scripts/build.sh                    # release → build/YoungBar.app（不含测试钩子）
 TESTHOOKS=1 sh Scripts/build.sh        # 带真机自检的测试版
-swift test --disable-sandbox           # YoungBarCore 单元测试（改代码后第一次偶尔报找不到 TestingMacros 插件，再跑一次即可）
+swift test --disable-sandbox           # YoungBarCore 单元测试（改代码后偶尔报找不到 TestingMacros 插件，再跑一次；打包后可能连续报，加 --scratch-path <新目录> 用全新构建）
 open build/YoungBar.app
 ```
 
@@ -94,6 +94,7 @@ Vendor/
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。
 - 构建时可以不退出正在运行的 YoungBar：`build.sh` 会整包替换，不再原地覆盖可执行文件。**但构建完要重启它**：运行中的进程和磁盘上的 app 对不上时，登录项查询和注册都报 error 22，设置里的「登录时打开」显示关闭、也打不开（2026-11-04 遇到过，重启后恢复；登录项本身没丢）。
 - 从 worktree 跑 app 时，`refreshLoginItemIfMoved` 见到路径变了会把登录项改注册到 worktree。启动前先 `defaults write studio.wuyiyang.youngbar loginItemToken "<worktree>/build/YoungBar.app|<CFBundleVersion>"`，退出后写回原值，再开回主目录的 app：登录项不动，defaults 也和备份一样。
+- 模拟全新安装要 `defaults delete` 掉 `itemModes`、`hiddenBundles`、`lastLaunchedVersion`、`sessionActive` 和 `barOptions` 里的 `onboarded`：`defaults import` 只合并，不删键。导入运行中导出的备份时先把 `sessionActive` 改成 false，否则下次启动走崩溃恢复。模拟升级只要 `defaults write … lastLaunchedVersion <旧版本>`。
 - 设置窗口截图：`open -n --env YOUNGBAR_SETTINGS_PREVIEW=zh build/YoungBar.app`（或 `=en`）。只开设置窗口、**不碰菜单栏**，可以和正在运行的 YoungBar 并存；深浅两套截图写到 `~/Library/Application Support/YoungBar/preview-*.png`，然后自动退出。
 - 自检会动真实菜单栏：点击、隐藏、拖动。**结束后必须恢复原状态**；测试打开的面板/菜单要关闭。
 - 改状态数字时同步更新 `docs/STATUS.md`；结论变了追加「更正第 N 轮」，不改历史条目。

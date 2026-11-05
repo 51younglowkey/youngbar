@@ -5,7 +5,7 @@
 >
 > 2026-11-05 改写过 Git 历史（去掉 Claude 尾注）：下面引用的短哈希是改写前的，对照表见 `JOURNAL.md` 同日条目。
 >
-> 最后核对：**2026-11-05 03:10 +00:00**，版本 **0.1.6 (7)**（发布前；已发布的最新版是 0.1.5），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
+> 最后核对：**2026-11-05 03:45 +00:00**，版本 **0.1.6 (7)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 
 ## 1. 构建
 
@@ -183,7 +183,18 @@
 
 发布步骤已在 2026-11-04 全部做完，结果见本节开头和上面的第二轮清单；步骤原文在提交 `e31b540` 的这个文件里。
 
-## 2.5 ••• 跟随当前桌面（2026-11-05，未发布）
+## 2.5 0.1.6（2026-11-05 已发布）：••• 跟随当前桌面、更新后不再走引导
+
+> [Release v0.1.6](https://github.com/51younglowkey/youngbar/releases/tag/v0.1.6)：`YoungBar-0.1.6.zip` + `.sha256`（SHA-256 `22fffc47b74003cc6aec2287acc93ea032c98d099632a7f65a2b334c551a3385`），tag 指向 `ab8d730`，`releases/latest` 指向它。线上下载的 zip 与测试过的那份逐字节相同。签名 `Authority=YoungBar Local Signing`，满足 0.1.1–0.1.5 发布包的 designated requirement；`strings` 里没有 `*TEST`。
+
+| 发布后 | 结果 | 证据 |
+|---|---|---|
+| 端到端更新 | ✅ 测试版假装 0.1.5 → 找到 0.1.6 → 下载、校验、安装、重新打开（新 PID）；只弹「更新内容」 | `updatetest.json`：`offered:0.1.6`、`selfAccepted:true`；装好的可执行文件与发布包 SHA-256 相同（`5059cc89…`），没有测试钩子；`update.log` 记了这次安装。`Updater.swift` 与 0.1.5 没有差异，但真正的 0.1.5 二进制没有跑过这一遍 |
+| 一键安装 | ✅ 发布事件触发的 `install-script.yml`：全新安装和覆盖更新都装的是 0.1.6；推 tag 触发的那次显示 cancelled，和 0.1.5 时一样 | Actions 日志 `Downloading YoungBar 0.1.6`、`YoungBar 0.1.6 is installed` |
+| CI | ✅ 公开和私有仓库 `v0.1.6` 通过；公开仓库 main 那次写这条时还在跑 | Actions |
+| 更新后弹什么 | ✅ 从 0.1.3、0.1.4、0.1.5 和没有版本记录的老版本启动 0.1.6，都只弹「更新内容」；同版本重启什么都不弹；全新安装只弹使用引导，关掉后不再弹别的。是在 0.1.6 上改 `lastLaunchedVersion` 模拟的，不是真的从老版本升上来 | AX 读窗口名；模拟后 defaults 与备份无差异 |
+| 本机 | ✅ `build/YoungBar.app` 换成了发布包本身。defaults 与会话开始前的备份只差 `lastLaunchedVersion` 和 `loginItemToken`（都是版本号） | `diff`。登录项状态没有独立确认 |
+| GitHub Contributors | ⏳ 按提交读的作者只有 `51younglowkey`；发布后侧栏仍列着 `claude` 和 `Youngbar`（缓存，见 `JOURNAL.md` 2026-11-05） | `contributors_list` 页面、GraphQL `authors` |
 
 状态项按钮的外观启动后不变，所以 ••• 改问窗口服务器：`SLSGetMenuAppearanceThemeOnSpace` 按桌面返回菜单栏外观（0 浅、1 深）。不建状态项，不要屏幕录制，不读像素。过程见 `JOURNAL.md` 2026-11-05。
 
@@ -221,6 +232,7 @@
 ## 4. 下一步
 
 1. 作者把系统切到浅色，用 `YOUNGBAR_BARLOOKTEST` 切一轮桌面（包括深色壁纸和全屏空间）：••• 跟随桌面还没在系统浅色下测过（见第 3 节）。
-2. 有第二块显示器时验证：控件、收纳条位置、点开隐藏项、••• 跟的是它所在那块屏的桌面。
-3. 从收纳条点开被 « 收走的项。
-4. 重启验证图标间隙；登出验证开机自启动。
+2. 过一两天再看 GitHub Contributors 侧栏；`claude` 或 `Youngbar` 还在就由作者找 GitHub Support 清除。
+3. 有第二块显示器时验证：控件、收纳条位置、点开隐藏项、••• 跟的是它所在那块屏的桌面。
+4. 从收纳条点开被 « 收走的项。
+5. 重启验证图标间隙；登出验证开机自启动。

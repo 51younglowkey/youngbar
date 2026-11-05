@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts
 - **Layout file**: export every icon's state, the order and all options to one JSON file, and import it on another Mac.
 - **Crash-safe**: a normal quit reveals every concealed item first; after a crash the next launch reveals everything before re-applying rules. `--reveal-all` is a rescue flag.
 - **Bilingual**: Chinese and English, switchable in General.
-- **Local only**: no telemetry, no screen capture; the only network use is the update check. About 0.3% CPU at rest.
+- **Light**: about 0.3% CPU at rest.
 
 If something looks wrong, *Copy Diagnostics* in the ••• menu gives a short report to paste to the author. See [docs/FAQ.md](docs/FAQ.md) for the IP, licence, private-API and distribution questions.
 

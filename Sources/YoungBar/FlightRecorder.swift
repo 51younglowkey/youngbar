@@ -9,8 +9,7 @@ import YoungBarCore
 /// Keeps what happened on this Mac in `events.log`, so a bug that only shows on
 /// someone else's setup comes with its history: every move of the •••, and
 /// what changed around it. The lines are for reading a report, so English only.
-/// Local: nothing is sent; "Copy Diagnostics" puts the newest lines in the text
-/// the user decides to paste.
+/// "Copy Diagnostics" puts the newest lines in the text the user pastes.
 @MainActor
 final class FlightRecorder {
     private var log = EventLog()

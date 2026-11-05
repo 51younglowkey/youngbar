@@ -80,7 +80,6 @@ enum Diagnostics {
 /// chat when something looks wrong. Versions, the displays, the shortcut, where
 /// the control and YoungBar's own item sit, each icon's state by name, whether
 /// the ••• is where it should be, and the flight recorder's newest lines.
-/// Nothing leaves the Mac unless the user pastes it.
 extension BarApp {
     /// Enough to see how it came to this, and short enough to paste. The whole
     /// log is `events.log`, one button away in the alert.

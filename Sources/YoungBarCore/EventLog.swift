@@ -9,7 +9,7 @@ import Foundation
 /// The flight recorder's memory: the last few hundred things that happened,
 /// one line each. A report like "the ••• jumps around" happens over time, on a
 /// Mac nobody here can touch; a snapshot taken afterwards shows the ••• already
-/// back in place. Stays on the Mac: it only leaves when the user copies it.
+/// back in place.
 public struct EventLog: Equatable, Sendable {
     struct Entry: Equatable, Sendable {
         /// Empty for a line restored from the file, which already has its time.

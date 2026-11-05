@@ -60,7 +60,7 @@ Sources/YoungBar/
   SettingsView.swift    设置窗口内容（SwiftUI）：侧栏、菜单栏 / 外观 / 通用三页（按使用频率排，打开时总是先显示菜单栏页；未授权时授权按钮也在菜单栏页），Form .grouped
   Theme.swift           配色、主题图（缓存）、控件图标
   Diagnostics.swift     运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）；「复制诊断信息」的纯文本报告（摘要 + ••• 的只读检查 + 最近 60 条事件）
-  FlightRecorder.swift  飞行记录器：本机 `events.log`（最多 500 行，重启不丢），记 ••• 每次移动和谁移动的（YoungBar 自己 / 外部）、屏幕排列、切桌面、睡眠唤醒、权限、引擎事件。只在用户复制诊断信息时才离开这台 Mac；行文只用英文
+  FlightRecorder.swift  飞行记录器：本机 `events.log`（最多 500 行，重启不丢），记 ••• 每次移动和谁移动的（YoungBar 自己 / 外部）、屏幕排列、切桌面、睡眠唤醒、权限、引擎事件。复制诊断信息时带上最近的部分；行文只用英文
   TestHooks.swift       真机自检，只在 TESTHOOKS=1 构建时编译
 Sources/YoungBarCore/   纯逻辑（事件日志、••• 位置检查、排序与落点、溢出判断、快捷键组合与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值），有单元测试；Linux 上也能编译
 Tests/YoungBarCoreTests/

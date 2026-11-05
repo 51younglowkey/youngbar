@@ -5,7 +5,7 @@
 >
 > 2026-11-05 改写过 Git 历史（去掉 Claude 尾注）：下面引用的短哈希是改写前的，对照表见 `JOURNAL.md` 同日条目。
 >
-> 最后核对：**2026-11-05 00:40 +00:00**，版本 **0.1.5 (6)**（已发布；2.5 的修复在这之上，还没发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
+> 最后核对：**2026-11-05 03:10 +00:00**，版本 **0.1.6 (7)**（发布前；已发布的最新版是 0.1.5），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 
 ## 1. 构建
 
@@ -201,6 +201,8 @@
 | 回归 | ✅ `YOUNGBAR_APPEARANCETEST`、`YOUNGBAR_CONTROLYTEST`（黑、灰蓝、浅色桌面各一次）；`swift test` | `passed:true`、`controlIgnoresSetting:true`、`restored:true`、`levelAfter:true`；72 passed |
 | 测完复原 | ✅ 重新打开主目录的 app，`defaults export` 和跑之前的备份没有差异 | `diff` 无输出，SHA-256 相同 |
 | 开销 | ✅ 读一次约 37 微秒，只在切桌面和每次刷新时读 | 2000 次取平均 |
+| 发布前自检（0.1.6） | ✅ `YOUNGBAR_SELFTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_CONFIGTEST`、`YOUNGBAR_KEYBOARDTEST`；⚠️ `YOUNGBAR_OVERFLOWTEST` 没有结论（`crowded:false`，这轮代码没动）；❌→✅ `YOUNGBAR_KEYBOARDTEST` 第一次没过（连按两下 ⌘ 没打开），当时有人在操作这台 Mac（最前面的应用变了，判断是干扰，属推断），重跑通过 | 各 JSON 的 `passed:true`；`overflowtest.json` 的 `inconclusive`、`restored:true`；跑完 defaults 和跑之前没有差异 |
+| 系统浅色 | ⬜ 作者决定跳过，0.1.6 发布时没测 | 见第 3 节、第 4 节第 1 条 |
 
 ## 3. 验证边界（不许含糊）
 

@@ -3,7 +3,7 @@
 > 只写**当前**状态和它的证据。0.1.0 及之前的阶段记录（截图缓存、旧 AppKit 设置窗口等）
 > 已原样移到 [`JOURNAL.md`](JOURNAL.md) 附录。
 >
-> 最后核对：**2026-11-04 23:55 +00:00**，版本 **0.1.5 (6)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
+> 最后核对：**2026-11-05 00:40 +00:00**，版本 **0.1.5 (6)**（已发布；2.5 的修复在这之上，还没发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），macOS 27。
 
 ## 1. 构建
 
@@ -12,7 +12,7 @@
 | 命令 | `sh Scripts/build.sh` → `build/YoungBar.app` | 构建通过（2026-10-29） |
 | 工具链 | 只需命令行工具：Swift 6.4（CLT 27.0，2026-10-26 安装），**不需要 Xcode** | `swift --version`；包内不再使用 `@State`（宏插件只随 Xcode） |
 | 测试版构建 | `TESTHOOKS=1 sh Scripts/build.sh`：编入 `TestHooks.swift` 的真机自检 | 正式版 `strings` 中 `YOUNGBAR_*TEST` 0 处；`otool -L` 无 ScreenCaptureKit |
-| 单元测试 | `swift test --disable-sandbox`：70 项（排序与落点、溢出判断、快捷键与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言） | 70 passed（2026-11-04，Linux 与 CI 的 macOS） |
+| 单元测试 | `swift test --disable-sandbox`：72 项（排序与落点、溢出判断、快捷键与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值） | 72 passed（2026-11-05，本机 macOS 27）；70 passed（2026-11-04，Linux 与 CI 的 macOS），新增的 2 项还没在 Linux 上跑 |
 | CI（0.1.5 起） | `.github/workflows/ci.yml`：Linux（swift:6.4-noble）跑单元测试；`xcode-27`（macOS 27.0.1、Xcode 27.1、Swift 6.4）跑单元测试、测试版编译（`-DYOUNGBAR_TESTHOOKS`）和 `Scripts/verify.sh`。`install-script.yml`：同一种机器上用 install.sh 装线上最新版、覆盖更新、拒绝 ad-hoc 包、证书比对拒绝别的签名 | Actions 日志里的 `sw_vers` / `swift --version`；见 2.4 |
 | Linux 上的单元测试 | `Package.swift` 在 Linux 上只声明 YoungBarCore 和测试，`swift test` 可以在没有 Mac 的地方跑 | Docker `swift:6.4-noble` 与 CI：70 passed |
 | 签名 | 本地 `YoungBar Local Signing` 证书；重建后辅助功能授权保持 | `codesign -dv`；重建后自检仍 `axTrusted:true` |
@@ -130,7 +130,6 @@
 | 代码整理 | ✅ main.swift 1507 行拆成 main / ControlPanel / Shelf / LayoutActions / SettingsBridge / EngineSync；拆分时逐行核对没有丢行 | CI 编译通过 |
 
 **没有处理（审查报告里提到，留给以后）**：
-- 各桌面壁纸明暗不同时，••• 只跟启动时所在的桌面：状态项按钮的外观启动后不再变（`YOUNGBAR_BARLOOKTEST=34`：切 6 次桌面只有 1 条记录；黑色桌面启动后切到浅色桌面，白色 ••• 几乎看不见）。重启 YoungBar 可以重新取色。不是回归，0.1.4 也不跟壁纸；已写进更新日志的说明。
 - 全屏空间里菜单栏隐藏时，••• 浮在应用上面（0.1.4 起就这样）。这一轮试过去掉 `.fullScreenAuxiliary`，复审指出那样全屏时就没有任何可点的地方（隐藏生效时 macOS 不画 YoungBar 自己的状态项），已撤回；要在真机上找到判断「全屏菜单栏是否滑下」的办法再做。菜单栏设为「自动隐藏」时同理。
 - 收纳条拖动中途如果正好重建，这次拖动会丢；只保留了滚动位置。
 - 换包失败只写在 `update.log`，下次启动不提示。
@@ -182,8 +181,28 @@
 
 发布步骤已在 2026-11-04 全部做完，结果见本节开头和上面的第二轮清单；步骤原文在提交 `e31b540` 的这个文件里。
 
+## 2.5 ••• 跟随当前桌面（2026-11-05，未发布）
+
+状态项按钮的外观启动后不变，所以 ••• 改问窗口服务器：`SLSGetMenuAppearanceThemeOnSpace` 按桌面返回菜单栏外观（0 浅、1 深）。不建状态项，不要屏幕录制，不读像素。过程见 `JOURNAL.md` 2026-11-05。
+
+作者的 Mac：单屏、系统深色。桌面 5 黑、3 接近黑、8 和 6 海军蓝、4 灰蓝（都读到 1），7 浅色（读到 0）。下表的「一致」是 ••• 和微信图标相对菜单栏背景的明暗方向相同（自写脚本比对 `screencapture` 的连拍，读屏幕的是测试脚本，不是 app）。
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 修之前（基线） | ❌ 黑色桌面启动后切到浅色桌面，••• 仍是白的 | 脚本：浅色栏（亮度 222）上 ••• +29、微信 −189；`barlooktest.json` 切 10 次只有 1 条记录 |
+| 从黑色 / 灰蓝 / 浅色桌面启动后来回切 | ✅ 切换约 1 秒后全部一致；明暗相反的桌面之间，切换动画里有一小段（不到 1 秒）••• 还是旧颜色（其他图标先变，`activeSpaceDidChangeNotification` 动画快结束才到） | 约 +1.1 s 和 +2.2 s 的连拍共 34 张，0 张不一致（约 +0.6 s 的 17 张有 9 张还在变）。`barlooktest.json` 三次都是 `passed:true`、`longestMismatch:0`，切 8 / 5 / 4 次，`spaceNotices` 次数相同。亮度：黑 ••• +228、微信 +229；海军蓝 +205、+206；灰蓝 +128、+129；浅色 −188、−189。![连拍](images/control-follows-desktop.png) |
+| 正式版（不带测试钩子） | ✅ 同样来回切，一致 | 9 张连拍 0 张不一致；`strings` 里自检开关 0 处，`otool -L` 无 ScreenCaptureKit |
+| 全屏空间 | ✅ 浅色桌面上全屏一个应用：读到 1，白色 ••• 落在刘海屏全屏的黑带上；退出后变回深色 | `barlooktest.json`：`space=1570 theme=1`，退出后 `space=7 theme=0`；截图 ••• +229 |
+| 启动核对 | ✅ 按钮和窗口服务器对不上时不信接口；对得上时信 | 从浅色桌面启动、停在黑色桌面时跑一次：`launchCheckAtEnd {button:light, theme:dark, trusts:false}`；从黑色和灰蓝启动、结束时一致：`trusts:true`。三个桌面启动后都是 `distrusted:false` |
+| 不信接口时的回退 | ✅ ••• 跟按钮（和 0.1.5 一样不跟桌面），恢复信任后下一次同步就对了 | `YOUNGBAR_BARLOOK_DISTRUST=1`：`control=dark`、`space=7 theme=0`，浅色栏上 ••• +29；之后截图 −188 |
+| 不影响引擎 | ✅ 没有新建或重建状态项，切桌面不换断言，隐藏的图标不出来 | `dimble.log` 同一段：切 12 次，13 条 `converge: no-op`，0 条 `swapping`；`concealedCount` 一直是 5、`itemCount` 一直是 12 |
+| 回归 | ✅ `YOUNGBAR_APPEARANCETEST`、`YOUNGBAR_CONTROLYTEST`（黑、灰蓝、浅色桌面各一次）；`swift test` | `passed:true`、`controlIgnoresSetting:true`、`restored:true`、`levelAfter:true`；72 passed |
+| 测完复原 | ✅ 重新打开主目录的 app，`defaults export` 和跑之前的备份没有差异 | `diff` 无输出，SHA-256 相同 |
+| 开销 | ✅ 读一次约 37 微秒，只在切桌面和每次刷新时读 | 2000 次取平均 |
+
 ## 3. 验证边界（不许含糊）
 
+- ••• 跟随桌面只在**系统深色**、内建屏上测过。没有测（要改系统设置或要第二块屏）：系统浅色配深色壁纸、同一桌面换壁纸、系统切深浅色的那一刻、「减少透明度」和菜单栏背景设置、第二块屏。这些情况下如果启动时接口和按钮对不上，会回退到按钮；启动之后才出现的不一致，要等重启才会发现。
 - **多显示器没有验证**（手头只有内建屏）。已做的只是代码层面：显示器增减时把控件放回状态项旁；
   空白处点击、溢出判断只看控件所在那块屏；兜底位置用主屏而不是「当前有键盘焦点的屏」。
 - 溢出只在「把隐藏项全部显示」这一种拥挤方式下实测过一次；被 « 收走的是有道。
@@ -197,7 +216,7 @@
 
 ## 4. 下一步
 
-1. 各桌面壁纸明暗不同时，让 ••• 跟上当前桌面（见 2.4「没有处理」；要先找到切桌面后读得到真实菜单栏外观的办法）。
-2. 有第二块显示器时验证：控件、收纳条位置、点开隐藏项。
+1. 作者把系统切到浅色，用 `YOUNGBAR_BARLOOKTEST` 切一轮桌面（包括深色壁纸和全屏空间）：••• 跟随桌面还没在系统浅色下测过（见第 3 节）。
+2. 有第二块显示器时验证：控件、收纳条位置、点开隐藏项、••• 跟的是它所在那块屏的桌面。
 3. 从收纳条点开被 « 收走的项。
 4. 重启验证图标间隙；登出验证开机自启动。

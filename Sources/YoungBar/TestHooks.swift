@@ -1911,32 +1911,89 @@ extension BarApp {
     }
 
     /// Opt-in (`YOUNGBAR_BARLOOKTEST=<seconds>`): records every change in what
-    /// the status item's button and the ••• report, for that long, while the
-    /// desktops are switched from outside (wallpapers can differ per desktop).
+    /// the window server, the status item's button and the ••• report, for
+    /// that long, while the desktops are switched from outside (wallpapers
+    /// can differ per desktop). Passes when the ••• never stays off the bar's
+    /// look for more than 2 s. `YOUNGBAR_BARLOOK_DISTRUST=1` runs it as after
+    /// a failed launch check: the ••• must then go by the button instead.
     func runBarLookTest(seconds: Double) async {
         func look(_ appearance: NSAppearance?) -> String {
             guard let appearance else { return "none" }
             return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? "dark" : "light"
         }
+        let trustedBefore = menuBarThemeTrusted
+        if ProcessInfo.processInfo.environment["YOUNGBAR_BARLOOK_DISTRUST"] == "1" {
+            menuBarThemeTrusted = false
+            syncControlAppearance()
+        }
         var samples: [[String: Any]] = []
         var last = ""
+        var themes: Set<Int32> = []
+        var spaces: Set<UInt64> = []
+        var mismatchSince: Date?
+        var longestMismatch = 0.0
         let started = Date()
+        func at(_ date: Date) -> Double { (date.timeIntervalSince(started) * 100).rounded() / 100 }
+        @MainActor final class Notices { var times: [Date] = [] }
+        let notices = Notices()
+        let observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
+            let now = Date()
+            Task { @MainActor in notices.times.append(now) }
+        }
         while Date().timeIntervalSince(started) < seconds {
             let button = statusItem.button
+            let space = MenuBarLook.space(on: controlPanel?.screen)
+            let theme = space.flatMap { MenuBarLook.rawTheme(space: $0) }
+            if let space { spaces.insert(space) }
+            if let theme { themes.insert(theme) }
+            let bar = look(menuBarAppearance)
+            let control = look(controlPanel?.effectiveAppearance)
             let state: [String: String] = [
-                "button": look(button?.effectiveAppearance),
-                "window": look(button?.window?.effectiveAppearance),
-                "control": look(controlPanel?.effectiveAppearance),
                 "app": look(NSApp.effectiveAppearance),
+                "bar": bar,
+                "button": look(button?.effectiveAppearance),
+                "control": control,
+                "space": space.map(String.init) ?? "none",
+                "theme": theme.map(String.init) ?? "none",
+                "window": look(button?.window?.effectiveAppearance),
             ]
             let line = state.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
             if line != last {
-                samples.append(["t": (Date().timeIntervalSince(started) * 10).rounded() / 10, "state": line])
+                samples.append(["t": at(Date()), "state": line])
                 last = line
             }
-            try? await Task.sleep(for: .milliseconds(200))
+            let now = Date()
+            if control == bar {
+                mismatchSince = nil
+            } else {
+                let since = mismatchSince ?? now
+                mismatchSince = since
+                longestMismatch = max(longestMismatch, now.timeIntervalSince(since))
+            }
+            try? await Task.sleep(for: .milliseconds(50))
         }
-        writeJSON(["at": ISO8601DateFormatter().string(from: Date()), "samples": samples], name: "barlooktest.json")
+        NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        let distrusted = !menuBarThemeTrusted
+        // The launch check, run here: away from the launch desktop the button
+        // can differ from the window server, and then the check must say so.
+        menuBarThemeTrusted = true
+        syncControlAppearance()
+        let endButton = look(statusItem.button?.effectiveAppearance)
+        let endBar = look(menuBarAppearance)
+        checkMenuBarTheme()
+        let checkTrusts = menuBarThemeTrusted
+        menuBarThemeTrusted = trustedBefore
+        syncControlAppearance()
+        writeJSON(["at": ISO8601DateFormatter().string(from: Date()), "samples": samples,
+                   "launchCheckAtEnd": ["button": endButton, "theme": endBar, "trusts": checkTrusts],
+                   "spaceNotices": notices.times.map(at),
+                   "spaces": spaces.sorted().map(String.init),
+                   "themes": themes.sorted().map(Int.init),
+                   "distrusted": distrusted,
+                   "buttonName": statusItem.button?.effectiveAppearance.name.rawValue ?? "none",
+                   "longestMismatch": (longestMismatch * 100).rounded() / 100,
+                   "passed": longestMismatch < 2 && !samples.isEmpty], name: "barlooktest.json")
     }
 
     /// Opt-in (`YOUNGBAR_EMPTYSHELFTEST=1`): with nothing hidden, the strip

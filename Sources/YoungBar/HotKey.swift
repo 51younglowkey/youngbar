@@ -81,7 +81,10 @@ extension BarApp {
         let hotKeyID = EventHotKeyID(signature: OSType(0x5942_4152), id: 1) // "YBAR"
         let status = RegisterEventHotKey(hotKey.keyCode, hotKey.modifiers, hotKeyID,
                                          GetApplicationEventTarget(), 0, &hotKeyRef)
-        if status != noErr { NSLog("YoungBar hotkey registration failed: \(status)") }
+        if status != noErr {
+            NSLog("YoungBar hotkey registration failed: \(status)")
+            flight.note("shortcut \(hotKeyDisplay) could not be registered: \(status)")
+        }
         return status == noErr
     }
 

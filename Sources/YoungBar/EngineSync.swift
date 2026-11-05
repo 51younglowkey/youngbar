@@ -94,6 +94,7 @@ extension BarApp {
             let adopted = await engine.openAdoptionWindow(for: bundle)
             if !adopted { adoptionMissed.insert(bundle) }
             NSLog("YoungBar: \(bundle) \(adopted ? "adopted" : "not seen") after launch")
+            flight.note("\(bundle) \(adopted ? "adopted" : "not seen") after launch")
         }
     }
 
@@ -135,11 +136,18 @@ extension BarApp {
             for await event in events {
                 guard let self else { return }
                 switch event {
-                case .assertionTornDown, .convergeFailed:
+                case .assertionTornDown:
+                    self.flight.note("engine: hide assertion torn down")
+                    self.scheduleReapply(after: 1)
+                case .convergeFailed(let reason):
+                    self.flight.note("engine: converge failed: \(reason)")
                     self.scheduleReapply(after: 1)
                 case .itemsChanged:
+                    self.flight.note("engine: items changed", mergeKey: "items-changed")
                     // An app's item came or went: its mode applies to it.
                     self.scheduleReapply(after: 2)
+                case .availabilityChanged(let available):
+                    self.flight.note("engine: native hiding \(available ? "available" : "unavailable")")
                 default:
                     break
                 }
@@ -169,6 +177,7 @@ extension BarApp {
             // icon it can't hide, most likely. Wait for the layout to change.
             reapplyPausedFor = signature
             NSLog("YoungBar: the engine doesn't settle on this layout; pausing re-applies until it changes")
+            flight.note("engine: doesn't settle on this layout; re-applies paused")
             return
         }
         // Not more often than every 10 s: an item whose identity changes

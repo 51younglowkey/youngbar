@@ -191,6 +191,13 @@ extension BarApp {
         syncControlAppearance()
         panel.orderFrontRegardless()
         applyUpdateNotice()
+        if let controlMoveObserver { NotificationCenter.default.removeObserver(controlMoveObserver) }
+        controlMoveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.controlDidMove() }
+        }
+        flight.controlFrame = panel.frame
+        flight.note("••• installed x\(Int(panel.frame.minX)) y\(Int(panel.frame.minY)) w\(Int(panel.frame.width)) · screens \(screenLayoutText)")
     }
 
     /// What the menu bar itself looks like. It isn't YoungBar's appearance:
@@ -222,6 +229,7 @@ extension BarApp {
               let dark = MenuBarLook.isDark(on: controlPanel?.screen) else { return }
         guard dark != (button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) else { return }
         NSLog("YoungBar: the window server's menu-bar look differs from the status item's; using the status item's")
+        flight.note("menu bar look: window server differs from the status item; using the status item")
         menuBarThemeTrusted = false
         syncControlAppearance()
     }
@@ -245,25 +253,39 @@ extension BarApp {
         return max(screen.safeAreaInsets.top, NSStatusBar.system.thickness)
     }
 
+    /// The leftmost icon the ••• sits beside on `screen`. Icons held by macOS's
+    /// « (or under the notch) are not on the bar; following them would take
+    /// the control out of sight too.
+    func leadingIcon(in snapshot: EngineSnapshot, on screen: NSScreen) -> (key: String, frame: CGRect)? {
+        let outOfSight = outOfSightKeys(snapshot)
+        return snapshot.items.compactMap { item -> (key: String, frame: CGRect)? in
+            let key = item.id.sectionKey.rawValue
+            guard let frame = item.frame,
+                  item.id.bundleID != Bundle.main.bundleIdentifier,
+                  !outOfSight.contains(key),
+                  frame.minX > screen.frame.midX,
+                  frame.minX < screen.frame.maxX else { return nil }
+            return (key, frame)
+        }.min { $0.frame.minX < $1.frame.minX }
+    }
+
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
         guard let panel = controlPanel,
               let screen = panel.screen ?? NSScreen.screens.first else { return }
-        // Icons held by macOS's « (or under the notch) are not on the bar;
-        // following them would take the control out of sight too.
         let outOfSight = outOfSightKeys(snapshot)
         // Item frames are in the global top-left space: this screen's bar
         // runs from `barTop` down.
         let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
         let barTop = primaryTop - screen.frame.maxY
-        let leadingFrame = snapshot.items.compactMap { item -> CGRect? in
-            guard let frame = item.frame,
-                  item.id.bundleID != Bundle.main.bundleIdentifier,
-                  !outOfSight.contains(item.id.sectionKey.rawValue),
-                  frame.minX > screen.frame.midX,
-                  frame.minX < screen.frame.maxX else { return nil }
-            return frame
-        }.min { $0.minX < $1.minX }
-        guard let leadingFrame else { return }
+        guard let leading = leadingIcon(in: snapshot, on: screen) else {
+            if flight.hadIconToFollow {
+                flight.hadIconToFollow = false
+                flight.note("••• no icon to follow on this bar; stays at x\(Int(panel.frame.minX))")
+            }
+            return
+        }
+        flight.hadIconToFollow = true
+        let leadingFrame = leading.frame
         let leadingIcon = leadingFrame.minX
         // Level with the icons beside it.
         var y = panel.frame.minY
@@ -273,6 +295,7 @@ extension BarApp {
         let floor = notchVisibleMinX ?? (screen.frame.minX + 12)
         var width = controlWidth
         var x = max(floor, leadingIcon - width - 6)
+        var inPile = false
         // A full bar: YoungBar's own item is in macOS's « with the others,
         // and the « sits at the right of their pile. The control takes the
         // free left part of that slot, narrowed so it doesn't cover the «.
@@ -285,6 +308,7 @@ extension BarApp {
            }).min() {
             width = 22
             x = max(floor, pile)
+            inPile = true
         }
         if abs(panel.frame.minX - x) > 1 || abs(panel.frame.width - width) > 0.5 || abs(panel.frame.minY - y) > 0.5 {
             // Slide with the bar's own shift instead of jumping a beat later.
@@ -292,8 +316,14 @@ extension BarApp {
             // (`animator()` on this panel never applied the move, leaving
             // the control wherever it was installed.)
             let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && abs(panel.frame.minX - x) < 200
-            panel.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: panel.frame.height)),
-                           display: true, animate: animate)
+            let target = NSRect(origin: origin, size: NSSize(width: width, height: panel.frame.height))
+            let reason = "follows \(name(for: leading.key)) x\(Int(leadingIcon))"
+                + (inPile ? " · in « pile" : "") + (x == floor ? " · at left limit" : "")
+            recordControlMove(from: panel.frame, to: target, reason: reason, snapshot: snapshot)
+            flight.controlFrame = target
+            flight.ownMoveUntil = Date().addingTimeInterval(1)
+            panel.setFrame(target, display: true, animate: animate)
+            flight.ownMoveUntil = Date().addingTimeInterval(0.5)
         }
         if expanded && !shelfAnchored { positionShelf() }
     }

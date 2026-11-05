@@ -1,0 +1,52 @@
+name: 反馈问题 / Report a bug
+description: 带上诊断信息，问题才查得出来。 Diagnostics are what make a bug findable.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **右键点 ••• → 复制诊断信息**，再贴到下面。它只包含版本、屏幕排列、图标名称和位置，以及最近的事件记录，不含窗口内容；贴之前可以先看一遍。
+        **Right-click ••• → Copy Diagnostics** and paste it below. It has versions, display layout, icon names and positions, and recent events, nothing from your windows. Read it first if you like.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断信息 / Diagnostics
+      description: 最好在问题刚出现时复制。打不开菜单时写明，并附 `~/Library/Application Support/YoungBar/events.log`。 Copy it right after the problem happens if you can. If the menu won't open, say so and attach that file.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 看到了什么，本来应该是什么样。 What you saw, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: when
+    attributes:
+      label: 当时在做什么 / What you were doing
+      description: 比如切桌面、接外接屏、合盖唤醒、全屏、打开某个应用。 For example switching desktops, plugging in a display, waking the Mac, going full screen, opening an app.
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: 多久出现一次 / How often
+      options:
+        - 每次都会 / Every time
+        - 经常 / Often
+        - 偶尔 / Now and then
+        - 只见过一次 / Once
+    validations:
+      required: true
+  - type: input
+    id: others
+    attributes:
+      label: 其他菜单栏工具 / Other menu bar tools
+      description: 比如 Bartender、Ice、iBar。这些工具会和 YoungBar 互相影响。 For example Bartender, Ice or iBar. They can affect each other.
+  - type: textarea
+    id: media
+    attributes:
+      label: 截图或录屏 / Screenshot or recording
+      description: 会动的问题（比如 ••• 乱跳）录屏最有用。⌘⇧5 可以录屏。 For anything that moves, a recording helps most. ⌘⇧5 records the screen.

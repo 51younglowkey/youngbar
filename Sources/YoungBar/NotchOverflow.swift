@@ -50,6 +50,7 @@ extension BarApp {
         guard let panel = controlPanel else { return }
         let onScreen = NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
         guard !onScreen || panel.screen == nil else { return }
+        flight.note("••• left the screens at x\(Int(panel.frame.minX)) y\(Int(panel.frame.minY)); reinstalling")
         closeShelf()
         panel.orderOut(nil)
         controlPanel = nil

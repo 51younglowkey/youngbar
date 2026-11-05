@@ -84,6 +84,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var nameCache: [String: String] = [:]
     var controlPanel: NSPanel?
     var controlButton: BarControlButton?
+    /// Whether the window server's menu-bar look is used for the •••; cleared
+    /// by `checkMenuBarTheme` if it fails its one check at launch.
+    var menuBarThemeTrusted = true
     var shelfPanel: NSPanel?
     var gearButton: BarControlButton?
     var hotKeyRef: EventHotKeyRef?
@@ -322,6 +325,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
                 Task { @MainActor in self?.refreshSoon() }
             })
         }
+        // Another desktop can mean another wallpaper, so another look for the bar.
+        workspaceObservers.append(center.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.syncControlAppearance() }
+        })
         workspaceObservers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
@@ -385,6 +393,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             }
             await engine.setModel(currentModel())
             started = true
+            checkMenuBarTheme()
         }
         let expired = Set(shownUntil.filter { $0.value <= Date() }.keys)
         if !expired.isEmpty {

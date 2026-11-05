@@ -42,6 +42,7 @@ macOS 27 的界面叫「设备控制与数据访问」，不是旧的「辅助�
 Sources/YoungBar/
   main.swift            BarApp 的状态、启动/退出、刷新节奏、顺序校准、名称与图标查找（~610 行）
   ControlPanel.swift    ••• 控件（浮在空白状态项上的面板，外观跟随菜单栏）、右键菜单、菜单栏按钮图片
+  MenuBarLook.swift     问窗口服务器当前桌面的菜单栏是深是浅（SkyLight 私有调用，运行时解析，拿不到就回到按钮的外观）
   Shelf.swift           收纳条的打开与绘制、空收纳条的「点图标收进来」、从收纳条原地打开（AXPress / 显示后点击）
   LayoutActions.swift   显示方式、排序、全部隐藏/显示、交给引擎的模型（currentModel）
   SettingsBridge.swift  设置窗口的回调、权限、登录项、图标间隙
@@ -60,7 +61,7 @@ Sources/YoungBar/
   Theme.swift           配色、主题图（缓存）、控件图标
   Diagnostics.swift     运行态 JSON（YOUNGBAR_DIAGNOSTICS=1）；「复制诊断信息」的纯文本报告
   TestHooks.swift       真机自检，只在 TESTHOOKS=1 构建时编译
-Sources/YoungBarCore/   纯逻辑（排序与落点、溢出判断、快捷键组合与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言），有单元测试；Linux 上也能编译
+Sources/YoungBarCore/   纯逻辑（排序与落点、溢出判断、快捷键组合与保存值校验、配置文件、更新日志、收纳条内容、图片缩放、默认语言、菜单栏外观值），有单元测试；Linux 上也能编译
 Tests/YoungBarCoreTests/
 Vendor/
   PelmetCore            菜单栏模型、策略、ItemID、搜索排序（SearchRanker）
@@ -71,7 +72,7 @@ Vendor/
 - **引擎的两种「显示」**：`reveal(_ sections)` 由 `conceal()` 收回；`reveal(items:)` **只有** `conceal(items:)` / `conceal(releasing:)` 收得回，`conceal()` 不管它。没收回的单个图标会一直留在菜单栏，改成隐藏也藏不住（0.1.4 及之前排序、改显示方式、导入都踩过）。每个 `reveal(items:)` 都要有配对的收回；清空 `shownUntil` 时用 `conceal(releasing: 那些项)`。
 - **引擎不会自己知道外面发生了什么**：运行中的应用要 `setRunningBundles` 推给它（EngineSync 用 KVO 盯 `runningApplications`；`didLaunchApplicationNotification` 不保证覆盖只有菜单栏图标的应用）；隐藏生效时 macOS 把新注册的菜单栏图标停在屏幕外，要 `openAdoptionWindow` 才会落位（会闪一下：只对「显示」的应用在启动时开，「隐藏」的等第一次按它时再开；这期间它不在引擎的快照里，靠 `parkedKeys` 留在收纳条和设置里）；`engine.events` 要读，断言被撤掉时重新 `setModel`，但同一布局反复失败要停（藏不住的图标会让引擎一直重建断言）。后台同步用 `syncing` 标记，不要用 `busy`（`busy` 会让点击和快捷键直接被忽略）。
 - 「全部隐藏」是 `bulkHiddenKeys`：叠在保存的模式上（只含应用图标，不含系统图标），收纳条列出它们，`currentModel()` 带上它们，「全部显示」「恢复」或改任何一个图标时清掉。
-- ••• 的颜色：控件面板的 `appearance` 取 YoungBar 状态项按钮的外观（菜单栏本身），不跟 `NSApp.appearance`（用户在 YoungBar 里选的外观）。按钮的外观不会继承 YoungBar 选的外观，但**启动后也不再变**：各桌面壁纸明暗不同时，••• 只跟启动时所在的桌面（已知限制，见 STATUS 2.4）。
+- ••• 的颜色：控件面板的 `appearance` 取当前桌面的菜单栏外观（`MenuBarLook`，`SLSGetMenuAppearanceThemeOnSpace`：0 浅、1 深；不建状态项，不要屏幕录制），不跟 `NSApp.appearance`（用户在 YoungBar 里选的外观）。切桌面（`activeSpaceDidChangeNotification`）和每次刷新都同步。YoungBar 状态项按钮的外观**启动后不再变**，只用来回退：接口没了，或者第一次刷新时和按钮对不上（`checkMenuBarTheme`：调用失败也读成 0，宁可不跟桌面，也不要在深色栏上画深色 •••）。面板用 `.vibrantDark` / `.aqua` 这一对：`.darkAqua` 比旁边的图标暗，`.vibrantLight` 比旁边的图标淡。
 - 刷新：每次刷新是一次完整 AX 遍历，耗 CPU。收纳条/设置打开或有定时展开时 1 秒一次，空闲 4 秒一次；应用启动退出、唤醒、显示器变化立即刷新。设置窗口不可见时不要重建它的模型。
 - 溢出：macOS 27 菜单栏满时在左端（刘海右侧）放一个 «，放不下的项 AX 位置互相重叠地堆在那里。判断规则在 `YoungBarCore/Overflow.swift`（与 Pelmet `PlacementGeometry.overflowTrapped` 相同）。
 
@@ -87,11 +88,12 @@ Vendor/
 - `YOUNGBAR_NOASSERTIONTEST`：没有要隐藏的项时的菜单栏（引擎撤掉断言，macOS 会绘制原生状态项），检查不会多出一个 •••；`YOUNGBAR_NOASSERTION_HOLD=秒` 保持以便截图。
 - 0.1.2 新增：`YOUNGBAR_UPDATETEST`（查 GitHub、记录结果和窗口号；`YOUNGBAR_SIGCHECK_PATH` 检查某个 app 是否与本 app 同证书；`YOUNGBAR_UPDATE_INSTALL=1` 真的安装）。配合 `YOUNGBAR_UPDATE_PRETEND_VERSION=0.1.0`（仅测试版）可以端到端升级到线上最新版：它会**替换正在运行的 bundle**（`build/YoungBar.app`），测完要重新 `sh Scripts/build.sh`。
 - 0.1.4 新增：`YOUNGBAR_EXTRASTEST`（更新内容窗口、诊断文本、收纳条图标右键改为始终隐藏再恢复；`YOUNGBAR_EXTRAS_HOLD=秒`）、`YOUNGBAR_AUTOUPDATETEST`（配合 `YOUNGBAR_UPDATE_PRETEND_VERSION`：后台检查→菜单行、不弹窗；`YOUNGBAR_AUTOUPDATE_HOLD=秒`）、`YOUNGBAR_SHELFDRAGTEST`（真实鼠标在收纳条里拖动排序，检查保存顺序、没有 reveal，结束恢复顺序）、`YOUNGBAR_AUTOHIDETEST`（把一个显示中的应用图标当成新图标，检查自动收纳，结束恢复）。`YOUNGBAR_KEYBOARDTEST` 改为真实按键连按两下 ⌘、⌘⇧ / 慢按不触发、数字键、自定义快捷键并恢复；`YOUNGBAR_KEYBOARD_DIGIT=1` 时还会用数字键真的点开一个第三方项的菜单再 Esc。
-- 0.1.5 新增：`YOUNGBAR_APPEARANCETEST`（外观设置依次切到跟随系统 / 浅色 / 深色，检查 ••• 每次都和菜单栏一致；`YOUNGBAR_APPEARANCE_HOLD=秒` 每步停留以便截图）、`YOUNGBAR_EMPTYSHELFTEST`（临时显示所有「隐藏」让收纳条变空，检查提供的图标、点一个收进来、收纳条不关，结束恢复）、`YOUNGBAR_LAUNCHTEST=<bundle id>`（**会真的退出并重开那个应用**，挑没有文档的菜单栏小工具；显示的应用检查图标回来，隐藏的检查不在菜单栏、但在收纳条和设置里）。`YOUNGBAR_BARLOOKTEST=<秒>`：记录这段时间里状态项按钮和 ••• 读到的外观每一次变化，配合外面切桌面。`YOUNGBAR_SHELFOPENTEST` 多查淡入后不透明度为 1，`YOUNGBAR_OVERFLOWTEST` 多查设置里「放不下」的标记；菜单栏没挤满时 `crowded:false`、不给 `passed`，`inconclusive` 写原因（多开几个带菜单栏图标的应用再跑）。`YOUNGBAR_CONTROLYTEST`：把 ••• 人为下移半个菜单栏，检查下一次刷新回到和图标平齐（`controlytest.json` 的 `levelAfter`）。自检里临时改的显示方式只放内存，不写进 defaults。
+- 0.1.5 新增：`YOUNGBAR_APPEARANCETEST`（外观设置依次切到跟随系统 / 浅色 / 深色，检查 ••• 每次都和菜单栏一致；`YOUNGBAR_APPEARANCE_HOLD=秒` 每步停留以便截图）、`YOUNGBAR_EMPTYSHELFTEST`（临时显示所有「隐藏」让收纳条变空，检查提供的图标、点一个收进来、收纳条不关，结束恢复）、`YOUNGBAR_LAUNCHTEST=<bundle id>`（**会真的退出并重开那个应用**，挑没有文档的菜单栏小工具；显示的应用检查图标回来，隐藏的检查不在菜单栏、但在收纳条和设置里）。`YOUNGBAR_BARLOOKTEST=<秒>`：记录这段时间里窗口服务器（`space`、`theme`、`bar`）、状态项按钮和 ••• 读到的外观每一次变化，配合外面切桌面（`osascript -e 'tell application "System Events" to key code 124 using control down'`，123 是向左）；`passed` 要求 ••• 和 `bar` 不一致不超过 2 秒，`launchCheckAtEnd` 是结束时跑一次启动核对的结果；`YOUNGBAR_BARLOOK_DISTRUST=1` 按「核对没过」跑，••• 应该只跟按钮。`YOUNGBAR_SHELFOPENTEST` 多查淡入后不透明度为 1，`YOUNGBAR_OVERFLOWTEST` 多查设置里「放不下」的标记；菜单栏没挤满时 `crowded:false`、不给 `passed`，`inconclusive` 写原因（多开几个带菜单栏图标的应用再跑）。`YOUNGBAR_CONTROLYTEST`：把 ••• 人为下移半个菜单栏，检查下一次刷新回到和图标平齐（`controlytest.json` 的 `levelAfter`）。自检里临时改的显示方式只放内存，不写进 defaults。
 - 0.1.1 新增：`YOUNGBAR_KEYBOARDTEST`（快捷键打开、方向键、Esc、自定义快捷键并恢复）、`YOUNGBAR_HOTKEYPROBE`（多组快捷键各按一次）、`YOUNGBAR_OVERFLOWTEST`（临时显示全部隐藏项制造拥挤，记录被 « 收走的项，恢复模式和顺序；`YOUNGBAR_OVERFLOW_HOLD=秒` 保持拥挤状态以便截图）、`YOUNGBAR_CONFIGTEST`（导出→改→导入）、`YOUNGBAR_SHOWGUIDE` / `YOUNGBAR_SHOWSETTINGS=general|layout|appearance`（打开窗口并把 windowNumber 写进 JSON，配合 `screencapture -l <id>` 截真实窗口）。
 - 本机 shell 可以直接 `screencapture -x -R 700,0,1100,38` 截菜单栏；`cacheDisplay` 的离屏渲染没有窗口背景，深色模式下文字会看不见，不能当外观证据。
 - 设置窗口交互：`open --env YOUNGBAR_SETTINGSUITEST=1 build/YoungBar.app`。用真实鼠标/键盘事件测试逐项模式菜单、拖动排序、右键移动、切换语言，结束后复原；结果在 `settingsuitest.json`。测试期间不要碰鼠标键盘。`YOUNGBAR_EXPECT_ORDER`（逗号分隔）可指定要恢复到的顺序。
 - 构建时可以不退出正在运行的 YoungBar：`build.sh` 会整包替换，不再原地覆盖可执行文件。**但构建完要重启它**：运行中的进程和磁盘上的 app 对不上时，登录项查询和注册都报 error 22，设置里的「登录时打开」显示关闭、也打不开（2026-11-04 遇到过，重启后恢复；登录项本身没丢）。
+- 从 worktree 跑 app 时，`refreshLoginItemIfMoved` 见到路径变了会把登录项改注册到 worktree。启动前先 `defaults write studio.wuyiyang.youngbar loginItemToken "<worktree>/build/YoungBar.app|<CFBundleVersion>"`，退出后写回原值，再开回主目录的 app：登录项不动，defaults 也和备份一样。
 - 设置窗口截图：`open -n --env YOUNGBAR_SETTINGS_PREVIEW=zh build/YoungBar.app`（或 `=en`）。只开设置窗口、**不碰菜单栏**，可以和正在运行的 YoungBar 并存；深浅两套截图写到 `~/Library/Application Support/YoungBar/preview-*.png`，然后自动退出。
 - 自检会动真实菜单栏：点击、隐藏、拖动。**结束后必须恢复原状态**；测试打开的面板/菜单要关闭。
 - 改状态数字时同步更新 `docs/STATUS.md`；结论变了追加「更正第 N 轮」，不改历史条目。

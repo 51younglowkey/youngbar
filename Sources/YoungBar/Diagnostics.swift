@@ -126,6 +126,10 @@ extension BarApp {
         let ownX = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }?.frame.map { "x\(Int($0.minX))" } ?? "-"
         let control = controlPanel.map { "x\(Int($0.frame.minX)) w\(Int($0.frame.width))" } ?? "-"
         let yes = "✓", no = "✗"
+        // Which source the ••• goes by, and what the window server says now.
+        let barSpace = MenuBarLook.space(on: controlPanel?.screen)
+        let barTheme = barSpace.flatMap { MenuBarLook.rawTheme(space: $0) }.map(String.init) ?? "-"
+        let barLook = "\(menuBarThemeTrusted ? "theme" : "button") \(barTheme)"
 
         let frames = Dictionary(snapshot.items.compactMap { item in item.frame.map { (item.id.sectionKey.rawValue, $0) } },
                                 uniquingKeysWith: { first, _ in first })
@@ -144,7 +148,7 @@ extension BarApp {
         YoungBar \(version) · macOS \(os) · \(modelName)
         \(L10n.t("屏幕", "Displays")) \(NSScreen.screens.count) · \(screenText) · \(L10n.t("刘海", "Notch")) \(notchVisibleMinX != nil ? yes : no)
         \(L10n.t("权限", "Permission")) \(AXIsProcessTrusted() ? yes : no) · \(L10n.t("原生隐藏", "Native hiding")) \(AssessmentMode.isAvailable ? yes : no) · \(L10n.t("正在隐藏", "Hiding")) \(hiding ? yes : no)
-        \(L10n.t("快捷键", "Shortcut")) \(hotKeyDisplay) · \(L10n.t("控件", "Control")) \(control) · \(L10n.t("占位", "Own item")) \(ownX)
+        \(L10n.t("快捷键", "Shortcut")) \(hotKeyDisplay) · \(L10n.t("控件", "Control")) \(control) · \(L10n.t("占位", "Own item")) \(ownX) · \(L10n.t("菜单栏外观", "Bar look")) \(barLook)
         \(L10n.t("显示", "Shown")) (\(shown.count)): \(list(shown, positions: true))
         \(L10n.t("隐藏", "Hidden")) (\(hidden.count)): \(list(hidden))
         \(L10n.t("始终隐藏", "Always hidden")) (\(always.count)): \(list(always))

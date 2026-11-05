@@ -195,15 +195,35 @@ extension BarApp {
 
     /// What the menu bar itself looks like. It isn't YoungBar's appearance:
     /// the user can force Light or Dark for YoungBar's windows, and the bar
-    /// follows the wallpaper. YoungBar's own (blank) status item sits in the
-    /// bar, and its button carries the bar's look whatever YoungBar forces,
-    /// though no view up to the window has an `appearance` of its own. The
-    /// system setting is no substitute: with system Light on a dark wallpaper
-    /// it drew a dark ••• on a dark bar.
+    /// follows the wallpaper of the desktop on screen, which the window
+    /// server knows (`MenuBarLook`). YoungBar's own (blank) status item is
+    /// the fallback: its button carries the bar's look whatever YoungBar
+    /// forces, but never changes after launch, so it stays on the desktop
+    /// YoungBar started on. The system setting is no substitute: with system
+    /// Light on a dark wallpaper it drew a dark ••• on a dark bar.
     var menuBarAppearance: NSAppearance? {
+        if menuBarThemeTrusted, let dark = MenuBarLook.isDark(on: controlPanel?.screen) {
+            // The pair that draws the ••• as strong as the icons beside it:
+            // `.darkAqua` is dimmer on a dark bar, `.vibrantLight` paler on a
+            // light one.
+            return NSAppearance(named: dark ? .vibrantDark : .aqua)
+        }
         if let button = statusItem?.button, button.window != nil { return button.effectiveAppearance }
         let systemDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
         return NSAppearance(named: systemDark ? .darkAqua : .aqua)
+    }
+
+    /// Soon after launch the button still shows the bar's real look. If the
+    /// window server's answer differs then, a macOS update changed what that
+    /// private call means (a failed call reads as Light): a dark ••• on every
+    /// dark bar would be worse than one that doesn't follow the desktop.
+    func checkMenuBarTheme() {
+        guard let button = statusItem?.button, button.window != nil,
+              let dark = MenuBarLook.isDark(on: controlPanel?.screen) else { return }
+        guard dark != (button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) else { return }
+        NSLog("YoungBar: the window server's menu-bar look differs from the status item's; using the status item's")
+        menuBarThemeTrusted = false
+        syncControlAppearance()
     }
 
     /// The ••• is drawn in YoungBar's own panel, which would otherwise take

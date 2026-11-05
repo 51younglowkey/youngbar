@@ -52,3 +52,15 @@ import Testing
         #expect(PreferredLanguage.isChinese([]))
     }
 }
+
+@Suite struct MenuBarThemeTests {
+    @Test func theTwoKnownValues() {
+        #expect(MenuBarTheme.isDark(rawValue: 0) == false)
+        #expect(MenuBarTheme.isDark(rawValue: 1) == true)
+    }
+
+    @Test func anythingElseIsUnknown() {
+        #expect(MenuBarTheme.isDark(rawValue: 2) == nil)
+        #expect(MenuBarTheme.isDark(rawValue: -1) == nil)
+    }
+}

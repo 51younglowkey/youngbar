@@ -20,16 +20,24 @@ extension BarApp {
     /// `byHover`: opened by resting the pointer on •••. Such a strip takes no
     /// keyboard focus — the user may be typing elsewhere, and a digit would
     /// open an item.
-    func toggleShelfFrom(keyboard fromKeyboard: Bool, byHover: Bool = false) {
+    /// `display`: the ••• that was clicked or hovered. With none (the shortcut,
+    /// the menu) the strip opens on the display the pointer is on.
+    func toggleShelfFrom(keyboard fromKeyboard: Bool, byHover: Bool = false, on display: CGDirectDisplayID? = nil) {
         guard AXIsProcessTrusted(), AssessmentMode.isAvailable else {
             showConfigurationMenu()
             return
         }
         guard !busy else { return }
-        if expanded {
+        // The ••• on another display: the strip goes there, instead of closing.
+        let movesAway = expanded && display != nil && display != anchorDisplayID
+        if expanded && !movesAway {
             if !fromKeyboard, let opened = hoverOpenedAt, Date().timeIntervalSince(opened) < 1.5 { return }
             closeShelf()
         } else {
+            if movesAway { closeShelf() }
+            anchorDisplayID = display ?? pointerDisplayID
+            // What the bar has no room for depends on the bar.
+            if let lastSnapshot { overflowKeys = computeOverflow(outOfSightKeys(lastSnapshot)) }
             let event = NSApp.currentEvent
             includeAlwaysHidden = !fromKeyboard && !byHover && event?.type == .leftMouseUp && event?.modifierFlags.contains(.option) == true
             // Always the strip: it shows app icons, so nothing on the bar is
@@ -95,8 +103,7 @@ extension BarApp {
     }
 
     func positionShelf() {
-        guard let anchor = controlPanel, let shelfPanel,
-              let screen = anchor.screen ?? NSScreen.screens.first else { return }
+        guard let anchor = controlPanel, let shelfPanel, let screen = anchorScreen else { return }
         let width = shelfPanel.frame.width
         // Centred under the control.
         let x = min(max(anchor.frame.midX - width / 2, screen.frame.minX + 8), screen.frame.maxX - width - 8)
@@ -106,6 +113,7 @@ extension BarApp {
     func closeShelf() {
         if expanded { flight.note("strip closed") }
         expanded = false
+        anchorDisplayID = nil
         hoverOpenedAt = nil
         shelfAnchored = false
         shelfSelection = nil
@@ -159,7 +167,7 @@ extension BarApp {
         // A little air between what is in the strip and what could join it.
         let gap: CGFloat = adding && !keys.isEmpty ? 10 : 0
         let itemContentWidth = inset * 2 + slot * CGFloat(keys.count + candidates.count) + gap
-        let screenWidth = (controlPanel?.screen ?? NSScreen.screens.first)?.frame.width ?? 800
+        let screenWidth = anchorScreen?.frame.width ?? 800
         let gearWidth: CGFloat = 38
         let rowHeight: CGFloat = 40
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -416,7 +424,7 @@ extension BarApp {
         // A covered item's menu opens under its slot, just below the notch:
         // still on screen, so it is pressed in place too.
         if let element = pressableElement(for: key, item: item, pid: owner),
-           pressOpensNearStrip(key) || overflowKeys.contains(key) {
+           pressOpensNearStrip(key) || (overflowKeys.contains(key) && slotIsOnStripDisplay(key)) {
             // Third-party items take AXPress while still concealed: no
             // reveal (so nothing on the bar shifts), no pointer movement.
             // The press can block until a menu closes, so it runs off the
@@ -451,6 +459,7 @@ extension BarApp {
                 _ = await engine.openAdoptionWindow(for: bundle)
                 snapshot = await settledSnapshot(for: [item.id])
             }
+            await refreshBarCopies()
             positionControlBesideMenuIcons(in: snapshot)
             guard let frame = snapshot.items.first(where: { $0.id.sectionKey == item.id.sectionKey })?.frame else {
                 // The saved entry can outlive its menu-bar item (app updated or
@@ -474,8 +483,12 @@ extension BarApp {
             }
             let pid = snapshot.items.first { $0.id.sectionKey == item.id.sectionKey }?.pid ?? 0
             let pidWindows = windowNumbers(of: pid)
+            // A click opens the item's menu on the display whose bar it lands
+            // on, so from a strip on another display it clicks that bar's copy.
+            let aimed = snapshot.items.first { $0.id.sectionKey == item.id.sectionKey }?.id ?? item.id
+            let aim = await pressAim(for: aimed, main: frame)
             NSCursor.hide()
-            await ItemMover.shieldedClick(at: CGPoint(x: frame.midX, y: frame.midY))
+            await ItemMover.shieldedClick(at: CGPoint(x: aim.midX, y: aim.midY))
             NSCursor.unhide()
             // Menus open above everything, but many items open an ordinary
             // window-level panel. Tuck the strip directly under it so the
@@ -525,13 +538,46 @@ extension BarApp {
     /// control; otherwise reveal and click like a system item.
     func pressOpensNearStrip(_ key: String) -> Bool {
         guard let point = axPosition(for: key), let control = controlPanel?.frame,
-              let screen = controlPanel?.screen ?? NSScreen.screens.first else { return false }
-        let near = point.x > screen.frame.midX && abs(point.x - control.midX) < 400
+              let screen = anchorScreen else { return false }
+        let near = ControlLayout.slotIsNearControl(point, control: globalRect(control), on: barDisplay(for: screen))
         if !near {
             NSLog("YoungBar: \(key) slot at x=\(point.x) is away from the control; revealing instead")
             flight.note("\(name(for: key)): slot at x\(Int(point.x)) is away from the ••• at x\(Int(control.minX)); revealing instead")
         }
         return near
+    }
+
+    /// A press opens the menu on the display of the item's slot. One that sits
+    /// on another bar would open it away from the strip.
+    func slotIsOnStripDisplay(_ key: String) -> Bool {
+        guard let point = axPosition(for: key), let screen = anchorScreen else { return false }
+        let frame = barDisplay(for: screen).frame
+        return point.x >= frame.minX && point.x < frame.maxX && point.y >= frame.minY - 5 && point.y < frame.maxY
+    }
+
+    /// Where to click an item out on the bar: its copy on the strip's display,
+    /// once that copy shows up in a walk; `main` on the primary display, or if
+    /// this display's bar doesn't list it in time.
+    func pressAim(for id: ItemID, main: CGRect) async -> CGRect {
+        guard let screen = anchorScreen, screen != NSScreen.screens.first, let number = screen.displayID else { return main }
+        let bounds = CGDisplayBounds(number)
+        var full = id
+        var mainFrame = main
+        for attempt in 0..<10 {
+            if attempt > 0 {
+                try? await Task.sleep(for: .milliseconds(100))
+                let snapshot = await engine.freshSnapshot()
+                await refreshBarCopies()
+                if let item = snapshot.items.first(where: { $0.id.sectionKey == id.sectionKey }) {
+                    full = item.id
+                    if let frame = item.frame { mainFrame = frame }
+                }
+            }
+            let aim = PressAim.aim(id: full, main: mainFrame, display: bounds, copies: barCopies)
+            if aim.onPressDisplay { return aim.frame }
+            guard PressAim.barListed(on: bounds, copies: barCopies) else { return aim.frame }
+        }
+        return mainFrame
     }
 
     func axPosition(for key: String) -> CGPoint? {
@@ -568,6 +614,6 @@ extension BarApp {
         let location = NSEvent.mouseLocation
         if expanded,
            shelfPanel?.frame.contains(location) != true,
-           controlPanel?.frame.contains(location) != true { closeShelf() }
+           !controlSlots.values.contains(where: { $0.panel.frame.contains(location) }) { closeShelf() }
     }
 }

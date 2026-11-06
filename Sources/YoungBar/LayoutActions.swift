@@ -88,9 +88,9 @@ extension BarApp {
             if let from = snapshot.items.first(where: { $0.id.sectionKey == item.id.sectionKey })?.frame,
                let to = snapshot.items.first(where: { $0.id.sectionKey == target.id.sectionKey })?.frame {
                 let destination = CGPoint(x: before.isEmpty ? to.maxX + 3 : to.minX - 3, y: to.midY)
-                controlPanel?.ignoresMouseEvents = true
+                setControlsIgnoreMouse(true)
                 await ItemMover.cmdDrag(from: CGPoint(x: from.midX, y: from.midY), to: destination)
-                controlPanel?.ignoresMouseEvents = false
+                setControlsIgnoreMouse(false)
                 let result = await settledSnapshot(for: ids)
                 if moveLanded(item.id, beside: target.id, after: before.isEmpty, in: result) {
                     UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
@@ -101,7 +101,9 @@ extension BarApp {
                 }
             } else { savedOrder = originalOrder; feedback = L10n.t("项目当前没有可移动的位置", "This item has no movable position right now") }
             await engine.conceal(items: Set(temporary))
-            positionControlBesideMenuIcons(in: await engine.freshSnapshot())
+            let settled = await engine.freshSnapshot()
+            await refreshBarCopies()
+            positionControlBesideMenuIcons(in: settled)
         }
     }
 

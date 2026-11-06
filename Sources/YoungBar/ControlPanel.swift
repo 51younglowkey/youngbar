@@ -12,6 +12,8 @@ import YoungBarCore
 
 @MainActor
 final class BarControlButton: NSButton {
+    /// The display whose bar this ••• sits on.
+    var displayID: CGDirectDisplayID?
     var rightClick: (() -> Void)?
     var hover: ((Bool) -> Void)?
     override func updateTrackingAreas() {
@@ -38,20 +40,75 @@ final class BarControlPanel: NSPanel {
     override var canBecomeKey: Bool { false }
 }
 
-/// The ••• control: a small panel floating over YoungBar's own (blank)
-/// status item, the right-click menu, and the menu-bar button's picture.
+/// One display's •••. macOS draws a menu bar per display, so each has its own.
+@MainActor
+final class ControlSlot {
+    let displayID: CGDirectDisplayID
+    let panel: BarControlPanel
+    let button: BarControlButton
+    let createdAt = Date()
+    var moveObserver: NSObjectProtocol?
+    /// Where it was last seen, and until when a move is YoungBar's own. A move
+    /// outside that came from macOS (or something else).
+    var knownFrame: NSRect?
+    var ownMoveUntil = Date.distantPast
+    var hadIconToFollow = true
+
+    init(displayID: CGDirectDisplayID, panel: BarControlPanel, button: BarControlButton) {
+        self.displayID = displayID
+        self.panel = panel
+        self.button = button
+    }
+
+    func close() {
+        if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
+        moveObserver = nil
+        panel.orderOut(nil)
+    }
+}
+
+extension NSScreen {
+    var displayID: CGDirectDisplayID? {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+    }
+}
+
+/// The ••• control: small panels floating on each display's bar over YoungBar's
+/// own (blank) status item, the right-click menu, and the menu-bar button's picture.
 extension BarApp {
-    @objc func statusClicked() {
+    /// How strong a ••• is on a bar macOS has dimmed (the display that isn't
+    /// active). Measured against the clock there: 0.45 on a 0.12 background,
+    /// where the active bar's is 0.92 on 0.01.
+    static let inactiveBarAlpha: CGFloat = 0.4
+
+    /// The ••• the strip hangs from: where it was opened, else the primary display's.
+    var anchorSlot: ControlSlot? {
+        anchorDisplayID.flatMap { controlSlots[$0] }
+            ?? NSScreen.screens.first?.displayID.flatMap { controlSlots[$0] }
+            ?? controlSlots.values.first
+    }
+
+    var controlPanel: NSPanel? { anchorSlot?.panel }
+    var controlButton: BarControlButton? { anchorSlot?.button }
+    var anchorScreen: NSScreen? {
+        anchorSlot.flatMap { screen(for: $0.displayID) } ?? NSScreen.screens.first
+    }
+
+    func setControlsIgnoreMouse(_ ignore: Bool) {
+        for slot in controlSlots.values { slot.panel.ignoresMouseEvents = ignore }
+    }
+
+    @objc func statusClicked(_ sender: Any?) {
         if NSApp.currentEvent?.type == .rightMouseUp {
             showConfigurationMenu()
             return
         }
-        toggleShelf()
+        toggleShelfFrom(keyboard: false, on: (sender as? BarControlButton)?.displayID)
     }
 
-    func showConfigurationMenu() {
+    func showConfigurationMenu(for clicked: NSButton? = nil) {
         let menu = configurationMenu()
-        if let event = NSApp.currentEvent, let button = controlButton ?? statusItem.button {
+        if let event = NSApp.currentEvent, let button = clicked ?? controlButton ?? statusItem.button {
             NSMenu.popUpContextMenu(menu, with: event, for: button)
         }
     }
@@ -106,45 +163,77 @@ extension BarApp {
         return menu
     }
 
+    /// Waits for macOS to give YoungBar's status item its place, then puts a
+    /// ••• on every display's bar.
     func installControlPanelWhenReady() async {
         for _ in 0..<15 {
-            if installControlPanel() { return }
+            if let seed = statusItemFrameInBar() {
+                installControlPanels(seed: seed)
+                return
+            }
             try? await Task.sleep(for: .milliseconds(60))
         }
         // Keep the control reachable if the system never exposes the status
         // item's final frame before the hide assertion starts.
-        guard let screen = NSScreen.screens.first else { return }
-        let fallback = NSRect(x: screen.frame.maxX - 88, y: screen.frame.maxY - 27,
-                              width: 22, height: 22)
-        makeControlPanel(at: fallback)
+        installControlPanels(seed: nil)
     }
 
-    func installControlPanel() -> Bool {
+    /// The status item's frame, if it is actually in a menu bar: the assessment
+    /// interface can hand back a window that sits below it.
+    func statusItemFrameInBar() -> NSRect? {
         guard let button = statusItem.button,
               let host = button.window,
-              let screen = host.screen ?? NSScreen.screens.first else { return false }
+              let screen = host.screen ?? NSScreen.screens.first else { return nil }
         let frame = host.convertToScreen(button.convert(button.bounds, to: nil))
-        // The assessment interface can hand back a status-item window that
-        // sits below the menu bar. Only accept a frame that is actually in it.
-        guard frame.width > 0, frame.height > 0, frame.height <= 40,
-              frame.minY >= screen.frame.maxY - 45,
-              frame.midX >= screen.frame.minX + 30 else { return false }
-        makeControlPanel(at: frame)
-        return true
+        guard frame.width > 0, frame.height > 0, frame.height <= menuBarHeight(of: screen) + 5,
+              frame.minY >= screen.frame.maxY - menuBarHeight(of: screen) - 5,
+              frame.midX >= screen.frame.minX + ControlLayout.parkedSlotMargin else { return nil }
+        return frame
     }
 
-    func makeControlPanel(at frame: NSRect) {
-        let size = NSSize(width: max(34, frame.width), height: max(24, frame.height))
-        controlWidth = size.width
+    func installControlPanels(seed: NSRect?) {
+        if let seed { controlWidth = max(34, seed.width) }
+        syncControlPanels(seed: seed)
+        // Something is on screen from the start, even with no walk to place the
+        // others (no permission yet).
+        anchorSlot?.panel.orderFrontRegardless()
+    }
+
+    /// One ••• per display's bar. Called at launch and whenever displays are
+    /// added, removed or rearranged. A display that keeps its ID keeps its •••;
+    /// `placeControl` puts it back if macOS moved it.
+    func syncControlPanels(seed: NSRect? = nil) {
+        let screens = barScreens
+        let wanted = Set(screens.compactMap(\.displayID))
+        for (id, slot) in controlSlots where !wanted.contains(id) {
+            if anchorDisplayID == id {
+                closeShelf()
+                anchorDisplayID = nil
+            }
+            flight.note("••• removed with display \(id)")
+            slot.close()
+            controlSlots[id] = nil
+        }
+        for screen in screens {
+            guard let id = screen.displayID, controlSlots[id] == nil else { continue }
+            let onSeed = seed.map { screen.frame.contains(NSPoint(x: $0.midX, y: $0.midY)) } ?? false
+            let slot = makeControl(on: screen, id: id, minX: onSeed ? seed.map { $0.midX - controlWidth / 2 } : nil)
+            controlSlots[id] = slot
+            flight.note("••• \(displayLabel(slot))installed x\(Int(slot.panel.frame.minX)) y\(Int(slot.panel.frame.minY)) w\(Int(slot.panel.frame.width)) · screens \(screenLayoutText)")
+        }
+        applyUpdateNotice()
+        if let lastSnapshot { positionControlBesideMenuIcons(in: lastSnapshot) }
+        syncControlAppearance()
+    }
+
+    func makeControl(on screen: NSScreen, id: CGDirectDisplayID, minX: CGFloat?) -> ControlSlot {
+        let size = NSSize(width: controlWidth, height: 24)
         // Centred in the menu bar, not on the status item's window: macOS
         // can report that window lower, and the control then hung half
         // below the bar (user report, 0.1.4).
-        let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: frame.midX, y: frame.midY)) }
-            ?? NSScreen.screens.first
-        let midY = screen.map { $0.frame.maxY - menuBarHeight(of: $0) / 2 } ?? frame.midY
-        let hitFrame = NSRect(x: frame.midX - size.width / 2,
-                              y: midY - size.height / 2,
-                              width: size.width, height: size.height)
+        let midY = screen.frame.maxY - menuBarHeight(of: screen) / 2
+        let x = minX ?? (screen.frame.maxX - size.width - ControlLayout.fallbackRightInset)
+        let hitFrame = NSRect(x: x, y: midY - size.height / 2, width: size.width, height: size.height)
         let panel = BarControlPanel(contentRect: hitFrame,
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
@@ -171,6 +260,7 @@ extension BarApp {
         control.target = self
         control.action = #selector(statusClicked)
         control.sendAction(on: [.leftMouseUp])
+        control.displayID = id
         control.hover = { [weak self] entered in
             guard let self else { return }
             isHovered = entered
@@ -178,38 +268,38 @@ extension BarApp {
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
                     if isHovered && !expanded && !busy {
-                        toggleShelfFrom(keyboard: false, byHover: true)
+                        toggleShelfFrom(keyboard: false, byHover: true, on: id)
                         hoverOpenedAt = Date()
                     }
                 }
             }
         }
-        control.rightClick = { [weak self] in self?.showConfigurationMenu() }
+        control.rightClick = { [weak self, weak control] in self?.showConfigurationMenu(for: control) }
         panel.contentView = control
-        controlPanel = panel
-        controlButton = control
-        syncControlAppearance()
-        panel.orderFrontRegardless()
-        applyUpdateNotice()
-        if let controlMoveObserver { NotificationCenter.default.removeObserver(controlMoveObserver) }
-        controlMoveObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.controlDidMove() }
+        let slot = ControlSlot(displayID: id, panel: panel, button: control)
+        slot.moveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self, weak slot] _ in
+            Task { @MainActor in
+                if let self, let slot { self.controlDidMove(slot) }
+            }
         }
-        flight.controlFrame = panel.frame
-        flight.note("••• installed x\(Int(panel.frame.minX)) y\(Int(panel.frame.minY)) w\(Int(panel.frame.width)) · screens \(screenLayoutText)")
+        slot.knownFrame = panel.frame
+        return slot
     }
 
-    /// What the menu bar itself looks like. It isn't YoungBar's appearance:
-    /// the user can force Light or Dark for YoungBar's windows, and the bar
-    /// follows the wallpaper of the desktop on screen, which the window
+    /// What the menu bar looks like on the ••• the strip goes by.
+    var menuBarAppearance: NSAppearance? { menuBarAppearance(on: anchorScreen) }
+
+    /// What the menu bar itself looks like on `screen`. It isn't YoungBar's
+    /// appearance: the user can force Light or Dark for YoungBar's windows, and
+    /// the bar follows the wallpaper of the desktop on screen, which the window
     /// server knows (`MenuBarLook`). YoungBar's own (blank) status item is
     /// the fallback: its button carries the bar's look whatever YoungBar
     /// forces, but never changes after launch, so it stays on the desktop
     /// YoungBar started on. The system setting is no substitute: with system
     /// Light on a dark wallpaper it drew a dark ••• on a dark bar.
-    var menuBarAppearance: NSAppearance? {
-        if menuBarThemeTrusted, let dark = MenuBarLook.isDark(on: controlPanel?.screen) {
+    func menuBarAppearance(on screen: NSScreen?) -> NSAppearance? {
+        if menuBarThemeTrusted, let dark = MenuBarLook.isDark(on: screen) {
             // The pair that draws the ••• as strong as the icons beside it:
             // `.darkAqua` is dimmer on a dark bar, `.vibrantLight` paler on a
             // light one.
@@ -224,9 +314,11 @@ extension BarApp {
     /// window server's answer differs then, a macOS update changed what that
     /// private call means (a failed call reads as Light): a dark ••• on every
     /// dark bar would be worse than one that doesn't follow the desktop.
+    /// Asked about the display the button itself is on: another display can
+    /// rightly show another desktop.
     func checkMenuBarTheme() {
-        guard let button = statusItem?.button, button.window != nil,
-              let dark = MenuBarLook.isDark(on: controlPanel?.screen) else { return }
+        guard let button = statusItem?.button, let host = button.window,
+              let dark = MenuBarLook.isDark(on: host.screen ?? NSScreen.screens.first) else { return }
         guard dark != (button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) else { return }
         NSLog("YoungBar: the window server's menu-bar look differs from the status item's; using the status item's")
         flight.note("menu bar look: window server differs from the status item; using the status item")
@@ -234,14 +326,33 @@ extension BarApp {
         syncControlAppearance()
     }
 
-    /// The ••• is drawn in YoungBar's own panel, which would otherwise take
+    /// The ••• is drawn in YoungBar's own panels, which would otherwise take
     /// YoungBar's appearance and could end up white on a light bar (or black
-    /// on a dark one). Cheap: runs on every refresh and appearance change.
+    /// on a dark one). Each panel goes by its own display: another display can
+    /// show another desktop. Cheap: runs on every refresh and appearance change.
     func syncControlAppearance() {
-        guard let panel = controlPanel, let target = menuBarAppearance else { return }
-        guard panel.appearance?.name != target.name else { return }
-        panel.appearance = target
-        controlButton?.needsDisplay = true
+        for slot in controlSlots.values {
+            guard let screen = screen(for: slot.displayID),
+                  let target = menuBarAppearance(on: screen),
+                  slot.panel.appearance?.name != target.name else { continue }
+            slot.panel.appearance = target
+            slot.button.needsDisplay = true
+        }
+        syncBarActivity()
+    }
+
+    /// macOS dims the bar of the display that isn't active, icons included.
+    /// A ••• at full strength there would be the one bright thing on that bar.
+    func syncBarActivity() {
+        guard controlSlots.count > 1 else {
+            controlSlots.values.first?.panel.alphaValue = 1
+            return
+        }
+        for slot in controlSlots.values {
+            let active = screen(for: slot.displayID).flatMap { MenuBarLook.isActiveBar(on: $0) } ?? true
+            let alpha: CGFloat = active ? 1 : Self.inactiveBarAlpha
+            if slot.panel.alphaValue != alpha { slot.panel.alphaValue = alpha }
+        }
     }
 
     /// The menu bar's height on `screen` (taller on a notched built-in).
@@ -253,79 +364,117 @@ extension BarApp {
         return max(screen.safeAreaInsets.top, NSStatusBar.system.thickness)
     }
 
-    /// The leftmost icon the ••• sits beside on `screen`. Icons held by macOS's
-    /// « (or under the notch) are not on the bar; following them would take
-    /// the control out of sight too.
-    func leadingIcon(in snapshot: EngineSnapshot, on screen: NSScreen) -> (key: String, frame: CGRect)? {
-        let outOfSight = outOfSightKeys(snapshot)
-        return snapshot.items.compactMap { item -> (key: String, frame: CGRect)? in
-            let key = item.id.sectionKey.rawValue
-            guard let frame = item.frame,
-                  item.id.bundleID != Bundle.main.bundleIdentifier,
-                  !outOfSight.contains(key),
-                  frame.minX > screen.frame.midX,
-                  frame.minX < screen.frame.maxX else { return nil }
-            return (key, frame)
-        }.min { $0.frame.minX < $1.frame.minX }
+    /// Displays that draw a menu bar: all of them, unless they share one set
+    /// of desktops ("Displays have separate Spaces" off), when only the primary does.
+    var barScreens: [NSScreen] {
+        NSScreen.screensHaveSeparateSpaces ? NSScreen.screens : Array(NSScreen.screens.prefix(1))
+    }
+
+    func screen(for id: CGDirectDisplayID) -> NSScreen? {
+        NSScreen.screens.first { $0.displayID == id }
+    }
+
+    /// The display the pointer is on, if it draws a bar; else the primary's.
+    var pointerDisplayID: CGDirectDisplayID? {
+        let location = NSEvent.mouseLocation
+        let under = barScreens.first { NSMouseInRect(location, $0.frame, false) }
+        return (under ?? NSScreen.screens.first)?.displayID
+    }
+
+    /// `screen` in the global top-left space AX frames use.
+    func barDisplay(for screen: NSScreen) -> BarDisplay {
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+        let frame = CGRect(x: screen.frame.minX, y: primaryTop - screen.frame.maxY,
+                           width: screen.frame.width, height: screen.frame.height)
+        let notched = screen.safeAreaInsets.top > 0
+        return BarDisplay(frame: frame, barHeight: menuBarHeight(of: screen),
+                          visibleMinX: notched ? screen.auxiliaryTopRightArea?.minX : nil)
+    }
+
+    /// `frame` (AppKit, bottom-left) in the global top-left space.
+    func globalRect(_ frame: NSRect) -> CGRect {
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? 0
+        return CGRect(x: frame.minX, y: primaryTop - frame.maxY, width: frame.width, height: frame.height)
+    }
+
+    /// Every item as `display`'s bar sees it. The snapshot keeps one copy of
+    /// each item (the main display's); the rest come from the same walk.
+    func barIcons(_ snapshot: EngineSnapshot, on display: BarDisplay) -> [BarIcon] {
+        let own = Bundle.main.bundleIdentifier
+        return snapshot.items.map { item in
+            let copies = barCopies[item.id] ?? []
+            let here = copies.first { ControlLayout.isOnBar($0, of: display) }
+                ?? item.frame.flatMap { ControlLayout.isOnBar($0, of: display) ? $0 : nil }
+            return BarIcon(key: item.id.sectionKey.rawValue, frame: here,
+                           drawnElsewhere: here == nil && (!copies.isEmpty || item.frame != nil),
+                           isOwn: item.id.bundleID == own)
+        }
+    }
+
+    /// Reads the copies the engine's last walk found; call right after a walk.
+    func refreshBarCopies() async {
+        barCopies = await engine.barCopies()
     }
 
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
-        guard let panel = controlPanel,
-              let screen = panel.screen ?? NSScreen.screens.first else { return }
-        let outOfSight = outOfSightKeys(snapshot)
-        // Item frames are in the global top-left space: this screen's bar
-        // runs from `barTop` down.
-        let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
-        let barTop = primaryTop - screen.frame.maxY
-        guard let leading = leadingIcon(in: snapshot, on: screen) else {
-            if flight.hadIconToFollow {
-                flight.hadIconToFollow = false
-                flight.note("••• no icon to follow on this bar; stays at x\(Int(panel.frame.minX))")
+        lastSnapshot = snapshot
+        for slot in controlSlots.values { placeControl(slot, in: snapshot) }
+        if expanded && !shelfAnchored { positionShelf() }
+    }
+
+    /// Puts this display's ••• on this display's bar, beside this display's
+    /// icons. Nothing is kept from where it happened to be but its place along
+    /// the bar, and only when there's no icon to go by.
+    func placeControl(_ slot: ControlSlot, in snapshot: EngineSnapshot) {
+        guard let screen = screen(for: slot.displayID) else { return }
+        let panel = slot.panel
+        let display = barDisplay(for: screen)
+        let spot = ControlLayout.spot(icons: barIcons(snapshot, on: display), on: display,
+                                      current: globalRect(panel.frame), width: controlWidth)
+        let label = displayLabel(slot)
+        var reason = "\(label)no icon to follow on this bar"
+        var hasIcon = true
+        switch spot.reason {
+        case .beside(let key, let iconX):
+            reason = "\(label)follows \(name(for: key)) x\(Int(iconX))"
+        case .inPile(let key, let iconX):
+            reason = "\(label)follows \(name(for: key)) x\(Int(iconX)) · in « pile"
+        case .noIcon:
+            hasIcon = false
+            if slot.hadIconToFollow {
+                slot.hadIconToFollow = false
+                flight.note("••• \(label)no icon to follow on this bar; stays at x\(Int(panel.frame.minX))")
             }
-            return
         }
-        flight.hadIconToFollow = true
-        let leadingFrame = leading.frame
-        let leadingIcon = leadingFrame.minX
-        // Level with the icons beside it.
-        var y = panel.frame.minY
-        if leadingFrame.minY - barTop > -5, leadingFrame.maxY - barTop < 50 {
-            y = (primaryTop - leadingFrame.midY - panel.frame.height / 2).rounded()
-        }
-        let floor = notchVisibleMinX ?? (screen.frame.minX + 12)
-        var width = controlWidth
-        var x = max(floor, leadingIcon - width - 6)
-        var inPile = false
-        // A full bar: YoungBar's own item is in macOS's « with the others,
-        // and the « sits at the right of their pile. The control takes the
-        // free left part of that slot, narrowed so it doesn't cover the «.
-        let ownKey = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }?.id.sectionKey.rawValue
-        if let ownKey, outOfSight.contains(ownKey),
-           let pile = snapshot.items.compactMap({ item -> CGFloat? in
-               guard let frame = item.frame, outOfSight.contains(item.id.sectionKey.rawValue),
-                     frame.minX > screen.frame.midX - 400, frame.minX < leadingIcon else { return nil }
-               return frame.minX
-           }).min() {
-            width = 22
-            x = max(floor, pile)
-            inPile = true
-        }
-        if abs(panel.frame.minX - x) > 1 || abs(panel.frame.width - width) > 0.5 || abs(panel.frame.minY - y) > 0.5 {
+        if hasIcon { slot.hadIconToFollow = true }
+        if spot.atLeftLimit { reason += " · at left limit" }
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+        let y = (primaryTop - spot.midY - panel.frame.height / 2).rounded()
+        if abs(panel.frame.minX - spot.minX) > 1 || abs(panel.frame.width - spot.width) > 0.5 || abs(panel.frame.minY - y) > 0.5 {
             // Slide with the bar's own shift instead of jumping a beat later.
-            let origin = NSPoint(x: x, y: y)
             // (`animator()` on this panel never applied the move, leaving
             // the control wherever it was installed.)
-            let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && abs(panel.frame.minX - x) < 200
-            let target = NSRect(origin: origin, size: NSSize(width: width, height: panel.frame.height))
-            let reason = "follows \(name(for: leading.key)) x\(Int(leadingIcon))"
-                + (inPile ? " · in « pile" : "") + (x == floor ? " · at left limit" : "")
+            let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && panel.isVisible
+                && abs(panel.frame.minX - spot.minX) < 200 && abs(panel.frame.minY - y) < 1
+            let target = NSRect(x: spot.minX, y: y, width: spot.width, height: panel.frame.height)
             recordControlMove(from: panel.frame, to: target, reason: reason, snapshot: snapshot)
-            flight.controlFrame = target
-            flight.ownMoveUntil = Date().addingTimeInterval(1)
+            slot.knownFrame = target
+            slot.ownMoveUntil = Date().addingTimeInterval(1)
             panel.setFrame(target, display: true, animate: animate)
-            flight.ownMoveUntil = Date().addingTimeInterval(0.5)
+            slot.ownMoveUntil = Date().addingTimeInterval(0.5)
         }
-        if expanded && !shelfAnchored { positionShelf() }
+        // A new display's ••• appears once it knows where to be, or after a
+        // moment if this bar lists no icons at all (hidden, or still coming up).
+        if !panel.isVisible, hasIcon || Date().timeIntervalSince(slot.createdAt) > 3 {
+            panel.orderFrontRegardless()
+        }
+    }
+
+    /// How a log line tells the •••s apart; nothing with one display.
+    func displayLabel(_ slot: ControlSlot) -> String {
+        guard controlSlots.count > 1,
+              let index = NSScreen.screens.firstIndex(where: { $0.displayID == slot.displayID }) else { return "" }
+        return "display \(index + 1) · "
     }
 
     var customControlIconURL: URL {
@@ -344,8 +493,10 @@ extension BarApp {
         let index = options[.controlIcon] ?? 0
         let image = currentControlIcon()
         let tint: NSColor? = index == ControlIcon.symbols.count ? nil : .labelColor
-        controlButton?.image = image
-        controlButton?.contentTintColor = tint
+        for slot in controlSlots.values {
+            slot.button.image = image
+            slot.button.contentTintColor = tint
+        }
     }
 
     func removeCustomIcon() {

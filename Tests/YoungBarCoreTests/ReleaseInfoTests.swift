@@ -16,6 +16,32 @@ import Testing
         #expect(AppVersion("beta") == nil)
         #expect(AppVersion("1.x") == nil)
         #expect(AppVersion("") == nil)
+        #expect(AppVersion("0.1.8-beta.") == nil)
+        #expect(AppVersion("0.1.8-beta.x") == nil)
+        #expect(AppVersion("-beta.1") == nil)
+    }
+
+    /// Someone on a beta is offered the final version; nobody on a final
+    /// version is offered an older beta.
+    @Test func aBetaComesBeforeItsVersion() throws {
+        let beta = try #require(AppVersion("0.1.8-beta.1"))
+        let previous = try #require(AppVersion("0.1.7"))
+        let final = try #require(AppVersion("0.1.8"))
+        let next = try #require(AppVersion("0.1.9"))
+        let secondBeta = try #require(AppVersion("0.1.8-beta.2"))
+        #expect(beta > previous)
+        #expect(beta < final)
+        #expect(beta < secondBeta)
+        #expect(beta < next)
+        #expect(!(final < beta))
+        #expect(beta != final)
+        #expect(try #require(AppVersion("0.1.8-beta.10")) > #require(AppVersion("0.1.8-beta.9")))
+    }
+
+    /// The zip's name and the changelog's are built from this.
+    @Test func aBetaKeepsItsName() throws {
+        #expect(try #require(AppVersion("v0.1.8-beta.1")).description == "0.1.8-beta.1")
+        #expect(try #require(AppVersion("0.1.8")).description == "0.1.8")
     }
 }
 

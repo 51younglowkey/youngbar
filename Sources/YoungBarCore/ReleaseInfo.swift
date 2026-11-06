@@ -4,19 +4,31 @@
 import Foundation
 
 /// A dotted version ("0.1.10"), compared number by number; missing parts
-/// count as 0, so 0.2 == 0.2.0.
+/// count as 0, so 0.2 == 0.2.0. A beta ("0.1.8-beta.2") comes before the
+/// version it leads up to, so someone on a beta is offered that version.
 public struct AppVersion: Comparable, CustomStringConvertible, Sendable {
     public let parts: [Int]
+    /// The beta's number; nil for a final version.
+    public let beta: Int?
 
     public init?(_ text: String) {
         var trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("v") || trimmed.hasPrefix("V") { trimmed.removeFirst() }
-        let parts = trimmed.split(separator: ".").map { Int($0) }
+        var beta: Int?
+        if let range = trimmed.range(of: "-beta.") {
+            guard let number = Int(trimmed[range.upperBound...]), number >= 0 else { return nil }
+            beta = number
+            trimmed = String(trimmed[..<range.lowerBound])
+        }
+        let parts = trimmed.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
         guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else { return nil }
         self.parts = parts.compactMap { $0 }
+        self.beta = beta
     }
 
-    public var description: String { parts.map(String.init).joined(separator: ".") }
+    public var description: String {
+        parts.map(String.init).joined(separator: ".") + (beta.map { "-beta.\($0)" } ?? "")
+    }
 
     public static func < (lhs: AppVersion, rhs: AppVersion) -> Bool {
         for index in 0..<max(lhs.parts.count, rhs.parts.count) {
@@ -24,7 +36,11 @@ public struct AppVersion: Comparable, CustomStringConvertible, Sendable {
             let b = index < rhs.parts.count ? rhs.parts[index] : 0
             if a != b { return a < b }
         }
-        return false
+        switch (lhs.beta, rhs.beta) {
+        case let (a?, b?): return a < b
+        case (_?, nil): return true
+        default: return false
+        }
     }
 
     public static func == (lhs: AppVersion, rhs: AppVersion) -> Bool { !(lhs < rhs) && !(rhs < lhs) }

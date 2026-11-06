@@ -22,13 +22,8 @@ final class FlightRecorder {
         return format
     }()
 
-    /// Where the ••• was last seen, and until when a move is YoungBar's own.
-    /// A move outside that came from macOS (or something else).
-    var controlFrame: NSRect?
-    var ownMoveUntil = Date.distantPast
     private(set) var jumps: [Date] = []
     var lastTrust: Bool?
-    var hadIconToFollow = true
 
     static var url: URL {
         Diagnostics.url.deletingLastPathComponent().appendingPathComponent("events.log")
@@ -126,16 +121,18 @@ extension BarApp {
         flight.note("accessibility permission \(trusted ? "granted" : "not granted")")
     }
 
-    /// Every display as this Mac has them laid out: `*` holds the •••.
+    /// Every display as this Mac has them laid out: `*` holds a •••, `active`
+    /// is the bar macOS isn't dimming. The first is the primary display.
     var screenLayoutText: String {
-        let control = controlPanel?.screen
+        let shared = NSScreen.screensHaveSeparateSpaces ? "" : " · shared desktops"
         return NSScreen.screens.enumerated().map { index, screen in
             let frame = screen.frame
             let notch = screen.safeAreaInsets.top > 0 ? " notch" : ""
-            let mark = screen == control ? "*" : ""
+            let mark = screen.displayID.flatMap { controlSlots[$0] } != nil ? "*" : ""
+            let active = controlSlots.count > 1 && MenuBarLook.isActiveBar(on: screen) == true ? " active" : ""
             return "\(index + 1)\(mark): \(Int(frame.width))×\(Int(frame.height))@\(Int(screen.backingScaleFactor))x"
-                + " at (\(Int(frame.minX)),\(Int(frame.minY))) bar \(Int(menuBarHeight(of: screen)))\(notch)"
-        }.joined(separator: "; ")
+                + " at (\(Int(frame.minX)),\(Int(frame.minY))) bar \(Int(menuBarHeight(of: screen)))\(notch)\(active)"
+        }.joined(separator: "; ") + shared
     }
 
     func recordControlMove(from: NSRect, to: NSRect, reason: String, snapshot: EngineSnapshot) {
@@ -153,24 +150,28 @@ extension BarApp {
         flight.note("JUMP \(move) · icons: \(icons.joined(separator: ", "))")
     }
 
-    /// The panel moved. YoungBar's own moves are recorded where they're made;
-    /// this catches the others, like macOS relocating it with a display.
-    func controlDidMove() {
-        guard let frame = controlPanel?.frame else { return }
-        guard let known = flight.controlFrame else {
-            flight.controlFrame = frame
+    /// A panel moved. YoungBar's own moves are recorded where they're made;
+    /// this catches the others, like macOS relocating it with a display. If
+    /// that took it off its bar it goes back at once, not at the next walk.
+    func controlDidMove(_ slot: ControlSlot) {
+        let frame = slot.panel.frame
+        guard let known = slot.knownFrame else {
+            slot.knownFrame = frame
             return
         }
-        guard Date() >= flight.ownMoveUntil,
+        guard Date() >= slot.ownMoveUntil,
               abs(known.minX - frame.minX) >= 1 || abs(known.minY - frame.minY) >= 1 else { return }
-        flight.controlFrame = frame
-        let move = "••• x\(Int(known.minX))→\(Int(frame.minX)) y\(Int(known.minY))→\(Int(frame.minY))"
+        slot.knownFrame = frame
+        let move = "••• \(displayLabel(slot))x\(Int(known.minX))→\(Int(frame.minX)) y\(Int(known.minY))→\(Int(frame.minY))"
         if ControlMove.isJump(from: known.origin, to: frame.origin) {
             flight.countJump()
             flight.note("JUMP \(move) · moved from outside YoungBar")
         } else {
             flight.note("\(move) · moved from outside YoungBar", mergeKey: "control-outside")
         }
+        guard let screen = screen(for: slot.displayID), let lastSnapshot,
+              !ControlLayout.controlIsInBar(globalRect(frame), of: barDisplay(for: screen)) else { return }
+        placeControl(slot, in: lastSnapshot)
     }
 
     /// Crash reports macOS kept for YoungBar in the last 30 days, newest first.

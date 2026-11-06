@@ -82,10 +82,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var workspaceObservers: [NSObjectProtocol] = []
     var iconCache: [String: NSImage] = [:]
     var nameCache: [String: String] = [:]
-    var controlPanel: NSPanel?
-    var controlButton: BarControlButton?
+    /// One ••• per display's bar (`ControlPanel.swift`).
+    var controlSlots: [CGDirectDisplayID: ControlSlot] = [:]
+    /// The display the strip is open on; nil while it's closed.
+    var anchorDisplayID: CGDirectDisplayID?
+    /// The last walk: one copy of each item, and every display's copies of them.
+    var lastSnapshot: EngineSnapshot?
+    var barCopies: [ItemID: [CGRect]] = [:]
     let flight = FlightRecorder()
-    var controlMoveObserver: NSObjectProtocol?
     /// Whether the window server's menu-bar look is used for the •••; cleared
     /// by `checkMenuBarTheme` if it fails its one check at launch.
     var menuBarThemeTrusted = true
@@ -201,7 +205,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         startRefreshTriggers()
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
-            Task { @MainActor in self?.outsideClick() }
+            Task { @MainActor in
+                self?.outsideClick()
+                // A click on another display makes its bar the active one.
+                self?.syncBarActivity()
+            }
         }
         let hotKeyRegistered = registerHotKey()
         refreshLoginItemIfMoved()
@@ -306,7 +314,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
     func startRefreshTriggers() {
         let tick = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, Date().timeIntervalSince(self.lastRefreshAt) >= self.refreshInterval - 0.05,
+                guard let self else { return }
+                // The active bar changes with the keyboard too, and nothing
+                // announces it. Reading it takes microseconds.
+                self.syncBarActivity()
+                guard Date().timeIntervalSince(self.lastRefreshAt) >= self.refreshInterval - 0.05,
                       self.sessionIsOnScreen else { return }
                 await self.refresh()
             }
@@ -334,7 +346,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         workspaceObservers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.reinstallControlIfNeeded()
+                self?.displaysChanged()
                 self?.refreshSoon()
             }
         })
@@ -403,6 +415,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             await engine.conceal(items: expired)
         }
         let snapshot = await engine.freshSnapshot()
+        await refreshBarCopies()
         remember(snapshot)
         overflowKeys = computeOverflow(outOfSightKeys(snapshot))
         positionControlBesideMenuIcons(in: snapshot)
@@ -515,8 +528,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
         guard !busy, !syncing else { return }
         // Only icons set to Show and in sight: a Hidden one out for a moment
         // (opened from the strip, Show all) keeps its place in the strip's
-        // order, and a pile in macOS's « has no order to learn from.
-        let outOfSight = outOfSightKeys(snapshot)
+        // order, and a pile in macOS's « has no order to learn from. Read on
+        // the primary display's bar, where the snapshot's frames are.
+        let outOfSight = outOfSightKeys(snapshot, on: NSScreen.screens.first)
         let actual = LayoutOrder.unique(snapshot.items
             .filter { item in
                 let key = item.id.sectionKey.rawValue

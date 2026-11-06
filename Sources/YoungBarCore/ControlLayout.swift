@@ -1,0 +1,193 @@
+// SPDX-FileCopyrightText: 2026 YoungBar contributors
+// SPDX-License-Identifier: GPL-3.0-only
+
+#if canImport(CoreGraphics)
+import CoreGraphics
+#else
+import Foundation // CGFloat / CGRect on Linux, where only the core is built and tested
+#endif
+
+/// One display's menu bar, in the global top-left space AX frames use
+/// (`CGDisplayBounds`): the primary display's top-left corner is (0, 0).
+public struct BarDisplay: Equatable, Sendable {
+    public let frame: CGRect
+    public let barHeight: CGFloat
+    /// The left edge of the bar right of the notch; nil without a notch.
+    public let visibleMinX: CGFloat?
+
+    public init(frame: CGRect, barHeight: CGFloat, visibleMinX: CGFloat? = nil) {
+        self.frame = frame
+        self.barHeight = barHeight
+        self.visibleMinX = visibleMinX
+    }
+
+    /// The vertical middle of this display's bar.
+    public var barMidY: CGFloat { frame.minY + barHeight / 2 }
+    /// How far left the control may go.
+    public var leftLimit: CGFloat { visibleMinX ?? (frame.minX + ControlLayout.edgeInset) }
+}
+
+/// An item as one display's bar sees it. macOS draws a status item once per
+/// display, so the same item has a different frame (or none) on each bar.
+public struct BarIcon: Equatable, Sendable {
+    public let key: String
+    /// Its frame on this bar; nil when this bar doesn't draw it.
+    public let frame: CGRect?
+    /// Drawn on another display's bar, just not this one.
+    public let drawnElsewhere: Bool
+    public let isOwn: Bool
+
+    public init(key: String, frame: CGRect?, drawnElsewhere: Bool = false, isOwn: Bool = false) {
+        self.key = key
+        self.frame = frame
+        self.drawnElsewhere = drawnElsewhere
+        self.isOwn = isOwn
+    }
+}
+
+/// Where the control goes on a bar. The answer depends only on that display
+/// and the icons on it, and it is always on that bar: no input can leave the
+/// control lower down (a user's control sat at the bottom right of the screen).
+public struct ControlSpot: Equatable, Sendable {
+    public enum Reason: Equatable, Sendable {
+        case beside(key: String, iconMinX: CGFloat)
+        /// A full bar: in the free left part of macOS's « pile.
+        case inPile(key: String, iconMinX: CGFloat)
+        /// No icon on this bar to go by.
+        case noIcon
+    }
+
+    public let minX: CGFloat
+    public let width: CGFloat
+    public let midY: CGFloat
+    public let reason: Reason
+    public let atLeftLimit: Bool
+}
+
+public enum ControlLayout {
+    public static let gapToIcon: CGFloat = 6
+    public static let narrowWidth: CGFloat = 22
+    public static let edgeInset: CGFloat = 12
+    /// Neighbours on a bar are a few points apart. A wider gap ends the run of
+    /// icons the control sits left of. It is wider than the control itself, so
+    /// a control placed in such a gap never covers an icon.
+    public static let runGap: CGFloat = 60
+    /// With no icon to go by, this far from the right edge of the bar.
+    public static let fallbackRightInset: CGFloat = 88
+    /// A frame this far above a bar still counts as on it (AX padding).
+    static let barSlack: CGFloat = 5
+
+    /// In this display's bar: on the display, level with its bar. A display
+    /// above or below can share every x, so x alone can't tell.
+    public static func isOnBar(_ frame: CGRect, of display: BarDisplay) -> Bool {
+        let y = frame.minY - display.frame.minY
+        return y > -barSlack && y < max(display.barHeight, 1)
+            && frame.midX >= display.frame.minX && frame.midX < display.frame.maxX
+    }
+
+    /// The control's own frame is in the bar's height range on this display.
+    public static func controlIsInBar(_ control: CGRect, of display: BarDisplay) -> Bool {
+        let y = control.midY - display.frame.minY
+        return y >= 0 && y <= display.barHeight
+            && control.midX >= display.frame.minX && control.midX < display.frame.maxX
+    }
+
+    /// Keys out of sight on this bar. When nothing at all is drawn on it (the
+    /// bar is hidden: full screen, auto-hide; or the display draws none) only
+    /// the items drawn nowhere count: everything else may well come back.
+    public static func outOfSight(_ icons: [BarIcon], on display: BarDisplay) -> Set<String> {
+        let barIsListed = icons.contains { $0.frame.map { isOnBar($0, of: display) } ?? false }
+        var frames: [String: CGRect?] = [:]
+        for icon in icons {
+            let frame = icon.frame.flatMap { isOnBar($0, of: display) ? $0 : nil }
+            if frame == nil, !barIsListed, icon.drawnElsewhere || icon.frame != nil { continue }
+            if let frame {
+                frames[icon.key] = .some(frame)
+            } else if frames[icon.key] == nil {
+                frames[icon.key] = .some(nil)
+            }
+        }
+        return Overflow.keys(frames: frames, visibleMinX: display.visibleMinX)
+    }
+
+    /// The leftmost icon of the run that starts at the right end of the bar.
+    /// A hidden item's slot can sit far left on the bar; a gap keeps it out,
+    /// however many real icons the run holds on a narrow display.
+    public static func leadingIcon(_ icons: [BarIcon], on display: BarDisplay,
+                                   outOfSight hidden: Set<String>) -> (key: String, frame: CGRect)? {
+        let visible = icons.compactMap { icon -> (key: String, frame: CGRect)? in
+            guard !icon.isOwn, !hidden.contains(icon.key), let frame = icon.frame,
+                  isOnBar(frame, of: display) else { return nil }
+            return (icon.key, frame)
+        }.sorted { $0.frame.minX > $1.frame.minX }
+        guard var leading = visible.first else { return nil }
+        for next in visible.dropFirst() {
+            if leading.frame.minX - next.frame.maxX > runGap { break }
+            leading = next
+        }
+        return leading
+    }
+
+    /// - Parameters:
+    ///   - current: the control's frame now, in the same global space.
+    ///   - width: its width beside a free bar.
+    public static func spot(icons: [BarIcon], on display: BarDisplay, current: CGRect, width: CGFloat) -> ControlSpot {
+        let hidden = outOfSight(icons, on: display)
+        let limit = display.leftLimit
+        guard let leading = leadingIcon(icons, on: display, outOfSight: hidden) else {
+            // Stay where it is along the bar if that is on this display, and
+            // on the bar's line in any case.
+            let onDisplay = current.midX >= display.frame.minX && current.midX < display.frame.maxX
+            let x = onDisplay ? current.minX : display.frame.maxX - width - fallbackRightInset
+            let clamped = min(max(x, limit), display.frame.maxX - width)
+            return ControlSpot(minX: clamped, width: width, midY: display.barMidY, reason: .noIcon,
+                               atLeftLimit: clamped == limit)
+        }
+        let midY = leading.frame.midY
+        let iconX = leading.frame.minX
+        // A full bar: YoungBar's own item is in macOS's « with the others, and
+        // the « sits at the right of their pile. The control takes the free
+        // left part of that slot, narrowed so it doesn't cover the «.
+        let ownKeys = Set(icons.filter(\.isOwn).map(\.key))
+        if !ownKeys.isDisjoint(with: hidden), let pile = pileMinX(icons, on: display, outOfSight: hidden, leftOf: iconX) {
+            let x = max(limit, pile)
+            return ControlSpot(minX: x, width: narrowWidth, midY: midY,
+                               reason: .inPile(key: leading.key, iconMinX: iconX), atLeftLimit: x == limit)
+        }
+        let x = max(limit, iconX - width - gapToIcon)
+        return ControlSpot(minX: x, width: width, midY: midY,
+                           reason: .beside(key: leading.key, iconMinX: iconX), atLeftLimit: x == limit)
+    }
+
+    /// The left end of the pile of out-of-sight items just left of `iconX`.
+    static func pileMinX(_ icons: [BarIcon], on display: BarDisplay, outOfSight hidden: Set<String>,
+                         leftOf iconX: CGFloat) -> CGFloat? {
+        let frames = icons.compactMap { icon -> CGRect? in
+            guard hidden.contains(icon.key), let frame = icon.frame, isOnBar(frame, of: display),
+                  frame.minX < iconX else { return nil }
+            return frame
+        }.sorted { $0.minX > $1.minX }
+        var edge = iconX
+        var result: CGFloat?
+        for frame in frames {
+            if edge - frame.maxX > runGap { break }
+            result = frame.minX
+            edge = min(edge, frame.minX)
+        }
+        return result
+    }
+
+    /// Whether AXPress can open an item's menu near the strip: macOS opens it
+    /// under the item's own (hidden) slot, which has to be on the strip's
+    /// display and near the control. A slot parked at the far left of a bar
+    /// doesn't count, wherever the control is.
+    public static func slotIsNearControl(_ slot: CGPoint, control: CGRect, on display: BarDisplay) -> Bool {
+        guard display.frame.contains(CGPoint(x: slot.x, y: display.frame.minY)) else { return false }
+        let y = slot.y - display.frame.minY
+        guard y > -barSlack, y < max(display.barHeight, 1) else { return false }
+        return slot.x - display.frame.minX > parkedSlotMargin && abs(slot.x - control.midX) < nearSlotDistance
+    }
+
+    public static let parkedSlotMargin: CGFloat = 100
+    static let nearSlotDistance: CGFloat = 400
+}

@@ -1,6 +1,6 @@
-# YoungBar 0.1.8 beta 1 更新日志
+# YoungBar 0.1.8 更新日志
 
-这是测试版，主要解决多显示器和不同屏幕上 ••• 跑位的问题。
+这个版本主要解决多显示器和不同屏幕上 ••• 跑位的问题。
 
 ## 新增
 
@@ -16,7 +16,7 @@
 
 ## 修复
 
-- ••• 不再停在屏幕下方或右下角
+- ••• 被挪出菜单栏时会立刻回来
 - 接显示器或改排列时 ••• 不再乱跑
 - 窄屏、图标多时 ••• 不再和图标重合
 
@@ -27,12 +27,11 @@
 
 ## 说明
 
-- 测试版不会自动推送，要手动安装；正式版 0.1.8 发布后，应用内会提示更新
 - 遇到问题时，右键 ••• →「复制诊断信息」，再贴到群里、评论区或 GitHub
 
 # English
 
-This is a test version. It mainly deals with multiple displays and the ••• ending up in the wrong place.
+This version mainly deals with multiple displays and the ••• ending up in the wrong place.
 
 ## New
 
@@ -48,7 +47,7 @@ This is a test version. It mainly deals with multiple displays and the •••
 
 ## Fixed
 
-- The ••• no longer stays low on the screen or at the bottom right
+- The ••• comes straight back if it gets moved off the menu bar
 - The ••• no longer wanders when displays connect or move
 - The ••• no longer overlaps icons on a narrow or crowded bar
 
@@ -59,5 +58,12 @@ This is a test version. It mainly deals with multiple displays and the •••
 
 ## Notes
 
-- A test version isn't offered automatically: install it by hand. Once 0.1.8 is out, the app offers the update
 - If something goes wrong, right-click ••• → Copy Diagnostics and paste it in the group, a comment or GitHub
+
+## 校验 / Checksum
+
+```sh
+shasum -a 256 -c YoungBar-0.1.8.zip.sha256
+```
+
+对应源码 / Corresponding source：本 tag（`v0.1.8`）的源码归档 / this tag's source archive.

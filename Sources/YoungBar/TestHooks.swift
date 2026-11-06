@@ -86,6 +86,9 @@ extension BarApp {
         if ProcessInfo.processInfo.environment["YOUNGBAR_DISPLAYTEST"] == "1" {
             _ = await runDisplayTest(name: "displaytest")
         }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_DISPLAYCLICKTEST"] == "1" {
+            await runDisplayClickTest()
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_DISPLAYLAB"] == "1" {
             listenForDisplayLab()
         }
@@ -2254,6 +2257,13 @@ extension BarApp {
         passed = passed && everyBarHasOne
 
         var snapshot = await walk()
+        // The raw walk: what a report needs when an icon lands in the wrong place.
+        result["walk"] = snapshot.items.map { item -> String in
+            let copies = (barCopies[item.id] ?? []).map { "\(Int($0.minX))+\(Int($0.width))@\(Int($0.minY))" }
+            let frame = item.frame.map { "\(Int($0.minX))+\(Int($0.width))@\(Int($0.minY))" } ?? "none"
+            return "\(item.id.rawValue) · main \(frame) · copies \(copies.joined(separator: " "))"
+        }
+        result["outOfSight"] = screens.map { outOfSightKeys(snapshot, on: $0).sorted() }
         var displays: [[String: Any]] = []
         for (index, screen) in screens.enumerated() {
             guard let id = screen.displayID, let slot = controlSlots[id] else { continue }
@@ -2369,6 +2379,203 @@ extension BarApp {
         }
         flight.flush()
         return passed
+    }
+
+    struct PopupWindow: Sendable {
+        let number: Int
+        let owner: String
+        let pid: Int
+        let layer: Int
+        let bounds: CGRect
+    }
+
+    /// On-screen windows above the normal level, with their global CG bounds.
+    nonisolated static func popupWindows() -> [PopupWindow] {
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        return list.compactMap { info in
+            guard let number = info[kCGWindowNumber as String] as? Int,
+                  let layer = info[kCGWindowLayer as String] as? Int, layer > 0,
+                  let raw = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: raw), bounds.height > 40 else { return nil }
+            return PopupWindow(number: number, owner: info[kCGWindowOwnerName as String] as? String ?? "",
+                               pid: info[kCGWindowOwnerPID as String] as? Int ?? 0, layer: layer, bounds: bounds)
+        }
+    }
+
+    /// `YOUNGBAR_DISPLAYCLICKTEST=1`: real input on each display. Rests the pointer
+    /// on its •••, clicks it, right-clicks it, then opens a system icon and an app's
+    /// icon from the strip and checks each menu is on that display. Escape closes
+    /// them; the temporary hidden mode stays in memory. Touches the pointer and
+    /// opens real menus. `YOUNGBAR_DISPLAYCLICK_APP=<bundle id>` picks the app (a
+    /// hidden one with a harmless menu). Result in `displayclicktest.json`, with a
+    /// screenshot of each open menu.
+    func runDisplayClickTest() async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
+        var passed = true
+        let home = CGEvent(source: nil)?.location
+        defer {
+            if let home { CGWarpMouseCursorPosition(home) }
+            result["passed"] = passed
+            writeJSON(result, name: "displayclicktest.json")
+        }
+        func settle(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
+        func waitIdle() async { for _ in 0..<40 where busy { await settle(150) } }
+        func movePointer(to point: CGPoint) {
+            let source = CGEventSource(stateID: .hidSystemState)
+            CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?
+                .post(tap: .cghidEventTap)
+        }
+        /// New windows since `before`, as evidence, and whether one sits on `bounds`.
+        func newPopups(since before: Set<Int>, on bounds: CGRect) -> (windows: [String], here: Bool) {
+            let fresh = Self.popupWindows().filter { !before.contains($0.number) }
+            return (fresh.map { "\($0.owner) layer \($0.layer) \(NSStringFromRect($0.bounds))" },
+                    fresh.contains { bounds.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) })
+        }
+        func shot(_ bounds: CGRect, _ name: String) async {
+            let path = Diagnostics.url.deletingLastPathComponent().appendingPathComponent(name).path
+            let region = "\(Int(bounds.minX)),\(Int(bounds.minY)),\(Int(bounds.width)),\(Int(min(bounds.height, 500)))"
+            await Task.detached {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                process.arguments = ["-x", "-R", region, path]
+                try? process.run()
+                process.waitUntilExit()
+            }.value
+        }
+        /// Opens `key`'s item from a strip on `id`; returns the windows that appeared.
+        func press(_ key: String, on id: CGDirectDisplayID, bounds: CGRect, shotName: String) async -> (windows: [String], here: Bool) {
+            if !expanded { toggleShelfFrom(keyboard: false, on: id) }
+            await settle(400)
+            let before = Set(Self.popupWindows().map(\.number))
+            let button = BarControlButton(frame: .zero)
+            button.identifier = .init(key)
+            await waitIdle()
+            pressShelfItem(button)
+            await settle(200)
+            await waitIdle()
+            await settle(800)
+            let seen = newPopups(since: before, on: bounds)
+            await shot(bounds, shotName)
+            postEscape()
+            await settle(600)
+            return seen
+        }
+
+        for _ in 0..<8 {
+            await refresh()
+            await settle(500)
+        }
+        result["layout"] = screenLayoutText
+        let app = ProcessInfo.processInfo.environment["YOUNGBAR_DISPLAYCLICK_APP"] ?? "com.better365.iFanOffline"
+        let appKey = catalog.first { $0.value.id.bundleID == app }?.key
+        let inputKey = catalog.first { $0.value.id.bundleID == "com.apple.TextInputMenuAgent" }?.key
+        result["appTarget"] = appKey ?? "not present"
+        result["appMode"] = appKey.flatMap { modes[$0] } ?? -1
+
+        var displays: [[String: Any]] = []
+        for (index, screen) in barScreens.enumerated() {
+            guard let id = screen.displayID, let slot = controlSlots[id] else { continue }
+            var entry: [String: Any] = ["display": index + 1]
+            var checks: [String: Bool] = [:]
+            let bounds = CGDisplayBounds(id)
+            let dot = globalRect(slot.panel.frame)
+            let center = CGPoint(x: dot.midX, y: dot.midY)
+            let before = slot.panel.frame.origin
+
+            // Resting on it opens the strip here (with hover on).
+            movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
+            await settle(300)
+            if options[.hoverExpand] == 1 {
+                movePointer(to: center)
+                await settle(900)
+                checks["hoverOpensHere"] = expanded && anchorDisplayID == id
+                    && (shelfPanel.map { screen.frame.contains($0.frame) } ?? false)
+                closeShelf()
+                movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
+                await settle(400)
+            }
+
+            // A click opens it here; a second click closes it.
+            await Self.postClick(at: center, button: .left)
+            await settle(500)
+            checks["clickOpensHere"] = expanded && anchorDisplayID == id
+                && (shelfPanel.map { screen.frame.contains($0.frame) } ?? false)
+            if let shelf = shelfPanel?.frame { entry["stripFrame"] = NSStringFromRect(shelf) }
+            await shot(bounds, "displayclick-\(index + 1)-strip.png")
+            await Self.postClick(at: center, button: .left)
+            await settle(500)
+            checks["secondClickCloses"] = !expanded
+            movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
+            await settle(300)
+
+            // The right-click menu runs its own loop, so Escape comes from off the main actor.
+            let beforeMenu = Set(Self.popupWindows().map(\.number))
+            let probe = Task.detached { () -> [PopupWindow] in
+                try? await Task.sleep(for: .milliseconds(800))
+                let windows = Self.popupWindows().filter { !beforeMenu.contains($0.number) }
+                for down in [true, false] {
+                    CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: down)?.post(tap: .cghidEventTap)
+                }
+                return windows
+            }
+            await Self.postClick(at: center, button: .right)
+            let menu = await probe.value
+            await settle(400)
+            entry["rightClickWindows"] = menu.map { "\($0.owner) layer \($0.layer) \(NSStringFromRect($0.bounds))" }
+            checks["rightClickMenuHere"] = menu.contains { bounds.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }
+            movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
+            await settle(300)
+
+            // A system icon: reveal and click, on this bar's copy.
+            if let key = inputKey, let item = catalog[key] {
+                let original = modes[key] ?? 0
+                modes[key] = 1
+                await engine.conceal()
+                await engine.setModel(currentModel())
+                await settle(800)
+                let seen = await press(key, on: id, bounds: bounds, shotName: "displayclick-\(index + 1)-system.png")
+                entry["systemWindows"] = seen.windows
+                checks["systemMenuHere"] = seen.here
+                shownUntil[item.id] = nil
+                modes[key] = original
+                await engine.conceal(releasing: [item.id])
+                await engine.setModel(currentModel())
+                closeShelf()
+                await settle(800)
+            }
+
+            // An app's hidden icon: AXPress in place on the main bar, reveal and click elsewhere.
+            if let key = appKey, let item = catalog[key] {
+                let original = modes[key] ?? 0
+                if original != 1 {
+                    modes[key] = 1
+                    await engine.conceal()
+                    await engine.setModel(currentModel())
+                    await settle(800)
+                }
+                let seen = await press(key, on: id, bounds: bounds, shotName: "displayclick-\(index + 1)-app.png")
+                entry["appWindows"] = seen.windows
+                checks["appMenuHere"] = seen.here
+                shownUntil[item.id] = nil
+                modes[key] = original
+                await engine.conceal(releasing: [item.id])
+                await engine.setModel(currentModel())
+                closeShelf()
+                await settle(800)
+            }
+
+            let snapshot = await engine.freshSnapshot()
+            await refreshBarCopies()
+            positionControlBesideMenuIcons(in: snapshot)
+            await settle(500)
+            checks["backInPlace"] = hypot(slot.panel.frame.minX - before.x, slot.panel.frame.minY - before.y) <= 2
+            entry["distance"] = Double(hypot(slot.panel.frame.minX - before.x, slot.panel.frame.minY - before.y))
+            entry["checks"] = checks
+            passed = passed && checks.values.allSatisfy { $0 }
+            displays.append(entry)
+        }
+        result["displays"] = displays
+        flight.flush()
     }
 
     /// `YOUNGBAR_DISPLAYLAB=1`: stays running and does what `Scripts/display-lab.swift`

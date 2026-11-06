@@ -28,6 +28,7 @@ extension BarApp {
             return
         }
         guard !busy else { return }
+        flight.note("strip asked by \(byHover ? "hover" : fromKeyboard ? "shortcut" : "•••")\(display.map { " on display \($0)" } ?? "")")
         // The ••• on another display: the strip goes there, instead of closing.
         let movesAway = expanded && display != nil && display != anchorDisplayID
         if expanded && !movesAway {
@@ -614,6 +615,9 @@ extension BarApp {
         let location = NSEvent.mouseLocation
         if expanded,
            shelfPanel?.frame.contains(location) != true,
-           !controlSlots.values.contains(where: { $0.panel.frame.contains(location) }) { closeShelf() }
+           !controlSlots.values.contains(where: { $0.panel.frame.contains(location) }) {
+            flight.note("click outside the strip at x\(Int(location.x)) y\(Int(location.y))")
+            closeShelf()
+        }
     }
 }

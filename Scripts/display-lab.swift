@@ -11,6 +11,12 @@
 //   swift Scripts/display-lab.swift               # about 10 minutes; hands off
 //   swift Scripts/display-lab.swift --with-off    # also turns each display off in software
 //   swift Scripts/display-lab.swift --restore     # puts the saved arrangement back
+//   swift Scripts/display-lab.swift --only <step> # one arrangement, by the name in the plan
+//   swift Scripts/display-lab.swift --baseline <App> [--with-off]
+//                                                 # an older build with no self-test: only
+//                                                 # records where its ••• goes
+//
+// Every step records where the ••• windows go for 8 seconds (`<step>-dots.txt`).
 //
 // Quit the YoungBar you normally run first; this starts the test build. Windows
 // may land elsewhere while displays move, and macOS doesn't always put them back.
@@ -23,6 +29,7 @@ import CoreGraphics
 let arguments = CommandLine.arguments
 let dryRun = arguments.contains("--dry-run")
 let withOff = arguments.contains("--with-off")
+let baselineApp: String? = arguments.firstIndex(of: "--baseline").flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
 let support = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/YoungBar", isDirectory: true)
 let savedURL = support.appendingPathComponent("display-lab-original.json")
@@ -47,6 +54,16 @@ struct Saved: Codable {
     var origins: [String: [Int]]   // display id -> x, y
     var modes: [String: Int32]     // display id -> mode number
     var loginItemToken: String?
+    var lastVersion: String?
+}
+
+func writeDefault(_ key: String, _ value: String?) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+    process.arguments = value.map { ["write", bundleID, key, $0] } ?? ["delete", bundleID, key]
+    process.standardError = FileHandle.nullDevice
+    try? process.run()
+    process.waitUntilExit()
 }
 
 func modeNumber(of id: CGDirectDisplayID) -> Int32 {
@@ -71,12 +88,16 @@ let enableDisplay: EnableDisplay? = {
     return unsafeBitCast(call, to: EnableDisplay.self)
 }()
 
+var lastConfigError: CGError = .success
+
 @discardableResult
 func configure(_ body: (CGDisplayConfigRef?) -> Void) -> Bool {
     var config: CGDisplayConfigRef?
-    guard CGBeginDisplayConfiguration(&config) == .success else { return false }
+    lastConfigError = CGBeginDisplayConfiguration(&config)
+    guard lastConfigError == .success else { return false }
     body(config)
-    return CGCompleteDisplayConfiguration(config, .forSession) == .success
+    lastConfigError = CGCompleteDisplayConfiguration(config, .forSession)
+    return lastConfigError == .success
 }
 
 func restore(_ saved: Saved) {
@@ -129,6 +150,8 @@ if let index = arguments.firstIndex(of: "--watchdog"), index + 1 < arguments.cou
     // The script removes the saved file once it has restored by itself.
     if let saved = loadSaved() {
         restore(saved)
+        writeDefault("loginItemToken", saved.loginItemToken)
+        writeDefault("lastLaunchedVersion", saved.lastVersion)
         try? FileManager.default.removeItem(at: savedURL)
     }
     exit(0)
@@ -181,10 +204,13 @@ var steps: [Step] = [
         place(config, inner: (0, 0), outer: (innerW, 0))
         if let mode = narrowMode() { CGConfigureDisplayWithDisplayMode(config, external, mode, nil) }
     },
-    Step(name: "mirror", what: "mirrored", relaunch: true) { config in
+    // On its own: a mode change and mirroring in one configuration were refused.
+    Step(name: "own-resolution", what: "external back at its own resolution") { config in
         if let mode = (CGDisplayCopyAllDisplayModes(external, nil) as? [CGDisplayMode])?.first(where: { $0.ioDisplayModeID == loadSaved()?.modes[String(external)] }) {
             CGConfigureDisplayWithDisplayMode(config, external, mode, nil)
         }
+    },
+    Step(name: "mirror", what: "mirrored", relaunch: true) { config in
         CGConfigureDisplayMirrorOfDisplay(config, external, builtIn)
     },
 ]
@@ -198,12 +224,18 @@ if withOff, enableDisplay != nil {
             _ = enableDisplay?(config, external, true)
         },
         Step(name: "only-external", what: "built-in off: like a Mac mini, or the lid closed", relaunch: true) { config in
+            // Never the last display that is on.
+            guard CGDisplayIsActive(external) != 0 else { return }
             _ = enableDisplay?(config, builtIn, false)
         },
         Step(name: "built-in-back", what: "built-in back: like opening the lid") { config in
             _ = enableDisplay?(config, builtIn, true)
         },
     ]
+}
+
+if let index = arguments.firstIndex(of: "--only"), index + 1 < arguments.count {
+    steps = steps.filter { $0.name == arguments[index + 1] }
 }
 
 log("Displays: built-in \(builtIn) \(innerW)×\(innerH), external \(external) \(outerW)×\(outerH)")
@@ -216,9 +248,9 @@ if dryRun {
 // MARK: - Running it
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-let app = root.appendingPathComponent("build/YoungBar.app")
+let app = baselineApp.map { URL(fileURLWithPath: $0) } ?? root.appendingPathComponent("build/YoungBar.app")
 guard FileManager.default.fileExists(atPath: app.path) else {
-    log("No build/YoungBar.app here: run TESTHOOKS=1 sh Scripts/build.sh in the repository first.")
+    log("No \(app.path): run TESTHOOKS=1 sh Scripts/build.sh in the repository first.")
     exit(1)
 }
 if !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
@@ -253,7 +285,18 @@ let build = shell("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleVersion", app
     .trimmingCharacters(in: .whitespacesAndNewlines)
 _ = shell("/usr/bin/defaults", ["write", bundleID, "loginItemToken", "\(app.path)|\(build)"])
 
-let saved = currentState(token: token.isEmpty ? nil : token)
+// Nor leave its version behind, or bring up What's New in the middle of the run.
+let versionRead = shell("/usr/bin/defaults", ["read", bundleID, "lastLaunchedVersion"]).trimmingCharacters(in: .whitespacesAndNewlines)
+let appVersion = shell("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", app.appendingPathComponent("Contents/Info.plist").path])
+    .trimmingCharacters(in: .whitespacesAndNewlines)
+writeDefault("lastLaunchedVersion", appVersion)
+
+// Nor fill the log with its test lines.
+let eventsURL = support.appendingPathComponent("events.log")
+let eventsBefore = try? Data(contentsOf: eventsURL)
+
+var saved = currentState(token: token.isEmpty ? nil : token)
+saved.lastVersion = versionRead.contains("does not exist") ? nil : versionRead
 try JSONEncoder().encode(saved).write(to: savedURL)
 let watchdog = Process()
 watchdog.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
@@ -266,6 +309,11 @@ func lab(_ command: String) {
 }
 
 func launch() {
+    if baselineApp != nil {
+        _ = shell("/usr/bin/open", [app.path])
+        sleep(6)
+        return
+    }
     try? FileManager.default.removeItem(at: support.appendingPathComponent("displaylab-ready.json"))
     _ = shell("/usr/bin/open", ["--env", "YOUNGBAR_DISPLAYLAB=1", "--env", "YOUNGBAR_DISPLAY_POINTER=1", app.path])
     let deadline = Date().addingTimeInterval(40)
@@ -273,9 +321,62 @@ func launch() {
 }
 
 func quitApp() {
-    lab("quit")
+    if baselineApp != nil {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).forEach { _ = $0.terminate() }
+    } else {
+        lab("quit")
+    }
     let deadline = Date().addingTimeInterval(15)
     while Date() < deadline, !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty { sleep(1) }
+}
+
+var summary: [String] = []
+
+/// The ••• windows on screen right now, in global coordinates.
+func dotFrames() -> [CGRect] {
+    let pids = Set(NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map { Int($0.processIdentifier) })
+    let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    return list.compactMap { info -> CGRect? in
+        guard pids.contains(info[kCGWindowOwnerPID as String] as? Int ?? -1),
+              (info[kCGWindowLayer as String] as? Int ?? 0) >= 20,
+              let raw = info[kCGWindowBounds as String] as? NSDictionary,
+              let frame = CGRect(dictionaryRepresentation: raw),
+              frame.width <= 40, frame.height <= 32 else { return nil }
+        return frame
+    }.sorted { ($0.minX, $0.minY) < ($1.minX, $1.minY) }
+}
+
+/// Inside the top 45 points of a display that is on.
+func isOnABar(_ frame: CGRect) -> Bool {
+    let center = CGPoint(x: frame.midX, y: frame.midY)
+    return displays().contains { id in
+        guard CGDisplayIsActive(id) != 0 else { return false }
+        let bounds = CGDisplayBounds(id)
+        return bounds.contains(center) && center.y < bounds.minY + 45
+    }
+}
+
+/// Follows the ••• windows after a change: when they move, and for how long any is off every bar.
+func watchDots(_ name: String, seconds: Double = 8) {
+    let started = Date()
+    var last: [CGRect] = []
+    var lines: [String] = []
+    var offBar = 0.0
+    while Date().timeIntervalSince(started) < seconds {
+        let frames = dotFrames()
+        if frames.contains(where: { !isOnABar($0) }) { offBar += 0.25 }
+        if frames != last {
+            let text = frames.map { "\(Int($0.minX)),\(Int($0.minY))\(isOnABar($0) ? "" : " OFF-BAR")" }.joined(separator: " | ")
+            lines.append(String(format: "%5.2f  ", Date().timeIntervalSince(started)) + text)
+            last = frames
+        }
+        usleep(250_000)
+    }
+    try? lines.joined(separator: "\n").appending("\n").write(to: out.appendingPathComponent("\(name)-dots.txt"), atomically: true, encoding: .utf8)
+    let end = last.map { "\(Int($0.minX)),\(Int($0.minY))\(isOnABar($0) ? "" : " OFF-BAR")" }.joined(separator: " | ")
+    let line = String(format: "dots  %@: off a bar %.1f s, %d positions, ends at %@", name, offBar, lines.count, end.isEmpty ? "none" : end)
+    summary.append(line)
+    log(line)
 }
 
 /// Every display's bar and strip of screen below it, then the checks.
@@ -284,6 +385,20 @@ func record(_ name: String) -> Bool {
         let bounds = CGDisplayBounds(id)
         let rect = "\(Int(bounds.minX)),\(Int(bounds.minY)),\(Int(bounds.width)),70"
         _ = shell("/usr/sbin/screencapture", ["-x", "-R", rect, out.appendingPathComponent("\(name)-display\(index + 1).png").path])
+    }
+    if baselineApp != nil {
+        // No self-test in that build: where its ••• is, is the result. A shot of the whole
+        // display only when it has left the bar, so the evidence shows where.
+        let frames = dotFrames()
+        for frame in frames where !isOnABar(frame) {
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            if let id = displays().first(where: { CGDisplayBounds($0).contains(center) }) {
+                let bounds = CGDisplayBounds(id)
+                _ = shell("/usr/sbin/screencapture", ["-x", "-R", "\(Int(bounds.minX)),\(Int(bounds.minY)),\(Int(bounds.width)),\(Int(bounds.height))",
+                                                     out.appendingPathComponent("\(name)-off-bar.png").path])
+            }
+        }
+        return !frames.isEmpty && frames.allSatisfy(isOnABar)
     }
     let file = support.appendingPathComponent("\(name).json")
     try? FileManager.default.removeItem(at: file)
@@ -300,30 +415,34 @@ func record(_ name: String) -> Bool {
     return false
 }
 
-var summary: [String] = []
 func note(_ name: String, _ passed: Bool) {
     let line = "\(passed ? "PASS" : "FAIL")  \(name)"
     summary.append(line)
     log(line)
 }
 
-log("Results in \(out.path)")
+log("Results in \(out.path)\(baselineApp == nil ? "" : " (baseline \(appVersion))")")
 launch()
 sleep(4)
 note("start", record("start"))
 for step in steps {
     log("→ \(step.what)")
-    guard configure(step.apply) else {
-        note("\(step.name): the arrangement was refused", false)
+    var accepted = configure(step.apply)
+    if !accepted, step.name == "mirror" {
+        log("  mirroring onto the built-in was refused (CGError \(lastConfigError.rawValue)); trying the other way")
+        accepted = configure { CGConfigureDisplayMirrorOfDisplay($0, builtIn, external) }
+    }
+    guard accepted else {
+        note("\(step.name): the arrangement was refused (CGError \(lastConfigError.rawValue))", false)
         continue
     }
     // Long enough for the walks after a display change to finish.
-    sleep(6)
+    watchDots(step.name)
     note(step.name, record(step.name))
     if step.relaunch {
         quitApp()
         launch()
-        sleep(4)
+        watchDots("\(step.name)-launch", seconds: 4)
         note("\(step.name), fresh launch", record("\(step.name)-launch"))
     }
 }
@@ -332,12 +451,10 @@ sleep(6)
 note("restored", record("restored"))
 quitApp()
 try? FileManager.default.removeItem(at: savedURL)
-if let token = saved.loginItemToken {
-    _ = shell("/usr/bin/defaults", ["write", bundleID, "loginItemToken", token])
-} else {
-    _ = shell("/usr/bin/defaults", ["delete", bundleID, "loginItemToken"])
-}
-try? FileManager.default.copyItem(at: support.appendingPathComponent("events.log"), to: out.appendingPathComponent("events.log"))
+writeDefault("loginItemToken", saved.loginItemToken)
+writeDefault("lastLaunchedVersion", saved.lastVersion)
+try? FileManager.default.copyItem(at: eventsURL, to: out.appendingPathComponent("events.log"))
+if let eventsBefore { try? eventsBefore.write(to: eventsURL, options: .atomic) }
 let defaultsAfter = shell("/usr/bin/defaults", ["export", bundleID, "-"])
 try defaultsAfter.write(to: out.appendingPathComponent("defaults-after.plist"), atomically: true, encoding: .utf8)
 summary.append(defaultsBefore == defaultsAfter ? "defaults: unchanged" : "defaults: CHANGED, compare defaults-before.plist and defaults-after.plist")

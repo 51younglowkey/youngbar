@@ -57,6 +57,24 @@ public enum LayoutOrder {
         return !others.contains { $0.midX > moved.midX && $0.midX < target.midX }
     }
 
+    /// The Menu Bar page's rows: the strip's icons first (Hide and Always
+    /// Hide), then the bar's, each left to right. YoungBar hides in place,
+    /// so a hidden icon keeps its real slot among the shown ones; listed
+    /// there, it read as sitting on the bar right of the ••• (user report,
+    /// 2026-11-09).
+    public static func grouped(_ order: [String], modes: [String: Int]) -> [String] {
+        order.filter { (modes[$0] ?? 0) > 0 } + order.filter { (modes[$0] ?? 0) == 0 }
+    }
+
+    /// Where a row may land in a `grouped` list it was taken out of:
+    /// `index` kept inside its own group (the first `hiddenCount` rows are
+    /// the strip's) and not past `end`, the locked run at the right.
+    public static func clampedIndex(_ index: Int, hidden: Bool, hiddenCount: Int, end: Int) -> Int {
+        let lower = hidden ? 0 : hiddenCount
+        let upper = hidden ? hiddenCount : max(hiddenCount, end)
+        return max(lower, min(index, upper))
+    }
+
     /// `key` moved to just before `before`; an empty or unknown `before`
     /// moves it to the end.
     public static func moving(_ key: String, before: String, in order: [String]) -> [String] {

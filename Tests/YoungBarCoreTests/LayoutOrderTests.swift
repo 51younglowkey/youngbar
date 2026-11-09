@@ -210,3 +210,25 @@ import Testing
         }
     }
 }
+
+@Suite struct GroupedOrderTests {
+    @Test func stripRowsComeFirstInOrder() {
+        // B and D hidden, F always hidden; A, C, E shown — as on the bar.
+        let order = ["A", "B", "C", "D", "E", "F"]
+        let modes = ["B": 1, "D": 1, "F": 2, "C": 0]
+        #expect(LayoutOrder.grouped(order, modes: modes) == ["B", "D", "F", "A", "C", "E"])
+    }
+
+    @Test func nothingHiddenKeepsTheOrder() {
+        #expect(LayoutOrder.grouped(["A", "B"], modes: [:]) == ["A", "B"])
+    }
+
+    @Test func rowsStayInTheirGroup() {
+        // 3 strip rows, then bar rows up to the locked run at 7.
+        #expect(LayoutOrder.clampedIndex(5, hidden: true, hiddenCount: 3, end: 7) == 3)
+        #expect(LayoutOrder.clampedIndex(1, hidden: false, hiddenCount: 3, end: 7) == 3)
+        #expect(LayoutOrder.clampedIndex(9, hidden: false, hiddenCount: 3, end: 7) == 7)
+        #expect(LayoutOrder.clampedIndex(2, hidden: true, hiddenCount: 3, end: 7) == 2)
+        #expect(LayoutOrder.clampedIndex(4, hidden: false, hiddenCount: 3, end: 7) == 4)
+    }
+}

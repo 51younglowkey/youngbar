@@ -25,12 +25,22 @@ extension BarApp {
     func outOfSightKeys(_ snapshot: EngineSnapshot) -> Set<String> {
         guard let screen = controlPanel?.screen ?? NSScreen.screens.first else { return [] }
         var frames: [String: CGRect?] = [:]
+        // YoungBar has one status item, but the walk can list it twice (its
+        // AX title flaps to "Item-0"), and the two entries on one spot read
+        // as the « pile. Judge it once, by an entry with a frame.
+        let ownItems = snapshot.items.filter { $0.id.bundleID == Bundle.main.bundleIdentifier }
+        let ownKeys = Set(ownItems.map(\.id.sectionKey.rawValue))
+        let ownJudged = (ownItems.first { $0.frame != nil } ?? ownItems.first)?.id.sectionKey.rawValue
         for item in snapshot.items {
+            let key = item.id.sectionKey.rawValue
+            if ownKeys.contains(key), key != ownJudged { continue }
             // Only this display's bar: a copy on a side display is visible.
             if let frame = item.frame, frame.midX < screen.frame.minX || frame.midX > screen.frame.maxX { continue }
-            frames[item.id.sectionKey.rawValue] = item.frame
+            frames[key] = item.frame
         }
-        return Overflow.keys(frames: frames, visibleMinX: notchVisibleMinX)
+        var result = Overflow.keys(frames: frames, visibleMinX: notchVisibleMinX)
+        if let ownJudged, result.contains(ownJudged) { result.formUnion(ownKeys) }
+        return result
     }
 
     /// The strip's share: items set to Show that the user can't reach.

@@ -283,7 +283,8 @@ extension BarApp {
         let icons = visibleIcons(in: snapshot, on: screen)
         guard let first = icons.min(by: { $0.frame.minX < $1.frame.minX }) else { return nil }
         let outOfSight = outOfSightKeys(snapshot)
-        let own = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }
+        // Listed twice at times (see `outOfSightKeys`): take an entry with a frame.
+        let own = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier && $0.frame != nil }
         let ownSpan = own.flatMap { item -> ControlPlacement.Span? in
             guard let frame = item.frame, !outOfSight.contains(item.id.sectionKey.rawValue),
                   frame.minX > screen.frame.midX, frame.maxX <= screen.frame.maxX else { return nil }

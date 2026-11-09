@@ -852,11 +852,13 @@ extension BarApp {
                 await Self.postClick(at: point, button: .left)
                 await settle(1200); await waitIdle(); await settle(600)
                 modeSteps.append(["expected": expected, "stored": modes[target.key] ?? 0,
-                                  "row": settings.currentEntries.first { $0.key == target.key }?.mode ?? -1])
+                                  "row": settings.currentEntries.first { $0.key == target.key }?.mode ?? -1,
+                                  "grouped": rowsGrouped(settings.currentEntries)])
             }
         }
         result["modeSteps"] = modeSteps
         result["modePassed"] = modeSteps.count == 4 && modeSteps.allSatisfy { ($0["expected"] as? Int) == ($0["stored"] as? Int) && ($0["expected"] as? Int) == ($0["row"] as? Int) }
+        result["groupedPassed"] = !modeSteps.isEmpty && modeSteps.allSatisfy { ($0["grouped"] as? Bool) == true }
 
         // 2. Drag a row below its right-hand neighbour; 3. move it back with
         //    the context menu ("左移一位" is the second item).
@@ -901,6 +903,29 @@ extension BarApp {
             result["contextPassed"] = contextSteps.count == plan.count && contextSteps.allSatisfy { ($0["aRightOfB"] as? Bool) == ($0["expectedRight"] as? Bool) }
         } else {
             result["dragError"] = "no movable adjacent pair reachable"
+        }
+
+        // 3b. A strip row dropped on a bar row does nothing: the two groups
+        //     don't swap (2026-11-09).
+        if !settings.windowForCapture.isKeyWindow { showWindow(); await settle(800) }
+        settings.select(.layout)
+        await settle(1000)
+        let rows = settings.currentEntries
+        if let strip = rows.last(where: { $0.mode > 0 && !$0.pinned }),
+           let bar = rows.first(where: { $0.mode == 0 && !$0.pinned }),
+           let rowA = rect("row:\(strip.key)"), let rowB = rect("row:\(bar.key)"),
+           let from = aim(NSPoint(x: rowA.minX + 90, y: rowA.midY), "cross start"),
+           let to = aim(NSPoint(x: rowB.minX + 90, y: rowB.midY), "cross end") {
+            let orderBefore = savedOrder, modesBefore = modes
+            result["crossPair"] = [strip.key, bar.key]
+            await Self.postDrag(from: from, to: to)
+            await settle(1500); await waitIdle(); await settle(600)
+            result["crossOrderUnchanged"] = savedOrder == orderBefore
+            result["crossModesUnchanged"] = modes == modesBefore
+            result["crossRowsGrouped"] = rowsGrouped(settings.currentEntries)
+            result["crossPassed"] = savedOrder == orderBefore && modes == modesBefore && rowsGrouped(settings.currentEntries)
+        } else {
+            result["crossError"] = "no strip row and bar row reachable"
         }
 
         // 4. Language menu: there and back, in place.
@@ -953,6 +978,15 @@ extension BarApp {
         result["languageRestored"] = (options[.language] ?? 0) == originalLanguage
         result["optionsUnchanged"] = options == originalOptions
         settings.close()
+    }
+
+    /// The Menu Bar page's rows: every strip row (Hide, Always Hide) before
+    /// every bar row, the strip's in the strip's own order.
+    func rowsGrouped(_ rows: [BarEntry]) -> Bool {
+        let hidden = rows.filter { $0.mode > 0 }.map(\.key)
+        let firstShown = rows.firstIndex { $0.mode == 0 } ?? rows.count
+        let strip = ShelfContents.keys(order: orderedKeys(), modes: modes, covered: [], includeAlwaysHidden: true)
+        return !rows[firstShown...].contains { $0.mode > 0 } && hidden == strip
     }
 
     /// Moves items until the ones now in the menu bar follow `target`,

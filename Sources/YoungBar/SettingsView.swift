@@ -118,13 +118,30 @@ final class SettingsModel {
         guard let key, key != target,
               let source = entries.firstIndex(where: { $0.key == key }),
               let index = entries.firstIndex(where: { $0.key == target }),
-              !entries[source].pinned else { return false }
+              !entries[source].pinned,
+              // Strip rows and bar rows don't swap: the mode says which it is.
+              (entries[source].mode > 0) == (entries[index].mode > 0) else { return false }
         move(from: source, to: source < index ? index + 1 : index)
         return true
     }
 
+    /// The strip's rows (Hide, Always Hide), then the bar's.
+    var hiddenEntries: [BarEntry] { entries.filter { $0.mode > 0 } }
+    var shownEntries: [BarEntry] { entries.filter { $0.mode == 0 } }
+
+    /// The first row of `entry`'s group: the strip's rows come first.
+    func groupStart(of entry: BarEntry) -> Int {
+        entry.mode > 0 ? 0 : entries.filter { $0.mode > 0 }.count
+    }
+
+    /// The last row of `entry`'s group.
+    func groupEnd(of entry: BarEntry) -> Int {
+        entry.mode > 0 ? entries.filter { $0.mode > 0 }.count - 1 : entries.count - 1
+    }
+
     /// `destination` is the index the row is placed before (as in `onMove`).
-    /// Rows never land after the macOS-pinned items at the right edge.
+    /// A row stays in its group (strip or bar), and never lands after the
+    /// macOS-pinned items at the right edge.
     func move(from source: Int, to destination: Int) {
         guard entries.indices.contains(source), !entries[source].pinned else { return }
         var list = entries
@@ -135,7 +152,8 @@ final class SettingsModel {
         // doesn't stop others passing it: clamping at the first locked row
         // turned a move to the right into one to the left.
         let end = list.lastIndex(where: { !$0.pinned }).map { $0 + 1 } ?? 0
-        index = min(index, end)
+        index = LayoutOrder.clampedIndex(index, hidden: item.mode > 0,
+                                         hiddenCount: list.filter { $0.mode > 0 }.count, end: end)
         index = max(0, min(index, list.count))
         guard index != source else { return }
         list.insert(item, at: index)
@@ -468,6 +486,16 @@ struct LayoutPane: View {
                     Text(L10n.t("需要授权", "Permission needed"))
                 }
             }
+            // Left of the ••• first: what the strip shows, in its order.
+            if !model.hiddenEntries.isEmpty {
+                Section {
+                    ForEach(model.hiddenEntries) { entry in
+                        LayoutRow(entry: entry, model: model)
+                    }
+                } header: {
+                    Text(L10n.t("收纳条：从左到右", "Strip: left to right"))
+                }
+            }
             Section {
                 if model.entries.isEmpty {
                     Text(model.axTrusted
@@ -478,12 +506,12 @@ struct LayoutPane: View {
                         .padding(.vertical, 12)
                 } else {
                     // Form rows don't honour `onMove`, so rows use drag and drop.
-                    ForEach(model.entries) { entry in
+                    ForEach(model.shownEntries) { entry in
                         LayoutRow(entry: entry, model: model)
                     }
                 }
             } header: {
-                Text(L10n.t("按菜单栏中的顺序，从左到右", "In menu-bar order, left to right"))
+                Text(L10n.t("菜单栏：从 ••• 往右，从左到右", "Menu bar: from the ••• rightwards, left to right"))
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     // What a change just did ("macOS did not accept the
@@ -554,6 +582,9 @@ struct LayoutRow: View {
                 }
             }
         }
+        // The whole row takes a drag or a right-click, not just its text and
+        // icon: past a short name ("iFan") the row was dead.
+        .contentShape(Rectangle())
         .settingsFrame("row:\(entry.key)", model)
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -572,12 +603,16 @@ struct LayoutRow: View {
               : "")
         .contextMenu {
             if !entry.pinned, let index = model.entries.firstIndex(where: { $0.key == entry.key }) {
-                Button(L10n.t("移到最左", "Move to Far Left")) { model.move(from: index, to: 0) }
-                    .disabled(index == 0)
+                // Within its group: the strip's rows, or the bar's.
+                let first = model.groupStart(of: entry), last = model.groupEnd(of: entry)
+                Button(L10n.t("移到最左", "Move to Far Left")) { model.move(from: index, to: first) }
+                    .disabled(index <= first)
                 Button(L10n.t("左移一位", "Move Left")) { model.move(from: index, to: index - 1) }
-                    .disabled(index == 0)
+                    .disabled(index <= first)
                 Button(L10n.t("右移一位", "Move Right")) { model.move(from: index, to: index + 2) }
-                Button(L10n.t("移到最右", "Move to Far Right")) { model.move(from: index, to: model.entries.count) }
+                    .disabled(index >= last)
+                Button(L10n.t("移到最右", "Move to Far Right")) { model.move(from: index, to: last + 1) }
+                    .disabled(index >= last)
             }
         }
     }

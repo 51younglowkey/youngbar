@@ -1702,6 +1702,35 @@ extension BarApp {
         if let panel = controlPanel?.frame {
             result["controlBare"] = ["x": Double(panel.minX), "width": Double(panel.width)]
         }
+        // `YOUNGBAR_NOASSERTION_LAUNCH=<bundle id>`: start a (quit) menu-bar
+        // app now. macOS puts its icon at the left end, left of YoungBar's
+        // drawn slot: the user report of 2026-11-09 (♥ on one side of an
+        // icon, a blank slot on the other).
+        if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTION_LAUNCH"],
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false
+            _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            try? await Task.sleep(for: .seconds(4))
+            let launched = await engine.freshSnapshot()
+            positionControlBesideMenuIcons(in: launched)
+            try? await Task.sleep(for: .milliseconds(600))
+            let ownFrame = launched.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }?.frame
+            let appFrame = launched.items.first { $0.id.bundleID == bundle }?.frame
+            result["launched"] = bundle
+            result["ownItemLaunched"] = own(launched)
+            if let appFrame { result["launchedItem"] = ["x": Double(appFrame.minX), "width": Double(appFrame.width)] }
+            result["outOfSightLaunched"] = outOfSightKeys(launched).sorted()
+            if let panel = controlPanel?.frame {
+                result["controlLaunched"] = ["x": Double(panel.minX), "width": Double(panel.width)]
+                if let ownFrame {
+                    // Global top-left frames and the panel share x.
+                    let overlap = min(panel.maxX, ownFrame.maxX) - max(panel.minX, ownFrame.minX)
+                    result["controlCoversOwnSlot"] = overlap >= min(panel.width, ownFrame.width) * 0.8
+                }
+                if let appFrame { result["iconLeftOfOwnSlot"] = ownFrame.map { appFrame.minX < $0.minX } ?? false }
+            }
+        }
         if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTION_HOLD"] ?? "") {
             writeJSON(["bare": true], name: "noassertion-hold.json")
             try? await Task.sleep(for: .seconds(hold))

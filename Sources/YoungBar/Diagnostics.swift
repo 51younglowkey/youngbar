@@ -147,7 +147,12 @@ extension BarApp {
         // With a full bar the ••• sits in the « pile, not beside the first icon.
         let own = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }?.id.sectionKey.rawValue
         let inPile = own.map { outOfSightKeys(snapshot).contains($0) } ?? false
-        let icon = inPile ? nil : leadingIcon(in: snapshot, on: screen).map { Double($0.frame.minX) }
+        // On YoungBar's own slot there is no icon right beside it: measure
+        // against where the slot puts it, as if an icon followed at the gap.
+        let place = controlPlacement(in: snapshot, on: screen, width: panel.frame.width)
+        let icon = inPile ? nil : place.map {
+            $0.onOwnSlot ? Double($0.x + panel.frame.width) + ControlPlacement.gap : Double($0.follows.frame.minX)
+        }
         return ControlCheck.evaluate(control: panel.frame, screens: NSScreen.screens.map(\.frame),
                                      barMinY: Double(screen.frame.maxY - menuBarHeight(of: screen)),
                                      barMaxY: Double(screen.frame.maxY), leadingIconX: icon)

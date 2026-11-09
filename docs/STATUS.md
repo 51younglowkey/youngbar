@@ -217,6 +217,19 @@
 | 发布前自检（0.1.6） | ✅ `YOUNGBAR_SELFTEST`、`YOUNGBAR_SHELFOPENTEST`、`YOUNGBAR_CONFIGTEST`、`YOUNGBAR_KEYBOARDTEST`；⚠️ `YOUNGBAR_OVERFLOWTEST` 没有结论（`crowded:false`，这轮代码没动）；❌→✅ `YOUNGBAR_KEYBOARDTEST` 第一次没过（连按两下 ⌘ 没打开），当时有人在操作这台 Mac（最前面的应用变了，判断是干扰，属推断），重跑通过 | 各 JSON 的 `passed:true`；`overflowtest.json` 的 `inconclusive`、`restored:true`；跑完 defaults 和跑之前没有差异 |
 | 系统浅色 | ⬜ 作者决定跳过，0.1.6 发布时没测 | 见第 3 节、第 4 节第 1 条 |
 
+## 2.6 用户反馈：♥ 和空白占位分开（2026-11-09，未发布）
+
+小红书反馈（M5 Air，macOS 27.0.1）：菜单栏上 ♥（控件）和一块空白隔着一个别的图标；点 ♥ 和点空白都打开收纳条，空白处有时显示三个点。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 原因 | ••• 一直跟在「最左边的可见图标」左侧，默认 YoungBar 自己的状态项就在那里。macOS 画出这个空白占位（没有隐藏断言时）、而它左边又有别的图标时（之后启动的应用会插到最左），两者就分开：••• 在那个图标左边，占位在右边，点它照样打开收纳条。本机隐藏生效时自己的项没有位置，所以平时看不到 | 见下面的复现 |
+| 第二个原因 | 遍历有时把 YoungBar 的状态项列两次（标题 `YoungBar` 和 `Item-0`），两个条目在同一位置互相重叠，被溢出判断当成「挤在 « 里」：••• 缩成 22 宽、按 « 那一支摆，第一条修复也用不上 | `outOfSightLaunched` 里有 `::Item-0` 和 `::YoungBar`，当时菜单栏上没有 « |
+| 修复 | `ControlPlacement`（YoungBarCore）：自己的项在菜单栏上、左边有别的图标、又没被图标盖住时，••• 盖在它上面；否则照旧跟最左边的图标。`outOfSightKeys` 对自己的状态项只判断一次。诊断里「贴着图标」按同一规则算 | 单元测试 96 passed（新增 7 项） |
+| 复现 | 新增 `YOUNGBAR_NOASSERTION_LAUNCH=<bundle id>`：无断言时启动一个已退出的菜单栏应用，它会落在 YoungBar 占位左边。本机临时退出 iBar Pro、UU远程、有道、iFan、Stats、定时暂停腾出位置，用定时暂停复现。**修复前**（main `5f7c543`）：••• x1061，定时暂停 x1101，占位 x1133.5 空着，`controlCoversOwnSlot:false`，和用户截图一样。**修复后**：••• x1136 盖住占位（x1133.5），`controlCoversOwnSlot:true`、日志 `on own slot` | `noassertiontest.json`、`events.log`、修复前后菜单栏截图（2026-11-09） |
+| 恢复 | 退出的应用都重新打开；Stats 改回显示；隐藏生效时 ••• 回到 Stats 左边（x1157） | `events.log`、菜单栏截图 |
+| 没验证 | 用户机器上的实际效果。「空白处显示三个点」的来源没查清 | — |
+
 ## 3. 验证边界（不许含糊）
 
 - ••• 跟随桌面只在**系统深色**、内建屏上测过。没有测（要改系统设置或要第二块屏）：系统浅色配深色壁纸、同一桌面换壁纸、系统切深浅色的那一刻、「减少透明度」和菜单栏背景设置、第二块屏。这些情况下如果启动时接口和按钮对不上，会回退到按钮；启动之后才出现的不一致，要等重启才会发现。

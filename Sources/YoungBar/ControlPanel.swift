@@ -257,6 +257,12 @@ extension BarApp {
     /// « (or under the notch) are not on the bar; following them would take
     /// the control out of sight too.
     func leadingIcon(in snapshot: EngineSnapshot, on screen: NSScreen) -> (key: String, frame: CGRect)? {
+        visibleIcons(in: snapshot, on: screen).min { $0.frame.minX < $1.frame.minX }
+    }
+
+    /// Other apps' and the system's icons in sight on the right half of
+    /// `screen`'s bar.
+    func visibleIcons(in snapshot: EngineSnapshot, on screen: NSScreen) -> [(key: String, frame: CGRect)] {
         let outOfSight = outOfSightKeys(snapshot)
         return snapshot.items.compactMap { item -> (key: String, frame: CGRect)? in
             let key = item.id.sectionKey.rawValue
@@ -266,7 +272,29 @@ extension BarApp {
                   frame.minX > screen.frame.midX,
                   frame.minX < screen.frame.maxX else { return nil }
             return (key, frame)
-        }.min { $0.frame.minX < $1.frame.minX }
+        }
+    }
+
+    /// Where the ••• belongs on `screen`'s bar (see `ControlPlacement`):
+    /// on YoungBar's own slot when macOS put another icon left of it,
+    /// otherwise beside the first icon.
+    func controlPlacement(in snapshot: EngineSnapshot, on screen: NSScreen, width: CGFloat)
+        -> (x: CGFloat, onOwnSlot: Bool, follows: (key: String, frame: CGRect))? {
+        let icons = visibleIcons(in: snapshot, on: screen)
+        guard let first = icons.min(by: { $0.frame.minX < $1.frame.minX }) else { return nil }
+        let outOfSight = outOfSightKeys(snapshot)
+        let own = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }
+        let ownSpan = own.flatMap { item -> ControlPlacement.Span? in
+            guard let frame = item.frame, !outOfSight.contains(item.id.sectionKey.rawValue),
+                  frame.minX > screen.frame.midX, frame.maxX <= screen.frame.maxX else { return nil }
+            return ControlPlacement.Span(minX: Double(frame.minX), maxX: Double(frame.maxX))
+        }
+        let floor = notchVisibleMinX ?? (screen.frame.minX + 12)
+        guard let place = ControlPlacement.x(
+            width: Double(width), own: ownSpan,
+            icons: icons.map { ControlPlacement.Span(minX: Double($0.frame.minX), maxX: Double($0.frame.maxX)) },
+            floor: Double(floor)) else { return nil }
+        return (CGFloat(place.x), place.onOwnSlot, first)
     }
 
     func positionControlBesideMenuIcons(in snapshot: EngineSnapshot) {
@@ -294,7 +322,9 @@ extension BarApp {
         }
         let floor = notchVisibleMinX ?? (screen.frame.minX + 12)
         var width = controlWidth
-        var x = max(floor, leadingIcon - width - 6)
+        let placement = controlPlacement(in: snapshot, on: screen, width: width)
+        var x = placement?.x ?? max(floor, leadingIcon - width - ControlPlacement.gap)
+        let onOwnSlot = placement?.onOwnSlot ?? false
         var inPile = false
         // A full bar: YoungBar's own item is in macOS's « with the others,
         // and the « sits at the right of their pile. The control takes the
@@ -318,7 +348,8 @@ extension BarApp {
             let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && abs(panel.frame.minX - x) < 200
             let target = NSRect(origin: origin, size: NSSize(width: width, height: panel.frame.height))
             let reason = "follows \(name(for: leading.key)) x\(Int(leadingIcon))"
-                + (inPile ? " · in « pile" : "") + (x == floor ? " · at left limit" : "")
+                + (inPile ? " · in « pile" : onOwnSlot ? " · on own slot" : "")
+                + (x == floor ? " · at left limit" : "")
             recordControlMove(from: panel.frame, to: target, reason: reason, snapshot: snapshot)
             flight.controlFrame = target
             flight.ownMoveUntil = Date().addingTimeInterval(1)

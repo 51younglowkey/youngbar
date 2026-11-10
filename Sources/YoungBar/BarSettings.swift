@@ -15,6 +15,9 @@ struct BarEntry {
     /// Set to Show, but the bar has no room: macOS holds it in « (or it sits
     /// under the notch), so for now it opens from the strip.
     var covered = false
+    /// Covered because macOS keeps it off the bar while anything is hidden
+    /// (an app without an Apple-issued signature), not for lack of room.
+    var shutOut = false
 }
 
 /// The settings window. Sidebar and detail are SwiftUI (`SettingsView.swift`); this
@@ -203,7 +206,7 @@ final class BarSettings: NSObject {
         if model.hasNotch != hasNotch { model.hasNotch = hasNotch }
         // `update` runs on every refresh tick; only touch what changed so an
         // open picker or a drag in progress is not rebuilt underneath the user.
-        let signature: (BarEntry) -> String = { "\($0.key)|\($0.name)|\($0.mode)|\($0.pinned)|\($0.covered)" }
+        let signature: (BarEntry) -> String = { "\($0.key)|\($0.name)|\($0.mode)|\($0.pinned)|\($0.covered)|\($0.shutOut)" }
         if model.entries.map(signature) != entries.map(signature) { model.entries = entries }
         if model.options != options { model.options = options }
         if model.message != message { model.message = message }

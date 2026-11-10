@@ -242,6 +242,18 @@
 | 其余 | ✅ 语言切换来回、恢复顺序和模式 | `languagePassed`、`modesRestored`、`orderRestored`；defaults 和测试前备份逐项相同（只差运行状态 `sessionActive`）；菜单栏截图顺序不变 |
 | 没做 | 收纳条里还有「放不下」和「全部隐藏」临时收起的项，它们保存的模式是显示，列表里仍在菜单栏那一段 | — |
 
+## 2.8 用户反馈：设为显示的图标，应用重开后既不在菜单栏也不在收纳条（2026-11-10，未发布）
+
+复现对象「定时暂停」（`com.51young.sleeptimer`，本机 `YoungBar Local Signing` 自签，没有 Team ID）。原因不是 «：**有图标被隐藏时，macOS 不显示没有 Apple 签发签名的应用的图标**，放行名单里有它也没用；它也从 MenuBarAgent 的 AX 树里消失，引擎的遍历看不到，所以两边都没有。YoungBar 自己的状态项（同一张自签证书）一直是这样。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 原因 | ✅ 同一次启动、同样挤在 « 那一堆里：Developer ID 的 UU远程 临时改成显示后回到菜单栏（x1150），自签的定时暂停不回来；放行名单两次都含它（`concealable` 里没有） | 外部脚本每 0.2 秒读 MenuBarAgent 的 AX 树；`dimble.log` 的 `converge: swapping` 行；`codesign -dvv` |
+| 排除的做法 | 断言生效时先把它隐藏再放行、事后隐藏再放行、给它写 `NSStatusItem Preferred Position`：都不回来。重启 YoungBar 也不回来 | `events.log`：`… still off the bar`（试验代码已删） |
+| 现在的行为 | ✅ 这类图标进收纳条（保存的模式仍是显示），设置里标「系统不显示」；一个图标都不隐藏时它回到菜单栏、自动离开收纳条。应用连续 8 秒不在遍历里才去问它自己的 AX 树，没有图标的应用 60 秒后再问 | `YOUNGBAR_LAUNCHTEST=com.51young.sleeptimer`：`shutOutByMacOS:true`、`inStripAfterLaunch:true`、`inSettingsAfterLaunch:true`、`passed:true`；`events.log`：`shut out by macOS while icons are hidden: 定时暂停`（启动后、重开后各一次）；单元测试 `ShutOutTests` |
+| 自检改动 | `YOUNGBAR_LAUNCHTEST` 以前看到图标一次就算回来（接纳窗口里人人都看得到）；现在等 5 秒再看，退不掉的应用强制退出 | `onBarDuringWindow` / `onBarAfterLaunch` |
+| 没验证 | 设置里「系统不显示」标记没有截图（那一行在列表下方，没滚动）；从收纳条点它没有真机点过（走的是「放不下」同一条 AXPress 路径，它的状态项有 AXPress）；ad hoc 签名、Apple Development 证书的应用没试，只试了本机自签证书 | — |
+
 ## 3. 验证边界（不许含糊）
 
 - ••• 跟随桌面只在**系统深色**、内建屏上测过。没有测（要改系统设置或要第二块屏）：系统浅色配深色壁纸、同一桌面换壁纸、系统切深浅色的那一刻、「减少透明度」和菜单栏背景设置、第二块屏。这些情况下如果启动时接口和按钮对不上，会回退到按钮；启动之后才出现的不一致，要等重启才会发现。

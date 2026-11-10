@@ -87,7 +87,7 @@ extension BarApp {
             return BarEntry(key: key, name: name(for: key), image: fallbackImage(for: key),
                             mode: modes[key] ?? 0,
                             pinned: MenuBarPolicy.isPinnedSystemItem(id) || MenuBarPolicy.isPinnedAppleHost(id.bundleID),
-                            covered: overflowKeys.contains(key))
+                            covered: overflowKeys.contains(key), shutOut: shutOutKeys.contains(key))
         }
     }
 

@@ -57,6 +57,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Items of Hidden apps started while an assertion holds: macOS parks them
     /// off screen, out of every engine snapshot, until an adoption window.
     var parkedKeys: Set<String> = []
+    /// Show icons macOS keeps off the bar while anything is hidden, in no
+    /// engine snapshot either (`ShutOutIcons.swift`).
+    var shutOutKeys: Set<String> = []
+    var shutOutWatch = ShutOut.Watch()
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
     var options: [String: Int] = {
@@ -115,7 +119,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var tuckInPending = false
     var shelfButtons: [NSButton] = []
     var shelfIconColor: NSColor = .white
-    /// Items set to Show that sit under the notch, so nobody sees them.
+    /// Items set to Show that nobody sees: in macOS's «, under the notch,
+    /// or shut out by macOS (`shutOutKeys`).
     var overflowKeys: Set<String> = []
     /// The control's width beside a free bar; it narrows when crowded.
     var controlWidth: CGFloat = 34
@@ -404,7 +409,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         let snapshot = await engine.freshSnapshot()
         remember(snapshot)
-        overflowKeys = computeOverflow(outOfSightKeys(snapshot))
+        lookForShutOutIcons(snapshot)
+        overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(shutOutKeys)
         positionControlBesideMenuIcons(in: snapshot)
         // The wallpaper or Dark Mode may have changed the bar's look.
         syncControlAppearance()
@@ -430,7 +436,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
         for id in snapshot.concealed { present.insert(id.sectionKey.rawValue) }
         // Landed since (any adoption window lands them all): the engine has it.
         parkedKeys.subtract(present)
-        presentKeys = present.union(parkedKeys)
+        // Back in the walk: nothing is hidden any more, or its mode changed.
+        shutOutKeys.subtract(present)
+        shutOutKeys = shutOutKeys.filter { (modes[$0] ?? 0) == 0 && !bulkHiddenKeys.contains($0) }
+        presentKeys = present.union(parkedKeys).union(shutOutKeys)
 
         var orderChanged = false
         // Nothing is "new" on the very first run: every icon is.

@@ -1463,7 +1463,7 @@ extension BarApp {
         result["overflowAllShown"] = overflowKeys.sorted()
         // Nothing went under « or the notch: the bar never filled, and the
         // checks below would hold for an empty set. Say so instead of passing.
-        let wasCrowded = !overflowKeys.isEmpty
+        let wasCrowded = !overflowKeys.subtracting(shutOutKeys).isEmpty
         result["crowded"] = wasCrowded
         if !wasCrowded {
             result["inconclusive"] = "the bar did not fill up with every icon shown: open more menu-bar apps (or show more items from Control Center) and run again"
@@ -2239,6 +2239,11 @@ extension BarApp {
         result["holdsAssertion"] = await engine.holdsAssertion
         _ = app.terminate()
         for _ in 0..<40 where !app.isTerminated { try? await Task.sleep(for: .milliseconds(250)) }
+        // Some menu-bar apps don't answer the quit event.
+        if !app.isTerminated {
+            result["forced"] = app.forceTerminate()
+            for _ in 0..<20 where !app.isTerminated { try? await Task.sleep(for: .milliseconds(250)) }
+        }
         result["quit"] = app.isTerminated
         try? await Task.sleep(for: .seconds(1))
         let started = Date()
@@ -2251,15 +2256,31 @@ extension BarApp {
             if onBar && mode == 0 { break }
         }
         result["secondsUntilBack"] = onBar ? Date().timeIntervalSince(started) : -1
+        // Seen once is not back: an icon that sat in macOS's « during the
+        // adoption window left the bar again when the window closed.
+        try? await Task.sleep(for: .seconds(5))
+        let seenOnce = onBar
+        onBar = await engine.freshSnapshot().items.contains { $0.id.bundleID == bundle && $0.frame != nil }
+        result["onBarDuringWindow"] = seenOnce
         result["onBarAfterLaunch"] = onBar
+        // A Show icon macOS shuts out (an app without an Apple-issued
+        // signature) is found once it has stayed missing for a while.
+        if mode == 0, !onBar {
+            for _ in 0..<24 where !shutOutKeys.contains(where: { catalog[$0]?.id.bundleID == bundle }) {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+        let shutOut = shutOutKeys.contains { catalog[$0]?.id.bundleID == bundle }
         let inStrip = shelfKeys().contains { catalog[$0]?.id.bundleID == bundle }
         let inSettings = barEntries().contains { catalog[$0.key]?.id.bundleID == bundle }
+        result["shutOutByMacOS"] = shutOut
         result["inStripAfterLaunch"] = inStrip
         result["inSettingsAfterLaunch"] = inSettings
         // Off the bar is only right if it can still be reached: a parked icon
-        // once dropped out of the strip and Settings as well.
+        // once dropped out of the strip and Settings as well, and so did a
+        // Show icon macOS shut out.
         result["passed"] = (result["quit"] as? Bool == true) && inSettings
-            && (mode == 0 ? onBar : !onBar && inStrip)
+            && (mode == 0 ? (onBar && !inStrip) || (shutOut && inStrip) : !onBar && inStrip)
     }
 
     /// The button for `key` sending `action`, anywhere under `view`.

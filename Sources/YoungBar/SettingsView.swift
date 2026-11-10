@@ -578,7 +578,7 @@ struct LayoutRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if entry.covered {
-                    CoveredTag()
+                    CoveredTag(shutOut: entry.shutOut)
                 }
             }
         }
@@ -621,7 +621,30 @@ struct LayoutRow: View {
 /// A row set to Show that the bar has no room for: macOS moved it into «
 /// (or it sits under the notch), so for now it opens from the strip.
 struct CoveredTag: View {
+    /// Kept off the bar by macOS, not by a full bar.
+    var shutOut = false
+
     var body: some View {
+        if shutOut { tag(L10n.t("系统不显示", "Kept off by macOS"),
+                         help: L10n.t("有图标被隐藏时，macOS 不显示这个应用的图标：它没有 Apple 签发的开发者签名（比如自己编译的应用）。现在可以从收纳条打开它；一个图标都不隐藏时，它会回到菜单栏。",
+                                      "While any icon is hidden, macOS doesn't show this app's icon: the app has no Apple-issued developer signature (one you built yourself, for example). Open it from the strip for now; with no icon hidden it returns to the menu bar."),
+                         label: L10n.t("macOS 不在菜单栏显示它，已在收纳条里", "macOS keeps it off the menu bar; in the strip for now"))
+        } else { noRoom }
+    }
+
+    private func tag(_ text: String, help: String, label: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(.quaternary))
+            .fixedSize()
+            .help(help)
+            .accessibilityLabel(label)
+    }
+
+    private var noRoom: some View {
         Text(L10n.t("放不下", "No room"))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.secondary)

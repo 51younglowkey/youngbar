@@ -582,7 +582,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
         let actual = LayoutOrder.unique(snapshot.items
             .filter { item in
                 let key = item.id.sectionKey.rawValue
+                // Nor has an icon macOS keeps off: the walk lists where it
+                // was for a while, and that is no place it has now.
                 return item.frame != nil && (modes[key] ?? 0) == 0 && !outOfSight.contains(key)
+                    && !fixedKeys.contains(key)
             }
             .sorted { ($0.frame?.minX ?? 0) < ($1.frame?.minX ?? 0) }
             .map { $0.id.sectionKey.rawValue })

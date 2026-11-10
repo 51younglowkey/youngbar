@@ -266,3 +266,29 @@ import Testing
         #expect(Self.spot(icons).reason == .onOwnSlot(key: "planet", iconMinX: 1300))
     }
 }
+
+/// An app with several untitled icons walks as one id (Stats with a module
+/// per icon): every place it has counts, or the ••• lands on one of them.
+@Suite struct SameIDIconTests {
+    static let display = OwnSlotTests.display
+    static let wechat = BarIcon(key: "wechat", frame: CGRect(x: 1316, y: 0, width: 40, height: 37))
+
+    @Test func repeatsCollapse() {
+        let gpu = CGRect(x: 1151, y: 0, width: 33, height: 37)
+        let disk = CGRect(x: 1198, y: 0, width: 112, height: 37)
+        #expect(ControlLayout.distinctFrames([gpu, disk, gpu, disk.offsetBy(dx: 0.5, dy: 0)], besides: gpu) == [disk])
+        #expect(ControlLayout.distinctFrames([gpu], besides: gpu).isEmpty)
+    }
+
+    /// The report: the snapshot kept the GPU icon, so the disk icon was
+    /// missing and the ••• went beside WeChat, on top of it.
+    @Test func everyIconOfTheAppIsFollowed() {
+        let gpu = BarIcon(key: "stats", frame: CGRect(x: 1151, y: 0, width: 33, height: 37))
+        let disk = BarIcon(key: "stats#1", frame: CGRect(x: 1198, y: 0, width: 112, height: 37))
+        let spot = ControlLayout.spot(icons: [gpu, disk, Self.wechat], on: Self.display,
+                                      current: CGRect(x: 1000, y: 6, width: 34, height: 24), width: 34)
+        #expect(spot.reason == .beside(key: "stats", iconMinX: 1151))
+        let control = CGRect(x: spot.minX, y: 0, width: spot.width, height: 37)
+        #expect(![gpu, disk, Self.wechat].contains { $0.frame?.intersects(control) ?? false })
+    }
+}

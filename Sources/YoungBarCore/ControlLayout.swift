@@ -87,6 +87,17 @@ public enum ControlLayout {
             && frame.midX >= display.frame.minX && frame.midX < display.frame.maxX
     }
 
+    /// The frames among `frames` that are not `first` or a repeat, more
+    /// than a point apart (the walk can list one icon several times).
+    public static func distinctFrames(_ frames: [CGRect], besides first: CGRect) -> [CGRect] {
+        func same(_ a: CGRect, _ b: CGRect) -> Bool {
+            abs(a.minX - b.minX) <= 1 && abs(a.width - b.width) <= 1 && abs(a.minY - b.minY) <= 1
+        }
+        var seen = [first]
+        for frame in frames where !seen.contains(where: { same($0, frame) }) { seen.append(frame) }
+        return Array(seen.dropFirst())
+    }
+
     /// The control's own frame is in the bar's height range on this display.
     public static func controlIsInBar(_ control: CGRect, of display: BarDisplay) -> Bool {
         let y = control.midY - display.frame.minY

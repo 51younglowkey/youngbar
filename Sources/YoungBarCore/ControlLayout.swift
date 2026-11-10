@@ -55,6 +55,8 @@ public struct ControlSpot: Equatable, Sendable {
         case inPile(key: String, iconMinX: CGFloat)
         /// On YoungBar's own slot, which macOS drew right of `key`.
         case onOwnSlot(key: String, iconMinX: CGFloat)
+        /// A full bar: macOS's « sits right before `key`, so left of the «.
+        case leftOfChevron(key: String, iconMinX: CGFloat, chevronMinX: CGFloat)
         /// No icon on this bar to go by.
         case noIcon
     }
@@ -204,6 +206,21 @@ public enum ControlLayout {
             return ControlSpot(minX: x, width: narrowWidth, midY: midY,
                                reason: .inPile(key: leading.key, iconMinX: iconX), atLeftLimit: x == limit)
         }
+        // A full bar, YoungBar's own item not listed (macOS keeps it off the
+        // walk while anything is hidden): the « sits at the right end of the
+        // pile right before the first icon. Beside that icon the ••• covered
+        // it (2026-11-10, Stats with more modules turned on). Left of the «
+        // instead, narrowed if the notch leaves less room.
+        if let chevron = chevronMinX(icons, on: display, outOfSight: hidden, leftOf: iconX) {
+            let right = chevron - gapToIcon
+            let fitted = min(width, right - limit)
+            if fitted >= narrowWidth {
+                let x = right - fitted
+                return ControlSpot(minX: x, width: fitted, midY: midY,
+                                   reason: .leftOfChevron(key: leading.key, iconMinX: iconX, chevronMinX: chevron),
+                                   atLeftLimit: x == limit)
+            }
+        }
         if let slot = ownSlotInRun(icons, on: display, outOfSight: hidden,
                                    run: run(icons, on: display, outOfSight: hidden)) {
             let x = max(limit, (slot.midX - width / 2).rounded())
@@ -213,6 +230,19 @@ public enum ControlLayout {
         let x = max(limit, iconX - width - gapToIcon)
         return ControlSpot(minX: x, width: width, midY: midY,
                            reason: .beside(key: leading.key, iconMinX: iconX), atLeftLimit: x == limit)
+    }
+
+    /// Where macOS's « starts: the right end of the pile of out-of-sight
+    /// items just left of `iconX`. The pile's frames all end at the «'s right
+    /// edge (staggered, or on one spot); the one starting furthest right is
+    /// the «'s own slot.
+    static func chevronMinX(_ icons: [BarIcon], on display: BarDisplay, outOfSight hidden: Set<String>,
+                            leftOf iconX: CGFloat) -> CGFloat? {
+        icons.compactMap { icon -> CGRect? in
+            guard hidden.contains(icon.key), let frame = icon.frame, isOnBar(frame, of: display),
+                  frame.minX < iconX, iconX - frame.maxX <= runGap else { return nil }
+            return frame
+        }.map(\.minX).max()
     }
 
     /// The left end of the pile of out-of-sight items just left of `iconX`.

@@ -95,6 +95,13 @@ extension BarApp {
             if !adopted { adoptionMissed.insert(bundle) }
             NSLog("YoungBar: \(bundle) \(adopted ? "adopted" : "not seen") after launch")
             flight.note("\(bundle) \(adopted ? "adopted" : "not seen") after launch")
+            // Adopted, and gone again once the icons are hidden: macOS shut
+            // it out (`ShutOut`). A new app needs a key to be found.
+            guard adopted else { return }
+            try? await Task.sleep(for: .seconds(1))
+            if !(await engine.freshSnapshot()).items.contains(where: { $0.id.bundleID == bundle }) {
+                rememberUnlistedApp(bundle)
+            }
         }
     }
 
@@ -103,6 +110,9 @@ extension BarApp {
         guard started, !quitting else { return }
         let running = runningBundleIDs()
         parkedKeys = parkedKeys.filter { key in
+            catalog[key]?.id.bundleID.map(running.contains) ?? false
+        }
+        shutOutKeys = shutOutKeys.filter { key in
             catalog[key]?.id.bundleID.map(running.contains) ?? false
         }
         Task {

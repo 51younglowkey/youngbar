@@ -53,6 +53,7 @@ Sources/YoungBar/
   NotesView.swift       更新内容 / 更新窗口里的说明，按「区块 + 短句」绘制（YoungBarCore 的 ReleaseNotes.blocks）
   HotKey.swift          全局快捷键：组合键走 Carbon；默认「连按两下 ⌘」用全局/本地事件监视器（YoungBarCore 的 DoubleTapDetector）
   NotchOverflow.swift   被 macOS « 收走 / 被刘海挡住的图标（按收纳条所在的屏算）；显示器变化时同步每块屏的控件
+  ShutOutIcons.swift    设为显示、但隐藏生效时被 macOS 拿掉的图标（没有 Apple 签名的应用）：找出来放进收纳条
   ConfigTransfer.swift  配置导入导出
   Guide.swift           首次启动引导。更新后不再走（用户要求，0.1.6 起）：更新后只显示「更新内容」；更新后权限丢了时，设置窗口的菜单栏页有授权按钮
   Preferences.swift     `Option`：barOptions 的键（磁盘上仍是 [String: Int]）
@@ -72,6 +73,7 @@ Vendor/
 - 更新器（`Updater.swift`）：启动 10 秒后、之后每天一次后台查 GitHub（始终开启，没有开关）；有新版本只在右键菜单第一行加「有新版本」（和控件的提示文字），菜单栏上不加圆点（用户要求），**不自动安装**。点「检查更新」时立即查。安装：下载 zip + .sha256 → 校验 → 解压 → 版本号、bundle id、签名（`SecStaticCodeCheckValidity` 对照本 app 的 designated requirement）→ 起一个 sh 脚本等本进程退出后换 bundle、`open`。**不要在 Swift 并发任务里直接调 `NSApp.terminate`**：`applicationShouldTerminate` 返回 `.terminateLater` 后 AppKit 在嵌套事件循环里等回复，而回复也是 main actor 任务，会死锁；用 `NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)`。
 - **引擎的两种「显示」**：`reveal(_ sections)` 由 `conceal()` 收回；`reveal(items:)` **只有** `conceal(items:)` / `conceal(releasing:)` 收得回，`conceal()` 不管它。没收回的单个图标会一直留在菜单栏，改成隐藏也藏不住（0.1.4 及之前排序、改显示方式、导入都踩过）。每个 `reveal(items:)` 都要有配对的收回；清空 `shownUntil` 时用 `conceal(releasing: 那些项)`。
 - **引擎不会自己知道外面发生了什么**：运行中的应用要 `setRunningBundles` 推给它（EngineSync 用 KVO 盯 `runningApplications`；`didLaunchApplicationNotification` 不保证覆盖只有菜单栏图标的应用）；隐藏生效时 macOS 把新注册的菜单栏图标停在屏幕外，要 `openAdoptionWindow` 才会落位（会闪一下：只对「显示」的应用在启动时开，「隐藏」的等第一次按它时再开；这期间它不在引擎的快照里，靠 `parkedKeys` 留在收纳条和设置里）；`engine.events` 要读，断言被撤掉时重新 `setModel`，但同一布局反复失败要停（藏不住的图标会让引擎一直重建断言）。后台同步用 `syncing` 标记，不要用 `busy`（`busy` 会让点击和快捷键直接被忽略）。
+- **断言只放行有 Apple 签发签名的应用**：自签或 ad hoc 的应用（自己编译的），放行名单里有它，隐藏生效时 macOS 照样不显示它的图标，MenuBarAgent 的 AX 树里也没有它（YoungBar 自己的状态项同理）。让它回到菜单栏的办法没有（试过先隐藏再放行、写位置），所以 `shutOutKeys`（`ShutOutIcons.swift`，判断在 `YoungBarCore/ShutOut.swift`）把这类设为显示的图标放进收纳条和设置，模式不改。查「图标不见了」先 `codesign -dvv` 看那个应用的签名，不要先怀疑 «。
 - 「全部隐藏」是 `bulkHiddenKeys`：叠在保存的模式上（只含应用图标，不含系统图标），收纳条列出它们，`currentModel()` 带上它们，「全部显示」「恢复」或改任何一个图标时清掉。
 - **多显示器（0.1.8）**：macOS 给每块屏画一条菜单栏，同一个状态项每条栏上各有一份（`engine.barCopies()`），`EngineSnapshot` 只留主屏那份。所以：① 每块有菜单栏的屏一个 •••（`controlSlots`，关掉「显示器具有单独的空间」时只有主屏有）；② ••• 只看自己那条栏上的图标（`barIcons` → `ControlLayout`），判断在不在某条栏要同时看 x 和 y（上下摆放的屏 x 完全重叠）；③ ••• 的纵坐标永远从那块屏的菜单栏算，不保留旧值（曾经只更新 x，用户那边 ••• 停在屏幕右下方）；被外部移出菜单栏时不等下一次遍历，当场放回（`controlDidMove`）；④ 收纳条开在点击的 ••• 或鼠标所在的屏（`anchorDisplayID`，关闭后回到主屏）；从外接屏点系统图标要点那条栏的副本（`pressAim`），AXPress 只在图标位置就在这块屏时才用。不要用「在屏幕右半边」这类判断：窄屏或图标多时不成立。
 - ••• 的颜色：控件面板的 `appearance` 取当前桌面的菜单栏外观（`MenuBarLook`，`SLSGetMenuAppearanceThemeOnSpace`：0 浅、1 深；不建状态项，不要屏幕录制），不跟 `NSApp.appearance`（用户在 YoungBar 里选的外观）。切桌面（`activeSpaceDidChangeNotification`）和每次刷新都同步。YoungBar 状态项按钮的外观**启动后不再变**，只用来回退：接口没了，或者第一次刷新时和按钮对不上（`checkMenuBarTheme`：调用失败也读成 0，宁可不跟桌面，也不要在深色栏上画深色 •••）。面板用 `.vibrantDark` / `.aqua` 这一对：`.darkAqua` 比旁边的图标暗，`.vibrantLight` 比旁边的图标淡。

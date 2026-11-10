@@ -252,7 +252,12 @@ extension BarApp {
                 image?.size = NSSize(width: 22, height: 22)
                 button.image = image
                 let outOfSight = overflowKeys.contains(key) && (modes[key] ?? 0) == 0
-                var tip = outOfSight ? L10n.t("\(name(for: key))（菜单栏放不下）", "\(name(for: key)) (no room in the menu bar)") : name(for: key)
+                var tip = name(for: key)
+                if outOfSight {
+                    tip = shutOutKeys.contains(key)
+                        ? L10n.t("\(tip)（有图标隐藏时，macOS 不显示它）", "\(tip) (macOS keeps it off the bar while icons are hidden)")
+                        : L10n.t("\(tip)（菜单栏放不下）", "\(tip) (no room in the menu bar)")
+                }
                 if index < 9 { tip += L10n.t("　键盘：\(index + 1)", "  Key: \(index + 1)") }
                 button.toolTip = tip
                 button.contentTintColor = iconColor

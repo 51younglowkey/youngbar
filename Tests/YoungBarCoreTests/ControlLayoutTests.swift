@@ -292,3 +292,47 @@ import Testing
         #expect(![gpu, disk, Self.wechat].contains { $0.frame?.intersects(control) ?? false })
     }
 }
+
+/// A full bar with YoungBar's own item not in the walk (2026-11-10: Stats
+/// with five modules, three of them in macOS's «).
+@Suite struct ChevronTests {
+    static let display = BarDisplay(frame: CGRect(x: 0, y: 0, width: 1800, height: 1169), barHeight: 40, visibleMinX: 1010)
+
+    static func icon(_ key: String, _ x: CGFloat, _ width: CGFloat) -> BarIcon {
+        BarIcon(key: key, frame: CGRect(x: x, y: 0, width: width, height: 40))
+    }
+
+    /// The walk as read: the pile ends at the «'s right edge, 1083.
+    static let bar = [icon("stats", 1012, 71), icon("stats#1", 1036, 47), icon("stats#2", 1061, 22),
+                      icon("stats#3", 1091, 47), icon("stats#4", 1138, 47), icon("stats#5", 1185, 126),
+                      icon("wechat", 1311, 38)]
+
+    static func spot(_ icons: [BarIcon], on display: BarDisplay = display) -> ControlSpot {
+        ControlLayout.spot(icons: icons, on: display, current: CGRect(x: 1000, y: 6, width: 34, height: 24), width: 34)
+    }
+
+    @Test func goesLeftOfTheChevron() {
+        let spot = Self.spot(Self.bar)
+        #expect(spot.reason == .leftOfChevron(key: "stats#3", iconMinX: 1091, chevronMinX: 1061))
+        #expect(spot.minX == 1061 - ControlLayout.gapToIcon - 34)
+        #expect(spot.width == 34)
+    }
+
+    @Test func narrowsWhenTheNotchIsClose() {
+        let display = BarDisplay(frame: Self.display.frame, barHeight: 40, visibleMinX: 1028)
+        let spot = Self.spot(Self.bar, on: display)
+        #expect(spot.minX == 1028)
+        #expect(spot.width == 1061 - ControlLayout.gapToIcon - 1028)
+    }
+
+    @Test func noPileStaysBesideTheIcon() {
+        let spot = Self.spot(Array(Self.bar.dropFirst(3)))
+        #expect(spot.reason == .beside(key: "stats#3", iconMinX: 1091))
+    }
+
+    /// YoungBar's own item in the pile keeps the narrow spot at its left end.
+    @Test func ownItemInThePileKeepsThePileSpot() {
+        let own = BarIcon(key: "own", frame: CGRect(x: 1036, y: 0, width: 47, height: 40), isOwn: true)
+        if case .inPile = Self.spot(Self.bar + [own]).reason {} else { Issue.record("expected the pile spot") }
+    }
+}

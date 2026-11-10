@@ -554,6 +554,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
     }
 
     func name(for key: String) -> String {
+        // `key#1`…: another icon of an app whose icons share one id (`barIcons`).
+        if let mark = key.lastIndex(of: "#"), Int(key[key.index(after: mark)...]) != nil, catalog[key] == nil {
+            return name(for: String(key[..<mark]))
+        }
         let id = catalog[key]?.id ?? ItemID(rawValue: key)
         if let system = MenuBarPolicy.systemItem(for: id) {
             switch system {

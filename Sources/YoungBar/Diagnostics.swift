@@ -156,7 +156,7 @@ extension BarApp {
         let spot = ControlLayout.spot(icons: icons, on: display, current: globalRect(slot.panel.frame), width: controlWidth)
         let icon: Double? = switch spot.reason {
         case .beside(_, let iconX): Double(iconX)
-        case .onOwnSlot: Double(spot.minX + spot.width + ControlLayout.gapToIcon)
+        case .onOwnSlot, .leftOfChevron: Double(spot.minX + spot.width + ControlLayout.gapToIcon)
         case .inPile, .noIcon: nil
         }
         return ControlCheck.evaluate(control: slot.panel.frame, screens: NSScreen.screens.map(\.frame),

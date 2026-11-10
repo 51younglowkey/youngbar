@@ -453,6 +453,8 @@ extension BarApp {
             reason = "\(label)follows \(name(for: key)) x\(Int(iconX)) · in « pile"
         case .onOwnSlot(let key, let iconX):
             reason = "\(label)follows \(name(for: key)) x\(Int(iconX)) · on own slot"
+        case .leftOfChevron(let key, let iconX, let chevron):
+            reason = "\(label)follows \(name(for: key)) x\(Int(iconX)) · left of « x\(Int(chevron))"
         case .noIcon:
             hasIcon = false
             if slot.hadIconToFollow {

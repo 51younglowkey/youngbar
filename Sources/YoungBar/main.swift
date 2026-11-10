@@ -71,6 +71,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Per running app, whether its signature is Apple-issued, and the
     /// processes looked at (`checkSignatures`).
     var signatures: [String: Bool] = [:]
+    /// The first signature check, at launch, is still running: the ••• waits
+    /// for it where it is (`refresh`).
+    var signaturesPending = false
     var signatureChecked: Set<pid_t> = []
     var shutOutWatch = ShutOut.Watch()
     /// Keys no version reads any more (options 0.1.4 turned into fixed
@@ -437,7 +440,13 @@ final class BarApp: NSObject, NSApplicationDelegate {
         lookForShutOutIcons(snapshot)
         checkSignatures()
         overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(fixedKeys)
-        positionControlBesideMenuIcons(in: snapshot)
+        // Until the first signatures are in, an icon macOS keeps off can't
+        // be told from one on the bar; that check refreshes when it is done.
+        if signaturesPending {
+            lastSnapshot = snapshot
+        } else {
+            positionControlBesideMenuIcons(in: snapshot)
+        }
         // The wallpaper or Dark Mode may have changed the bar's look.
         syncControlAppearance()
         if expanded { populateShelf() }

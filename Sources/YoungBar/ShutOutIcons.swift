@@ -33,6 +33,7 @@ extension BarApp {
     /// icon here and listed as shut out.
     func checkSignatures() {
         guard started, !quitting else { return }
+        let first = signatureChecked.isEmpty
         var asking: [(bundle: String, pid: pid_t, settled: Bool)] = []
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy != .prohibited {
             guard let bundle = app.bundleIdentifier, bundle != Bundle.main.bundleIdentifier,
@@ -44,7 +45,15 @@ extension BarApp {
             asking.append((bundle, app.processIdentifier, settled))
         }
         guard !asking.isEmpty else { return }
+        signaturesPending = first
         Task {
+            // Whatever comes of it, the ••• is placed once it is known.
+            defer {
+                if signaturesPending {
+                    signaturesPending = false
+                    if let lastSnapshot { positionControlBesideMenuIcons(in: lastSnapshot) }
+                }
+            }
             var unsigned = Set<String>()
             var withIcon = Set<String>()
             let hiding = await engine.holdsAssertion

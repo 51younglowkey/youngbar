@@ -409,6 +409,11 @@ extension BarApp {
         let own = Bundle.main.bundleIdentifier
         return snapshot.items.flatMap { item -> [BarIcon] in
             let key = item.id.sectionKey.rawValue
+            // An icon macOS keeps off the bar: for some seconds after hiding
+            // took effect the walk still lists where it was. Counted, that
+            // stale frame read as the « pile and the ••• sat on the icon
+            // left of it for two seconds at every launch (2026-11-10).
+            if fixedKeys.contains(key) { return [] }
             let isOwn = item.id.bundleID == own
             let copies = barCopies[item.id] ?? []
             let here = copies.first { ControlLayout.isOnBar($0, of: display) }

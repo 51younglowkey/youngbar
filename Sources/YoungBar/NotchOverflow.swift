@@ -12,35 +12,19 @@ import YoungBarCore
 /// so they leave it by themselves once there is room again.
 extension BarApp {
     /// The left edge of the bar right of the notch, in global coordinates,
-    /// for the display that holds YoungBar's control; nil without a notch.
+    /// for the display the strip hangs from; nil without a notch.
     var notchVisibleMinX: CGFloat? {
-        guard let screen = controlPanel?.screen ?? NSScreen.screens.first,
-              screen.safeAreaInsets.top > 0,
-              let right = screen.auxiliaryTopRightArea else { return nil }
-        return right.minX
+        anchorScreen.flatMap { barDisplay(for: $0).visibleMinX }
     }
 
-    /// Every item on the control's bar that is out of sight, YoungBar's
-    /// own status item included (the control must not follow it).
-    func outOfSightKeys(_ snapshot: EngineSnapshot) -> Set<String> {
-        guard let screen = controlPanel?.screen ?? NSScreen.screens.first else { return [] }
-        var frames: [String: CGRect?] = [:]
-        // YoungBar has one status item, but the walk can list it twice (its
-        // AX title flaps to "Item-0"), and the two entries on one spot read
-        // as the « pile. Judge it once, by an entry with a frame.
-        let ownItems = snapshot.items.filter { $0.id.bundleID == Bundle.main.bundleIdentifier }
-        let ownKeys = Set(ownItems.map(\.id.sectionKey.rawValue))
-        let ownJudged = (ownItems.first { $0.frame != nil } ?? ownItems.first)?.id.sectionKey.rawValue
-        for item in snapshot.items {
-            let key = item.id.sectionKey.rawValue
-            if ownKeys.contains(key), key != ownJudged { continue }
-            // Only this display's bar: a copy on a side display is visible.
-            if let frame = item.frame, frame.midX < screen.frame.minX || frame.midX > screen.frame.maxX { continue }
-            frames[key] = item.frame
-        }
-        var result = Overflow.keys(frames: frames, visibleMinX: notchVisibleMinX)
-        if let ownJudged, result.contains(ownJudged) { result.formUnion(ownKeys) }
-        return result
+    /// Every item that is out of sight on `screen`'s bar (the strip's display
+    /// by default), YoungBar's own status item included. Each bar has its own
+    /// room: what didn't fit on a notched built-in can be plain to see on a
+    /// wide external display.
+    func outOfSightKeys(_ snapshot: EngineSnapshot, on screen: NSScreen? = nil) -> Set<String> {
+        guard let screen = screen ?? anchorScreen else { return [] }
+        let display = barDisplay(for: screen)
+        return ControlLayout.outOfSight(barIcons(snapshot, on: display), on: display)
     }
 
     /// The strip's share: items set to Show that the user can't reach.
@@ -53,21 +37,11 @@ extension BarApp {
         }
     }
 
-    /// After a display is added, removed or rearranged, the control may be
-    /// left on a screen that no longer exists or off the bar: put it back
-    /// beside the status item.
-    func reinstallControlIfNeeded() {
-        guard let panel = controlPanel else { return }
-        let onScreen = NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
-        guard !onScreen || panel.screen == nil else { return }
-        flight.note("••• left the screens at x\(Int(panel.frame.minX)) y\(Int(panel.frame.minY)); reinstalling")
-        closeShelf()
-        panel.orderOut(nil)
-        controlPanel = nil
-        controlButton = nil
-        Task {
-            await installControlPanelWhenReady()
-            await refresh()
-        }
+    /// Displays were added, removed or rearranged. Don't wait for the next
+    /// walk: every ••• goes to its own bar now, and the walks that follow line
+    /// them up with the icons.
+    func displaysChanged() {
+        guard !controlSlots.isEmpty else { return }
+        syncControlPanels()
     }
 }

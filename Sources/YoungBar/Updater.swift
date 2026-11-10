@@ -255,12 +255,10 @@ extension BarApp {
     func applyUpdateNotice() {
         let tip = L10n.t("YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                          "YoungBar: click to show concealed icons; right-click to choose apps")
-        guard let control = controlButton else { return }
-        if let release = availableUpdate {
-            control.toolTip = tip + L10n.t("\n有新版本 \(release.version)，右键菜单里更新", "\nYoungBar \(release.version) is available; update from the right-click menu")
-        } else {
-            control.toolTip = tip
-        }
+        let text = availableUpdate.map { release in
+            tip + L10n.t("\n有新版本 \(release.version)，右键菜单里更新", "\nYoungBar \(release.version) is available; update from the right-click menu")
+        } ?? tip
+        for slot in controlSlots.values { slot.button.toolTip = text }
     }
 
     func installUpdate() {

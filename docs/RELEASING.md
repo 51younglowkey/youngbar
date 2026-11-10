@@ -51,6 +51,25 @@ Release notes must include:
 
 > Corresponding source for this binary: <link to the same tag's source>.
 
+## 3.1 Test versions (betas)
+
+Only when a change touches the core and can't be fully checked on one Mac; a
+plain fix goes straight to a final version.
+
+- Version `0.1.8-beta.1` in `Info.plist`, changelog `docs/RELEASE-0.1.8-beta.1.md`,
+  tag `v0.1.8-beta.1` on the public repository (GPLv3: every published build
+  has its source there).
+- Publish it marked **pre-release**. `releases/latest` skips pre-releases, so
+  nobody is offered it: the updater and the one-line install keep the last final
+  version, and `ReleaseInfo.parse` refuses one anyway.
+- People install it by hand, on purpose:
+  `curl -fsSL https://raw.githubusercontent.com/51younglowkey/youngbar/main/Scripts/install.sh | YOUNGBAR_VERSION=0.1.8-beta.1 sh`
+- A beta sorts before its version (`0.1.8-beta.2` < `0.1.8`), so someone on it
+  is offered the final version. One beta isn't offered the next: they install
+  that by hand too.
+- Versions before 0.1.8 can't read a beta's number. It doesn't matter: they only
+  ever see the latest final version.
+
 ## 4. Distribution channels
 
 - GitHub Releases: direct download

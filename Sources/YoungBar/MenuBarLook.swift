@@ -56,4 +56,23 @@ enum MenuBarLook {
         guard let space = space(on: screen), let raw = rawTheme(space: space) else { return nil }
         return MenuBarTheme.isDark(rawValue: raw)
     }
+
+    private typealias CopyActiveBar = @convention(c) (Int32) -> Unmanaged<CFString>?
+
+    private static let activeBarCall: CopyActiveBar? = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY),
+              let call = dlsym(handle, "SLSCopyActiveMenuBarDisplayIdentifier") else { return nil }
+        return unsafeBitCast(call, to: CopyActiveBar.self)
+    }()
+
+    /// Whether `screen` has the active menu bar, the one macOS doesn't dim; nil
+    /// when the window server can't say, and the ••• then stays at full strength.
+    static func isActiveBar(on screen: NSScreen) -> Bool? {
+        guard let calls, let activeBarCall,
+              let number = screen.displayID,
+              let active = activeBarCall(calls.mainConnection())?.takeRetainedValue() as String?,
+              let uuid = CGDisplayCreateUUIDFromDisplayID(number)?.takeRetainedValue(),
+              let name = CFUUIDCreateString(nil, uuid) as String? else { return nil }
+        return active.caseInsensitiveCompare(name) == .orderedSame
+    }
 }

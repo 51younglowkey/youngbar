@@ -143,19 +143,51 @@ extension BarApp {
 
     /// Where the ••• is against where it should be, right now.
     func controlCheck(_ snapshot: EngineSnapshot) -> ControlCheck? {
-        guard let panel = controlPanel, let screen = panel.screen ?? NSScreen.screens.first else { return nil }
-        // With a full bar the ••• sits in the « pile, not beside the first icon.
-        let own = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }?.id.sectionKey.rawValue
-        let inPile = own.map { outOfSightKeys(snapshot).contains($0) } ?? false
-        // On YoungBar's own slot there is no icon right beside it: measure
+        anchorSlot.flatMap { controlCheck(snapshot, slot: $0) }
+    }
+
+    func controlCheck(_ snapshot: EngineSnapshot, slot: ControlSlot) -> ControlCheck? {
+        guard let screen = screen(for: slot.displayID) else { return nil }
+        let display = barDisplay(for: screen)
+        let icons = barIcons(snapshot, on: display)
+        // With a full bar the ••• sits in the « pile, not beside the first
+        // icon. On YoungBar's own slot no icon is right beside it: measure
         // against where the slot puts it, as if an icon followed at the gap.
-        let place = controlPlacement(in: snapshot, on: screen, width: panel.frame.width)
-        let icon = inPile ? nil : place.map {
-            $0.onOwnSlot ? Double($0.x + panel.frame.width) + ControlPlacement.gap : Double($0.follows.frame.minX)
+        let spot = ControlLayout.spot(icons: icons, on: display, current: globalRect(slot.panel.frame), width: controlWidth)
+        let icon: Double? = switch spot.reason {
+        case .beside(_, let iconX): Double(iconX)
+        case .onOwnSlot: Double(spot.minX + spot.width + ControlLayout.gapToIcon)
+        case .inPile, .noIcon: nil
         }
-        return ControlCheck.evaluate(control: panel.frame, screens: NSScreen.screens.map(\.frame),
+        return ControlCheck.evaluate(control: slot.panel.frame, screens: NSScreen.screens.map(\.frame),
                                      barMinY: Double(screen.frame.maxY - menuBarHeight(of: screen)),
                                      barMaxY: Double(screen.frame.maxY), leadingIconX: icon)
+    }
+
+    /// One line per display's •••: where it is, its check, what's on that bar.
+    func controlReportLines(_ snapshot: EngineSnapshot) -> [String] {
+        let mark: (Bool) -> String = { $0 ? "✓" : "✗" }
+        return NSScreen.screens.enumerated().map { index, screen in
+            let number = index + 1
+            guard let slot = screen.displayID.flatMap({ controlSlots[$0] }) else {
+                return "••• \(number): " + L10n.t("这块屏没有菜单栏", "no bar on this display")
+            }
+            let display = barDisplay(for: screen)
+            let icons = barIcons(snapshot, on: display)
+            let onBar = icons.filter { $0.frame != nil }.count
+            let first = ControlLayout.leadingIcon(icons, on: display, outOfSight: ControlLayout.outOfSight(icons, on: display))
+            var line = "••• \(number): x\(Int(slot.panel.frame.minX)) y\(Int(slot.panel.frame.minY)) w\(Int(slot.panel.frame.width))"
+            line += slot.panel.isVisible ? "" : " " + L10n.t("未显示", "not shown")
+            if let check = controlCheck(snapshot, slot: slot) {
+                let gap = check.gapToIcon.map { " (\(Int($0)))" } ?? ""
+                line += " · " + L10n.t("在屏幕上", "On screen") + " \(mark(check.onScreen)) · "
+                    + L10n.t("在菜单栏内", "In the bar") + " \(mark(check.inBar)) · "
+                    + L10n.t("贴着图标", "Beside icons") + " \(check.besideIcons.map(mark) ?? "-")\(gap)"
+            }
+            line += " · " + L10n.t("这条菜单栏上的图标", "Icons on this bar") + " \(onBar)"
+            if let first { line += " · " + L10n.t("最左", "First") + " \(name(for: first.key)) x\(Int(first.frame.minX))" }
+            return line
+        }
     }
 
     func diagnosticsSummary() async -> String {
@@ -167,14 +199,15 @@ extension BarApp {
         let modelName = Self.sysctl("hw.model")
 
         let snapshot = await engine.freshSnapshot()
+        await refreshBarCopies()
         let hiding = await engine.holdsAssertion
-        let screen = controlPanel?.screen ?? NSScreen.screens.first
+        let screen = anchorScreen
         let screenText = screen.map { "\(Int($0.frame.width))×\(Int($0.frame.height))" } ?? "?"
         let ownX = snapshot.items.first { $0.id.bundleID == Bundle.main.bundleIdentifier }?.frame.map { "x\(Int($0.minX))" } ?? "-"
         let control = controlPanel.map { "x\(Int($0.frame.minX)) w\(Int($0.frame.width))" } ?? "-"
         let yes = "✓", no = "✗"
         // Which source the ••• goes by, and what the window server says now.
-        let barSpace = MenuBarLook.space(on: controlPanel?.screen)
+        let barSpace = MenuBarLook.space(on: anchorScreen)
         let barTheme = barSpace.flatMap { MenuBarLook.rawTheme(space: $0) }.map(String.init) ?? "-"
         let barLook = "\(menuBarThemeTrusted ? "theme" : "button") \(barTheme)"
 
@@ -191,20 +224,14 @@ extension BarApp {
         let hidden = keys.filter { modes[$0] == 1 }
         let always = keys.filter { modes[$0] == 2 }
         let covered = keys.filter { overflowKeys.contains($0) }
-        let mark: (Bool) -> String = { $0 ? yes : no }
-        var checkText = "-"
-        if let check = controlCheck(snapshot) {
-            let gap = check.gapToIcon.map { " (\(Int($0)))" } ?? ""
-            checkText = L10n.t("在屏幕上", "On screen") + " \(mark(check.onScreen)) · "
-                + L10n.t("在菜单栏内", "In the bar") + " \(mark(check.inBar)) · "
-                + L10n.t("贴着图标", "Beside icons") + " \(check.besideIcons.map(mark) ?? "-")\(gap)"
-        }
         let crashes = recentCrashTimes()
+        let controlLines = controlReportLines(snapshot).joined(separator: "\n")
         return """
         YoungBar \(version) · macOS \(os) · \(modelName)
         \(L10n.t("屏幕", "Displays")) \(NSScreen.screens.count) · \(screenText) · \(L10n.t("刘海", "Notch")) \(notchVisibleMinX != nil ? yes : no)
         \(L10n.t("屏幕排列", "Layout")) \(screenLayoutText)
-        ••• \(checkText) · \(L10n.t("10 分钟内大幅移动", "Jumps in 10 min")) \(flight.recentJumps)
+        \(controlLines)
+        \(L10n.t("10 分钟内大幅移动", "Jumps in 10 min")) \(flight.recentJumps)
         \(L10n.t("近 30 天崩溃", "Crashes in 30 days")) (\(crashes.count))\(crashes.isEmpty ? "" : ": " + crashes.prefix(3).joined(separator: ", "))
         \(L10n.t("权限", "Permission")) \(AXIsProcessTrusted() ? yes : no) · \(L10n.t("原生隐藏", "Native hiding")) \(AssessmentMode.isAvailable ? yes : no) · \(L10n.t("正在隐藏", "Hiding")) \(hiding ? yes : no)
         \(L10n.t("快捷键", "Shortcut")) \(hotKeyDisplay) · \(L10n.t("控件", "Control")) \(control) · \(L10n.t("占位", "Own item")) \(ownX) · \(L10n.t("菜单栏外观", "Bar look")) \(barLook)

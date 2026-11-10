@@ -5,7 +5,7 @@
 >
 > 2026-11-05 改写过 Git 历史（去掉 Claude 尾注）：下面引用的短哈希是改写前的，对照表见 `JOURNAL.md` 同日条目。
 >
-> 最后核对：**2026-11-10 05:35 +00:00**，版本 **0.2.0 (10)**，MacBook 内建屏（1800×1169，刘海 790–1010pt），没接外接屏，macOS 27。
+> 最后核对：**2026-11-10 05:35 +00:00**，版本 **0.2.0 (10)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt），没接外接屏，macOS 27。
 
 ## 1. 构建
 
@@ -358,7 +358,9 @@
 | 真机 | ✅ 重启后顺序是 ••• « RAM GPU 磁盘，互不重叠，之后 30 秒没再动。启动后第 1 秒有一次误判（« 读成 x1143），2 秒后自己改对 | 菜单栏截图、`events.log` 03:39:09–11 |
 | 没做 | ••• 不能直接贴着新指标：« 的位置由 macOS 定，夹在中间 | — |
 
-## 2.12 0.2.0（2026-11-10）：发布前回归
+## 2.12 0.2.0（2026-11-10 已发布）：发布前回归
+
+> [Release v0.2.0](https://github.com/51younglowkey/youngbar/releases/tag/v0.2.0)：`YoungBar-0.2.0.zip` + `.sha256`（SHA-256 `529623f03a87dcda0e4abdbfda34cc612ab2d959171646e5449b82792b6a2a7f`），tag 指向 `e848109`（公开和私有仓库的 main 都在这里），`releases/latest` 指向它，不是草稿也不是预发布。线上下载的 zip 校验通过，和本机测试过的那份逐字节相同。签名 `Authority=YoungBar Local Signing`，满足线上 0.1.8 发布包的 designated requirement。端到端更新：测试版假装 0.1.8 → 找到 0.2.0 → 下载、校验、安装、重新打开（新 PID）；`updatetest.json`：`offered:0.2.0`、`selfAccepted:true`；`update.log`：`installed 0.2.0`；装好的 `build/YoungBar.app` 与发布包 `diff -r` 相同，没有 `*TEST`；重开后弹出中文的「YoungBar 0.2.0 更新内容」（截图）。公开仓库发布事件触发的[安装检查](https://github.com/51younglowkey/youngbar/actions/runs/42763252835)通过，tag 的 [CI](https://github.com/51younglowkey/youngbar/actions/runs/42763235165) 通过（推 tag 触发的那次安装检查照例 cancelled）。没验证：真正的 0.1.8 二进制没有跑过这次更新（`Updater.swift` 的路径只用 0.2.0 的代码假装旧版本跑过）。更新测试后保存的图标顺序又被改写了那三格（Mustop / iBar Pro / Stats），已按备份放回，defaults 与备份无差异。2.7–2.11 标题里的「未发布」都随这一版发布了。
 
 > 内容是 2.7–2.11 和上面两个「2.10」的修复合在一起。真机证据只来自一台 Mac、只有内建屏；这一版没有在外接屏上重跑。
 

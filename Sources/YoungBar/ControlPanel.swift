@@ -399,15 +399,27 @@ extension BarApp {
 
     /// Every item as `display`'s bar sees it. The snapshot keeps one copy of
     /// each item (the main display's); the rest come from the same walk.
+    ///
+    /// An app with several untitled icons (Stats, one per module) walks as
+    /// one id, so the snapshot keeps one of its icons and which one changes
+    /// from walk to walk. Every other place it has on this bar is an icon of
+    /// its own here (`key#1`, …): the ••• went left of the narrow one and sat
+    /// on the other (2026-11-10, Stats with its GPU module turned on).
     func barIcons(_ snapshot: EngineSnapshot, on display: BarDisplay) -> [BarIcon] {
         let own = Bundle.main.bundleIdentifier
-        return snapshot.items.map { item in
+        return snapshot.items.flatMap { item -> [BarIcon] in
+            let key = item.id.sectionKey.rawValue
+            let isOwn = item.id.bundleID == own
             let copies = barCopies[item.id] ?? []
             let here = copies.first { ControlLayout.isOnBar($0, of: display) }
                 ?? item.frame.flatMap { ControlLayout.isOnBar($0, of: display) ? $0 : nil }
-            return BarIcon(key: item.id.sectionKey.rawValue, frame: here,
-                           drawnElsewhere: here == nil && (!copies.isEmpty || item.frame != nil),
-                           isOwn: item.id.bundleID == own)
+            let first = BarIcon(key: key, frame: here,
+                                drawnElsewhere: here == nil && (!copies.isEmpty || item.frame != nil),
+                                isOwn: isOwn)
+            guard let here, !isOwn else { return [first] }
+            let others = ControlLayout.distinctFrames(copies.filter { ControlLayout.isOnBar($0, of: display) },
+                                                      besides: here)
+            return [first] + others.enumerated().map { BarIcon(key: "\(key)#\($0.offset + 1)", frame: $0.element) }
         }
     }
 

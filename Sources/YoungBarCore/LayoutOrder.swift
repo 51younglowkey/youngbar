@@ -58,20 +58,25 @@ public enum LayoutOrder {
     }
 
     /// The Menu Bar page's rows: the strip's icons first (Hide and Always
-    /// Hide), then the bar's, each left to right. YoungBar hides in place,
-    /// so a hidden icon keeps its real slot among the shown ones; listed
-    /// there, it read as sitting on the bar right of the ••• (user report,
-    /// 2026-11-09).
-    public static func grouped(_ order: [String], modes: [String: Int]) -> [String] {
-        order.filter { (modes[$0] ?? 0) > 0 } + order.filter { (modes[$0] ?? 0) == 0 }
+    /// Hide), then the `fixed` ones (kept off the bar by macOS, whatever
+    /// their mode: `ShutOut`), then the bar's, each left to right. YoungBar
+    /// hides in place, so a hidden icon keeps its real slot among the shown
+    /// ones; listed there, it read as sitting on the bar right of the •••
+    /// (user report, 2026-11-09).
+    public static func grouped(_ order: [String], modes: [String: Int], fixed: Set<String> = []) -> [String] {
+        order.filter { (modes[$0] ?? 0) > 0 && !fixed.contains($0) }
+            + order.filter(fixed.contains)
+            + order.filter { (modes[$0] ?? 0) == 0 && !fixed.contains($0) }
     }
 
     /// Where a row may land in a `grouped` list it was taken out of:
     /// `index` kept inside its own group (the first `hiddenCount` rows are
-    /// the strip's) and not past `end`, the locked run at the right.
-    public static func clampedIndex(_ index: Int, hidden: Bool, hiddenCount: Int, end: Int) -> Int {
-        let lower = hidden ? 0 : hiddenCount
-        let upper = hidden ? hiddenCount : max(hiddenCount, end)
+    /// the strip's, the next `fixedCount` don't move) and not past `end`,
+    /// the locked run at the right.
+    public static func clampedIndex(_ index: Int, hidden: Bool, hiddenCount: Int, fixedCount: Int = 0,
+                                    end: Int) -> Int {
+        let lower = hidden ? 0 : hiddenCount + fixedCount
+        let upper = hidden ? hiddenCount : max(lower, end)
         return max(lower, min(index, upper))
     }
 

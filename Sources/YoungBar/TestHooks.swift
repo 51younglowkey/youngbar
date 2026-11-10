@@ -74,6 +74,9 @@ extension BarApp {
         if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_LAUNCHTEST"], !bundle.isEmpty {
             await runLaunchTest(bundle: bundle)
         }
+        if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_SHUTOUTTEST"], !bundle.isEmpty {
+            await runShutOutTest(bundle: bundle)
+        }
         if ProcessInfo.processInfo.environment["YOUNGBAR_NOASSERTIONTEST"] == "1" {
             await runNoAssertionTest()
         }
@@ -792,6 +795,15 @@ extension BarApp {
         func settle(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
         func waitIdle() async { for _ in 0..<80 where busy { await settle(250) } }
         let originalModes = modes
+        // `YOUNGBAR_SETTINGSUI_SHUTOUT=<bundle id>`: an app macOS keeps off
+        // the bar, set to Show first, so the run has a fixed row to step
+        // around. Its mode goes back with the others at the end.
+        if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSUI_SHUTOUT"],
+           let key = catalog.first(where: { $0.value.id.bundleID == bundle && $0.key.hasPrefix("bundle:") })?.key {
+            if modes[key] ?? 0 != 0 { setMode(key: key, mode: 0); await settle(800); await waitIdle() }
+            for _ in 0..<80 where !shutOutKeys.contains(key) { await settle(250) }
+        }
+        result["fixedRowsAtStart"] = shutOutKeys.sorted().map { name(for: $0) }
         let expected = ProcessInfo.processInfo.environment["YOUNGBAR_EXPECT_ORDER"]?
             .split(separator: ",").map(String.init) ?? savedOrder
         let originalLanguage = options[.language] ?? 0
@@ -807,6 +819,17 @@ extension BarApp {
         let controller = settings
         let ourWindow = settings.windowForCapture.windowNumber
         let screenTop = NSScreen.screens.first?.frame.maxY ?? 0
+        // As tall as the screen allows for the run: nothing here scrolls the
+        // list, and with a third section the bar's rows were below the fold
+        // (2026-11-10: the drag found no row to drop on).
+        let originalFrame = settings.windowForCapture.frame
+        if let visible = settings.windowForCapture.screen?.visibleFrame {
+            var tall = originalFrame
+            tall.size.height = visible.height
+            tall.origin.y = visible.minY
+            settings.windowForCapture.setFrame(tall, display: true)
+            await settle(600)
+        }
         /// Converts an AppKit screen point to CG space, or nil if another
         /// window would receive the event.
         func aim(_ point: NSPoint, _ label: String) -> CGPoint? {
@@ -850,7 +873,7 @@ extension BarApp {
         settings.select(.layout)
         await settle(1000)
         var modeSteps: [[String: Any]] = []
-        if let target = settings.currentEntries.first(where: { !$0.pinned && $0.mode == 0 && $0.key.hasPrefix("bundle:") }) {
+        if let target = settings.currentEntries.first(where: { !$0.pinned && !$0.shutOut && $0.mode == 0 && $0.key.hasPrefix("bundle:") }) {
             result["modeTarget"] = target.key
             for expected in [1, 2, 1, 0] {
                 guard let control = rect("mode:\(target.key)"),
@@ -875,7 +898,7 @@ extension BarApp {
         let entries = settings.currentEntries
         let pairs = entries.indices.dropLast().filter { index in
             let a = entries[index], b = entries[index + 1]
-            return !a.pinned && !b.pinned && a.key.hasPrefix("bundle:") && b.key.hasPrefix("bundle:")
+            return !a.pinned && !b.pinned && !a.shutOut && !b.shutOut && a.key.hasPrefix("bundle:") && b.key.hasPrefix("bundle:")
         }
         let shownPair = pairs.first { entries[$0].mode == 0 && entries[$0 + 1].mode == 0 }
         if let index = shownPair ?? pairs.first,
@@ -920,8 +943,8 @@ extension BarApp {
         settings.select(.layout)
         await settle(1000)
         let rows = settings.currentEntries
-        if let strip = rows.last(where: { $0.mode > 0 && !$0.pinned }),
-           let bar = rows.first(where: { $0.mode == 0 && !$0.pinned }),
+        if let strip = rows.last(where: { $0.mode > 0 && !$0.pinned && !$0.shutOut }),
+           let bar = rows.first(where: { $0.mode == 0 && !$0.pinned && !$0.shutOut }),
            let rowA = rect("row:\(strip.key)"), let rowB = rect("row:\(bar.key)"),
            let from = aim(NSPoint(x: rowA.minX + 90, y: rowA.midY), "cross start"),
            let to = aim(NSPoint(x: rowB.minX + 90, y: rowB.midY), "cross end") {
@@ -986,16 +1009,25 @@ extension BarApp {
         result["orderRestored"] = savedOrder == expected
         result["languageRestored"] = (options[.language] ?? 0) == originalLanguage
         result["optionsUnchanged"] = options == originalOptions
+        settings.windowForCapture.setFrame(originalFrame, display: true)
+        result["frameRestored"] = settings.windowForCapture.frame == originalFrame
         settings.close()
     }
 
     /// The Menu Bar page's rows: every strip row (Hide, Always Hide) before
     /// every bar row, the strip's in the strip's own order.
     func rowsGrouped(_ rows: [BarEntry]) -> Bool {
+        // Strip rows, then the ones macOS keeps off the bar, then bar rows.
+        let fixedStart = rows.firstIndex(where: \.shutOut) ?? rows.count
+        let fixedEnd = rows.lastIndex(where: \.shutOut).map { $0 + 1 } ?? fixedStart
+        guard !rows[fixedStart..<fixedEnd].contains(where: { !$0.shutOut }) else { return false }
+        let rows = rows.filter { !$0.shutOut }
         let hidden = rows.filter { $0.mode > 0 }.map(\.key)
         let firstShown = rows.firstIndex { $0.mode == 0 } ?? rows.count
         let strip = ShelfContents.keys(order: orderedKeys(), modes: modes, covered: [], includeAlwaysHidden: true)
+            .filter { !shutOutKeys.contains($0) }
         return !rows[firstShown...].contains { $0.mode > 0 } && hidden == strip
+            && (fixedStart == fixedEnd || fixedStart == hidden.count)
     }
 
     /// Moves items until the ones now in the menu bar follow `target`,
@@ -2290,6 +2322,118 @@ extension BarApp {
         // Show icon macOS shut out.
         result["passed"] = (result["quit"] as? Bool == true) && inSettings
             && (mode == 0 ? (onBar && !inStrip) || (shutOut && inStrip) : !onBar && inStrip)
+    }
+
+    /// Opt-in (`YOUNGBAR_SHUTOUTTEST=<bundle id>`): an app macOS keeps off the
+    /// bar while anything is hidden (one without an Apple-issued signature),
+    /// switched between Show and Hide the way Settings does it, with the
+    /// Menu Bar page open. Its row must never leave Settings (user report,
+    /// 2026-11-10: after a click or two neither section had it), and set to
+    /// Show it must end up in the fixed section and in the strip, and stay
+    /// there whatever the mode. `YOUNGBAR_SHUTOUT_PRESS=1` also presses it
+    /// from the strip and closes what opened with Esc;
+    /// `YOUNGBAR_SHUTOUT_HOLD=<seconds>` waits with the window up for a
+    /// screenshot (its number is in `shutout-window.json`). The saved mode is
+    /// put back at the end.
+    func runShutOutTest(bundle: String) async {
+        var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "bundle": bundle]
+        defer { writeJSON(result, name: "shutouttest.json") }
+        guard let key = catalog.first(where: { $0.value.id.bundleID == bundle && $0.key.hasPrefix("bundle:") })?.key,
+              NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == bundle }) else {
+            result["skipped"] = "not running, or no icon known"
+            return
+        }
+        let saved = modes[key] ?? 0
+        result["key"] = key
+        result["savedMode"] = saved
+        result["holdsAssertion"] = await engine.holdsAssertion
+        showWindow()
+        settings?.select(.layout)
+        try? await Task.sleep(for: .milliseconds(900))
+        // Which section has the row: "none" is the bug.
+        func place() -> String {
+            guard let row = barEntries().first(where: { $0.key == key }) else { return "none" }
+            return row.shutOut ? "fixed" : row.mode > 0 ? "strip" : "bar"
+        }
+        var steps: [[String: Any]] = []
+        func apply(_ mode: Int, seconds: Double) async {
+            setMode(key: key, mode: mode)
+            var seen: [String] = []
+            let started = Date()
+            var fixedAfter = -1.0
+            while Date().timeIntervalSince(started) < seconds {
+                let now = place()
+                if seen.last != now {
+                    seen.append(now)
+                    if now == "fixed" { fixedAfter = Date().timeIntervalSince(started) }
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            steps.append(["mode": mode, "seen": seen, "fixedAfter": fixedAfter,
+                          "inStrip": shelfKeys().contains(key), "savedMode": modes[key] ?? 0])
+        }
+        result["placeAtStart"] = place()
+        // From Hide (concealed, or already known to be shut out) to Show…
+        if saved == 0 { await apply(1, seconds: 3) }
+        await apply(0, seconds: 0.8)
+        // …and back before anyone knows where it went, as a second click does.
+        await apply(1, seconds: 5)
+        await apply(0, seconds: 8)
+        // Shut out now: the mode no longer moves it.
+        await apply(1, seconds: 1.5)
+        await apply(0, seconds: 1.5)
+        result["steps"] = steps
+        let rows = settings?.currentEntries ?? []
+        result["fixedRows"] = rows.filter(\.shutOut).map(\.name)
+        result["rowsGrouped"] = rowsGrouped(rows)
+        result["placeAtEnd"] = place()
+        result["inStripAtEnd"] = shelfKeys().contains(key)
+        writeJSON(["window": settings?.windowForCapture.windowNumber ?? 0], name: "shutout-window.json")
+        if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_SHUTOUT_HOLD"] ?? "") {
+            try? await Task.sleep(for: .seconds(hold))
+        }
+        if ProcessInfo.processInfo.environment["YOUNGBAR_SHUTOUT_PRESS"] == "1" {
+            let owner = NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == bundle }?.processIdentifier ?? 0
+            let before = windowNumbers(of: owner)
+            showShelf(takeKeyboard: false)
+            try? await Task.sleep(for: .milliseconds(600))
+            if let button = shelfButtons.first(where: { $0.identifier?.rawValue == key }) {
+                pressShelfItem(button)
+                try? await Task.sleep(for: .milliseconds(1500))
+                let opened = windowNumbers(of: owner).subtracting(before)
+                let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+                result["pressOpened"] = windows.compactMap { info -> String? in
+                    guard let number = info[kCGWindowNumber as String] as? Int, opened.contains(number),
+                          let raw = info[kCGWindowBounds as String] as? NSDictionary,
+                          let bounds = CGRect(dictionaryRepresentation: raw) else { return nil }
+                    return "\(Int(bounds.minX)),\(Int(bounds.minY)) \(Int(bounds.width))x\(Int(bounds.height))"
+                }
+                result["pressFeedback"] = feedback
+                if ProcessInfo.processInfo.environment["YOUNGBAR_SHUTOUT_HOLD"] != nil {
+                    await captureScreen(to: "shutout-press.png")
+                }
+                for down in [true, false] {
+                    CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: down)?.post(tap: .cghidEventTap)
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+                result["pressLeftOpen"] = windowNumbers(of: owner).subtracting(before).count
+            } else {
+                result["pressOpened"] = "no strip button"
+            }
+            closeShelf()
+        }
+        // Back to the saved mode.
+        setMode(key: key, mode: saved)
+        for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+        try? await Task.sleep(for: .milliseconds(500))
+        result["restoredMode"] = modes[key] ?? 0
+        result["placeRestored"] = place()
+        settings?.close()
+        let neverGone = !steps.contains { ($0["seen"] as? [String] ?? []).contains("none") }
+        result["neverGone"] = neverGone
+        result["passed"] = neverGone && (result["placeAtEnd"] as? String) == "fixed"
+            && (result["inStripAtEnd"] as? Bool == true) && (result["rowsGrouped"] as? Bool == true)
+            && (result["restoredMode"] as? Int) == saved && (result["placeRestored"] as? String) != "none"
     }
 
     /// The button for `key` sending `action`, anywhere under `view`.

@@ -231,4 +231,20 @@ import Testing
         #expect(LayoutOrder.clampedIndex(2, hidden: true, hiddenCount: 3, end: 7) == 2)
         #expect(LayoutOrder.clampedIndex(4, hidden: false, hiddenCount: 3, end: 7) == 4)
     }
+
+    @Test func fixedRowsSitBetweenTheStripAndTheBar() {
+        // C is shown and E hidden, but macOS keeps both off the bar.
+        let order = ["A", "B", "C", "D", "E", "F"]
+        let modes = ["B": 1, "E": 1, "F": 2]
+        #expect(LayoutOrder.grouped(order, modes: modes, fixed: ["C", "E"]) == ["B", "F", "C", "E", "A", "D"])
+    }
+
+    @Test func rowsDontLandAmongTheFixedOnes() {
+        // 2 strip rows, 2 fixed rows, then bar rows up to the locked run at 8.
+        #expect(LayoutOrder.clampedIndex(3, hidden: true, hiddenCount: 2, fixedCount: 2, end: 8) == 2)
+        #expect(LayoutOrder.clampedIndex(2, hidden: false, hiddenCount: 2, fixedCount: 2, end: 8) == 4)
+        #expect(LayoutOrder.clampedIndex(6, hidden: false, hiddenCount: 2, fixedCount: 2, end: 8) == 6)
+        // Only locked rows after the fixed ones: nowhere to go but the group's start.
+        #expect(LayoutOrder.clampedIndex(9, hidden: false, hiddenCount: 2, fixedCount: 2, end: 3) == 4)
+    }
 }

@@ -55,4 +55,19 @@ import Testing
         #expect(watch.due(["a"], now: 67) == [])
         #expect(watch.due(["a"], now: 68) == ["a"])
     }
+
+    @Test func anIconThatLeftEveryListStaysWhileItsAppRuns() {
+        // "timer" was listed and no longer is; "old" quit; "stats" is still there.
+        let lost = ShutOut.lost(previous: ["bundle:timer", "bundle:stats", "bundle:old", "status:x::y"],
+                                listed: ["bundle:stats"], bundles: bundles, running: ["timer", "stats", "chat"])
+        #expect(lost == ["bundle:timer"])
+    }
+
+    @Test func anIconListedAMomentAgoIsAskedSooner() {
+        var watch = ShutOut.Watch()
+        #expect(watch.due(["a", "b"], eager: ["a"], now: 0) == [])
+        #expect(watch.due(["a", "b"], eager: ["a"], now: 2) == [])
+        #expect(watch.due(["a", "b"], eager: ["a"], now: 3) == ["a"])
+        #expect(watch.due(["a", "b"], eager: ["a"], now: 8) == ["b"])
+    }
 }

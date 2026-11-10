@@ -115,6 +115,9 @@ extension BarApp {
         shutOutKeys = shutOutKeys.filter { key in
             catalog[key]?.id.bundleID.map(running.contains) ?? false
         }
+        unlistedKeys = unlistedKeys.filter { key in
+            catalog[key]?.id.bundleID.map(running.contains) ?? false
+        }
         Task {
             await engine.setRunningBundles(runningBundleIDs())
             await reapplyModel()

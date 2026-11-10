@@ -79,9 +79,11 @@ extension BarApp {
         settings?.show()
     }
 
-    /// The Menu Bar page's rows: the strip's, then the bar's, each in order.
+    /// The Menu Bar page's rows: the strip's, the ones macOS keeps off the
+    /// bar, then the bar's, each in order.
     func barEntries() -> [BarEntry] {
-        let keys = LayoutOrder.grouped(previewOnly ? LayoutOrder.unique(savedOrder) : orderedKeys(), modes: modes)
+        let keys = LayoutOrder.grouped(previewOnly ? LayoutOrder.unique(savedOrder) : orderedKeys(), modes: modes,
+                                       fixed: shutOutKeys)
         return keys.map { key in
             let id = catalog[key]?.id ?? ItemID(rawValue: key)
             return BarEntry(key: key, name: name(for: key), image: fallbackImage(for: key),

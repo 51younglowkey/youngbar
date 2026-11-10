@@ -41,6 +41,8 @@ extension BarApp {
         UserDefaults.standard.set(modes, forKey: "itemModes")
         UserDefaults.standard.set(hiddenBundles.sorted(), forKey: "hiddenBundles")
         bulkHiddenKeys = []
+        // Asked again soon: set to Show, it may turn out to be shut out.
+        shutOutWatch.forget(key)
         // Icons opened from the strip are out on their own 20 s: take them
         // back with this change, or nothing ever would.
         let timed = Set(shownUntil.keys)

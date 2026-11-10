@@ -290,6 +290,21 @@
 | 现在的行为 | ✅ 这类图标进收纳条（保存的模式仍是显示），设置里标「系统不显示」；一个图标都不隐藏时它回到菜单栏、自动离开收纳条。应用连续 8 秒不在遍历里才去问它自己的 AX 树，没有图标的应用 60 秒后再问 | `YOUNGBAR_LAUNCHTEST=com.51young.sleeptimer`：`shutOutByMacOS:true`、`inStripAfterLaunch:true`、`inSettingsAfterLaunch:true`、`passed:true`；`events.log`：`shut out by macOS while icons are hidden: 定时暂停`（启动后、重开后各一次）；单元测试 `ShutOutTests` |
 | 自检改动 | `YOUNGBAR_LAUNCHTEST` 以前看到图标一次就算回来（接纳窗口里人人都看得到）；现在等 5 秒再看，退不掉的应用强制退出 | `onBarDuringWindow` / `onBarAfterLaunch` |
 | 没验证 | 设置里「系统不显示」标记没有截图（那一行在列表下方，没滚动）；从收纳条点它没有真机点过（走的是「放不下」同一条 AXPress 路径，它的状态项有 AXPress）；ad hoc 签名、Apple Development 证书的应用没试，只试了本机自签证书 | — |
+| 更正（2.10） | 设置里的「系统不显示」标记改成了单独一段；截图和从收纳条真机点开见 2.10 | — |
+
+## 2.10 用户反馈：自签应用在设置里点一两下显示 / 隐藏，两段都没有它了（2026-11-10，未发布）
+
+作者自己发现，对象是 Mustop（`studio.wuyiyang.mustop`）和 Maclean 预览（`com.51young.maclean.preview`），都是本机自签。两条路都会让行消失：① 已经认出「系统不显示」的图标，`remember()` 只在模式是显示时把它留在列表里，点成隐藏就哪都不在，`ShutOut.suspects` 又只看显示的，重启前回不来；② 保存为隐藏的自签应用启动时被正常藏起来，一改成显示就同时离开引擎的 `concealed` 和遍历，至少 8 秒没有行。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 行不再消失 | ✅ 认出来之后不看模式，留在 `shutOutKeys` 直到遍历重新列出它或应用退出；刚从所有列表里掉出来、应用还在跑的图标先留着行（`unlistedKeys`），3 秒后去问它自己的 AX 树 | `YOUNGBAR_SHUTOUTTEST=studio.wuyiyang.mustop`：`neverGone:true`、`passed:true`，各步见到的段：显示 0.8 秒 `bar` → 隐藏 5 秒 `strip` → 显示 8 秒 `bar,fixed`（4.2 秒后进固定段）→ 隐藏 `fixed` → 显示 `fixed`；Maclean 预览同样通过（3.4 秒）；`events.log`：`in no list although the app runs: Mustop`、`shut out by macOS while icons are hidden: Mustop`；单元测试 138 passed（`ShutOutTests`、`LayoutOrderTests` 新增） |
+| 固定段 | ✅ 设置的菜单栏页在收纳条和菜单栏两段之间多一段「系统不显示：固定在收纳条里」：带锁、右边写「在收纳条里」，没有显示/隐藏控件、不能拖、没有移动菜单；收纳条里右键它也没有模式项 | 截图（深色、中文）：Mustop 在固定段；`fixedRows:["Mustop"]`、`rowsGrouped:true`。收纳条右键菜单没有真机点开看过 |
+| 从收纳条点开 | ✅ 这类图标一律原地 AXPress | `YOUNGBAR_SHUTOUT_PRESS=1`：Mustop 的菜单 `1272,40 167x296`（截图）、Maclean 预览的弹窗 `1025,31 346x478`；Esc 后都关了（Maclean 的弹窗淡出慢，`pressLeftOpen:1`，随后截图确认已关） |
+| 带固定行时设置的其余操作 | ✅ 改显示方式、拖动、右键移动、跨段拖不动、切语言 | `YOUNGBAR_SETTINGSUITEST=1` + `YOUNGBAR_SETTINGSUI_SHUTOUT=studio.wuyiyang.mustop`：`fixedRowsAtStart:["Mustop"]`，各项 passed，`modesRestored`、`orderRestored`、`frameRestored` 都是 true。第一次跑 `dragPassed:false`：多了一段后菜单栏那几行在 620 高的窗口下面，自检点不到；自检改成期间把窗口拉高 |
+| 行为说明 | 保存为隐藏的自签应用，启动后是普通的隐藏行（有控件）；改成显示后 3–4 秒进固定段，之后改回隐藏也留在固定段，重启 YoungBar 才回到普通隐藏行。固定段里模式不是显示、而别的图标都不隐藏时，断言还在，它回不到菜单栏；出口是「全部显示」 | — |
+| 没验证 | 浅色、英文界面的固定段没截图；外接屏上没测；ad hoc 签名、Apple Development 证书的应用没试；批量操作（全部隐藏 / 显示）和导入配置之后固定段的表现没单独测 | — |
+| 另外看到的 | 每次启动 ••• 有约 2 秒放错：隐藏刚生效时遍历里还留着 Mustop 的旧位置（x1279，在 Stats 的范围里），被当成 « 那一堆，••• 先去 x1277，下一次遍历回到 x1151。和这次修的不是一回事，没改 | `events.log` 04:31:38、04:39:31、04:40:55 的 `JUMP … left of « x1317`，各自 1–2 秒后的 `JUMP … follows Stats x1191` |
 
 ## 3. 验证边界（不许含糊）
 

@@ -1683,10 +1683,17 @@ extension BarApp {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date())]
         defer { writeJSON(result, name: "autohidetest.json") }
         await refresh()
+        // An icon macOS keeps off the bar can't be concealed or shown again:
+        // right after launch the walk still lists its old position, and the
+        // signatures come in a moment after the first refresh.
+        try? await Task.sleep(for: .seconds(2))
+        await refresh()
+        let keptOff = fixedKeys.union(unsignedKeys())
         let snapshot = await engine.freshSnapshot()
         guard let victim = snapshot.items.last(where: { item in
             guard item.frame != nil, let bundle = item.id.bundleID else { return false }
             return bundle != Bundle.main.bundleIdentifier && !bundle.hasPrefix("com.apple.")
+                && !keptOff.contains(item.id.sectionKey.rawValue)
                 && (modes[item.id.sectionKey.rawValue] ?? 0) == 0 && MenuBarPolicy.isSectionManageable(item.id)
         }) else {
             result["skipped"] = "no shown app icon"

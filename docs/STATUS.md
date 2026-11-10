@@ -5,7 +5,7 @@
 >
 > 2026-11-05 改写过 Git 历史（去掉 Claude 尾注）：下面引用的短哈希是改写前的，对照表见 `JOURNAL.md` 同日条目。
 >
-> 最后核对：**2026-11-06 09:10 +00:00**，版本 **0.1.8 (9)**（已发布），MacBook 内建屏（1800×1169，刘海 790–1010pt）+ XV252Q 1920×1080，macOS 27。
+> 最后核对：**2026-11-10 05:35 +00:00**，版本 **0.2.0 (10)**，MacBook 内建屏（1800×1169，刘海 790–1010pt），没接外接屏，macOS 27。
 
 ## 1. 构建
 
@@ -357,3 +357,19 @@
 | 修复 | `ControlLayout.spot` 新增 `.leftOfChevron`：第一个图标左边紧挨着一堆看不见的项时，« 的起点取这堆里起点最靠右的框，••• 放在 « 左边 6pt；刘海留的地方不够就变窄（不窄于 22），再不够才照旧。自己的项在堆里时仍走原来的规则 | 单元测试 134 passed（`ChevronTests` 4 项） |
 | 真机 | ✅ 重启后顺序是 ••• « RAM GPU 磁盘，互不重叠，之后 30 秒没再动。启动后第 1 秒有一次误判（« 读成 x1143），2 秒后自己改对 | 菜单栏截图、`events.log` 03:39:09–11 |
 | 没做 | ••• 不能直接贴着新指标：« 的位置由 macOS 定，夹在中间 | — |
+
+## 2.12 0.2.0（2026-11-10）：发布前回归
+
+> 内容是 2.7–2.11 和上面两个「2.10」的修复合在一起。真机证据只来自一台 Mac、只有内建屏；这一版没有在外接屏上重跑。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 单元测试 | ✅ 141 项通过（本机 macOS 27） | `swift test`，2026-11-10 |
+| 回归：`SELFTEST`、`ORDER`、`MENU`、`HOTKEY`、`PINNED`、`GEAR`、`SHELFOPEN`（27ms）、`ABOUT`、`KEYBOARD`、`CONFIG`、`OVERFLOW`（`crowded:true`）、`APPEARANCE`、`DISPLAY`（单屏）、`FLIGHT` | ✅ passed | 各自的 json，2026-11-10 05:27–05:31 |
+| 回归：`INTERACTION`、`CONCEAL`、`EXTRAS`、`EMPTYSHELF`、`SHELFDRAG`、`NOASSERTION`、`CONTROLY` | ✅ 不写总判定，逐项读了结果，都是预期值（`SHELFDRAG` 这次 `stripReordered`、`savedOrderFollows` 都是 true） | 同上 |
+| `AUTOHIDETEST` | ✅ 第一次没走完（`concealed:false`、`shownAgain:false`）：自检挑了 Mustop，它现在是系统不显示的图标，藏不了也显示不回来。自检改成等签名结果、跳过这类图标后，对 Stats 通过（`modeAfter:1`、`concealed`、`inStrip`、`shownAgain`、`restored` 都对）。测试中途 Notion 启动，被自动设为隐藏（`events.log` 05:28:37 `notion.id adopted after launch`），这是真实发生的一次 | `autohidetest.json` |
+| `SHUTOUTTEST`、`SETTINGSUITEST` | ✅ 合并前在同一份代码上跑过（合并后的 tree 和 `b6c7b9c` 相同），见 2.10 | — |
+| 测试版查更新 | ✅ `upToDate`（当前 0.2.0，线上 0.1.8 不会被当成新版本），自己的签名被接受 | `updatetest.json` |
+| 设置有没有被自检改动 | 🟡 显示方式、选项没变；保存的顺序里 Mustop / iBar Pro / Stats 三格被改写（2.10 记过的 `reconcileVisibleOrder`），测完放回。多出来的 `notion.id` 是 Notion 启动带来的，留着 | `defaults export` 前后对比 |
+| 没跑 | `LAUNCHTEST`（会退出并重开一个应用）、`DISPLAYCLICKTEST`、`BARLOOKTEST`、外接屏上的任何一项、`display-lab` | — |
+| 发布包 | ✅ `make package`：`YoungBar Local Signing` 签名，0.2.0 (10)，`YOUNGBAR_*TEST` 0 处，zip 解开和构建产物 `diff -r` 相同，校验和通过 | `dist/YoungBar-0.2.0.zip`，sha256 `529623f0…a2a7f`（改完自检后重新打的包） |

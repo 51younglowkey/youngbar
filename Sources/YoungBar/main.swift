@@ -57,9 +57,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Items of Hidden apps started while an assertion holds: macOS parks them
     /// off screen, out of every engine snapshot, until an adoption window.
     var parkedKeys: Set<String> = []
-    /// Show icons macOS keeps off the bar while anything is hidden, in no
-    /// engine snapshot either (`ShutOutIcons.swift`).
+    /// Icons macOS keeps off the bar while anything is hidden, in no engine
+    /// snapshot either (`ShutOutIcons.swift`). Whatever their mode: until a
+    /// walk lists them again or their app quits.
     var shutOutKeys: Set<String> = []
+    /// Icons listed a moment ago and in no list now, their app still
+    /// running: kept listed while the app is asked whether it has an icon.
+    var unlistedKeys: Set<String> = []
+    /// The icons with no mode to choose (`ShutOut.fixed`): the shut-out
+    /// ones, and those of apps without an Apple-issued signature that
+    /// another hidden icon keeps off the bar. Set on every refresh.
+    var fixedKeys: Set<String> = []
+    /// Per running app, whether its signature is Apple-issued, and the
+    /// processes looked at (`checkSignatures`).
+    var signatures: [String: Bool] = [:]
+    var signatureChecked: Set<pid_t> = []
     var shutOutWatch = ShutOut.Watch()
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
@@ -423,7 +435,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         await refreshBarCopies()
         remember(snapshot)
         lookForShutOutIcons(snapshot)
-        overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(shutOutKeys)
+        checkSignatures()
+        overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(fixedKeys)
         positionControlBesideMenuIcons(in: snapshot)
         // The wallpaper or Dark Mode may have changed the bar's look.
         syncControlAppearance()
@@ -449,10 +462,27 @@ final class BarApp: NSObject, NSApplicationDelegate {
         for id in snapshot.concealed { present.insert(id.sectionKey.rawValue) }
         // Landed since (any adoption window lands them all): the engine has it.
         parkedKeys.subtract(present)
-        // Back in the walk: nothing is hidden any more, or its mode changed.
+        // Back in the walk: nothing is hidden any more. A changed mode
+        // doesn't bring it back: dropped for that, a shut-out icon set to
+        // Hide was in no list, with no row left to set it back.
         shutOutKeys.subtract(present)
-        shutOutKeys = shutOutKeys.filter { (modes[$0] ?? 0) == 0 && !bulkHiddenKeys.contains($0) }
-        presentKeys = present.union(parkedKeys).union(shutOutKeys)
+        var listed = present.union(parkedKeys).union(shutOutKeys)
+        unlistedKeys.subtract(listed)
+        // Gone from every list although its app runs (set from Hide to Show
+        // and macOS won't show it, say): it keeps its row meanwhile.
+        // Not while quitting: every icon is on its way back to the bar then.
+        let lost = quitting ? [] : ShutOut.lost(previous: presentKeys, listed: listed.union(unlistedKeys),
+                                                bundles: singleIconBundles(), running: runningBundleIDs())
+        if !lost.isEmpty {
+            unlistedKeys.formUnion(lost)
+            flight.note("in no list although the app runs: \(lost.sorted().map { name(for: $0) }.joined(separator: ", "))")
+        }
+        listed.formUnion(unlistedKeys)
+        presentKeys = listed
+        fixedKeys = ShutOut.fixed(shutOut: shutOutKeys, unsigned: unsignedKeys(), listed: listed,
+                                  walked: Set(snapshot.items.map { $0.id.sectionKey.rawValue }),
+                                  concealed: Set(snapshot.concealed.map { $0.sectionKey.rawValue }),
+                                  hidden: Set(modes.filter { $0.value > 0 }.keys).union(bulkHiddenKeys))
 
         var orderChanged = false
         // Nothing is "new" on the very first run: every icon is.

@@ -118,32 +118,35 @@ final class SettingsModel {
         guard let key, key != target,
               let source = entries.firstIndex(where: { $0.key == key }),
               let index = entries.firstIndex(where: { $0.key == target }),
-              !entries[source].pinned,
+              !entries[source].pinned, !entries[source].shutOut, !entries[index].shutOut,
               // Strip rows and bar rows don't swap: the mode says which it is.
               (entries[source].mode > 0) == (entries[index].mode > 0) else { return false }
         move(from: source, to: source < index ? index + 1 : index)
         return true
     }
 
-    /// The strip's rows (Hide, Always Hide), then the bar's.
-    var hiddenEntries: [BarEntry] { entries.filter { $0.mode > 0 } }
-    var shownEntries: [BarEntry] { entries.filter { $0.mode == 0 } }
+    /// The strip's rows (Hide, Always Hide), the ones macOS keeps off the
+    /// bar (in the strip too, with no mode to choose), then the bar's.
+    var hiddenEntries: [BarEntry] { entries.filter { $0.mode > 0 && !$0.shutOut } }
+    var fixedEntries: [BarEntry] { entries.filter(\.shutOut) }
+    var shownEntries: [BarEntry] { entries.filter { $0.mode == 0 && !$0.shutOut } }
 
-    /// The first row of `entry`'s group: the strip's rows come first.
+    /// The first row of `entry`'s group: the strip's rows come first, the
+    /// bar's after the fixed ones.
     func groupStart(of entry: BarEntry) -> Int {
-        entry.mode > 0 ? 0 : entries.filter { $0.mode > 0 }.count
+        entry.mode > 0 ? 0 : hiddenEntries.count + fixedEntries.count
     }
 
     /// The last row of `entry`'s group.
     func groupEnd(of entry: BarEntry) -> Int {
-        entry.mode > 0 ? entries.filter { $0.mode > 0 }.count - 1 : entries.count - 1
+        entry.mode > 0 ? hiddenEntries.count - 1 : entries.count - 1
     }
 
     /// `destination` is the index the row is placed before (as in `onMove`).
     /// A row stays in its group (strip or bar), and never lands after the
     /// macOS-pinned items at the right edge.
     func move(from source: Int, to destination: Int) {
-        guard entries.indices.contains(source), !entries[source].pinned else { return }
+        guard entries.indices.contains(source), !entries[source].pinned, !entries[source].shutOut else { return }
         var list = entries
         let item = list.remove(at: source)
         var index = destination > source ? destination - 1 : destination
@@ -153,11 +156,13 @@ final class SettingsModel {
         // turned a move to the right into one to the left.
         let end = list.lastIndex(where: { !$0.pinned }).map { $0 + 1 } ?? 0
         index = LayoutOrder.clampedIndex(index, hidden: item.mode > 0,
-                                         hiddenCount: list.filter { $0.mode > 0 }.count, end: end)
+                                         hiddenCount: list.filter { $0.mode > 0 && !$0.shutOut }.count,
+                                         fixedCount: list.filter(\.shutOut).count, end: end)
         index = max(0, min(index, list.count))
         guard index != source else { return }
         list.insert(item, at: index)
-        let next = index + 1 < list.count ? list[index + 1].key : ""
+        // The neighbour it is put before on the bar: a fixed row has no slot there.
+        let next = list[(index + 1)...].first { !$0.shutOut }?.key ?? ""
         entries = list
         send(.move(item.key, next))
     }
@@ -496,6 +501,22 @@ struct LayoutPane: View {
                     Text(L10n.t("收纳条：从左到右", "Strip: left to right"))
                 }
             }
+            // Apps macOS won't show while anything is hidden: in the strip
+            // whatever their mode, so there is none to choose.
+            if !model.fixedEntries.isEmpty {
+                Section {
+                    ForEach(model.fixedEntries) { entry in
+                        LayoutRow(entry: entry, model: model)
+                    }
+                } header: {
+                    Text(L10n.t("系统不显示：固定在收纳条里", "Kept off by macOS: fixed in the strip"))
+                } footer: {
+                    Text(L10n.t("有图标隐藏时，macOS 不显示这些应用的图标：它们没有 Apple 签发的开发者签名（比如自己编译的应用）。所以它们固定在收纳条里，不能单独设为显示或隐藏；别的图标都不隐藏时，它们和其他图标一样。",
+                                "While any icon is hidden, macOS doesn't show these apps' icons: they have no Apple-issued developer signature (apps you built yourself, for example). So they stay in the strip and can't be set to Show or Hide on their own; with no other icon hidden they are like any other icon."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section {
                 if model.entries.isEmpty {
                     Text(model.axTrusted
@@ -557,10 +578,15 @@ struct LayoutRow: View {
 
     var body: some View {
         LabeledContent {
-            ModeControl(entry: entry, model: model)
+            if entry.shutOut {
+                Text(L10n.t("在收纳条里", "In the strip"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ModeControl(entry: entry, model: model)
+            }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: entry.pinned ? "lock.fill" : "line.3.horizontal")
+                Image(systemName: entry.pinned || entry.shutOut ? "lock.fill" : "line.3.horizontal")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .frame(width: 14)
@@ -577,8 +603,9 @@ struct LayoutRow: View {
                 Text(entry.name)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if entry.covered {
-                    CoveredTag(shutOut: entry.shutOut)
+                // A fixed row's section says why it isn't on the bar.
+                if entry.covered, !entry.shutOut {
+                    CoveredTag()
                 }
             }
         }
@@ -592,17 +619,21 @@ struct LayoutRow: View {
                 .padding(.horizontal, -6)
                 .padding(.vertical, -4)
         }
-        .movable(!entry.pinned, key: entry.key) { LayoutDragPreview(entry: entry) }
+        .movable(!entry.pinned && !entry.shutOut, key: entry.key) { LayoutDragPreview(entry: entry) }
         .dropDestination(for: String.self) { keys, _ in
             model.drop(keys.first, on: entry.key)
         } isTargeted: { inside in
             if inside { model.dropTarget = entry.key } else if model.dropTarget == entry.key { model.dropTarget = nil }
         }
-        .help(entry.pinned
+        .help(entry.shutOut
+              ? L10n.t("有图标隐藏时，macOS 不显示这个应用的图标；可以从收纳条打开它",
+                       "While any icon is hidden, macOS doesn't show this app's icon; open it from the strip")
+              : entry.pinned
               ? L10n.t("位置由 macOS 固定，不能移动；仍然可以隐藏", "macOS fixes this item's position; it can still be hidden")
               : "")
+        .accessibilityHint(entry.shutOut ? L10n.t("macOS 不在菜单栏显示它，固定在收纳条里", "macOS keeps it off the menu bar; fixed in the strip") : "")
         .contextMenu {
-            if !entry.pinned, let index = model.entries.firstIndex(where: { $0.key == entry.key }) {
+            if !entry.pinned, !entry.shutOut, let index = model.entries.firstIndex(where: { $0.key == entry.key }) {
                 // Within its group: the strip's rows, or the bar's.
                 let first = model.groupStart(of: entry), last = model.groupEnd(of: entry)
                 Button(L10n.t("移到最左", "Move to Far Left")) { model.move(from: index, to: first) }
@@ -621,30 +652,7 @@ struct LayoutRow: View {
 /// A row set to Show that the bar has no room for: macOS moved it into «
 /// (or it sits under the notch), so for now it opens from the strip.
 struct CoveredTag: View {
-    /// Kept off the bar by macOS, not by a full bar.
-    var shutOut = false
-
     var body: some View {
-        if shutOut { tag(L10n.t("系统不显示", "Kept off by macOS"),
-                         help: L10n.t("有图标被隐藏时，macOS 不显示这个应用的图标：它没有 Apple 签发的开发者签名（比如自己编译的应用）。现在可以从收纳条打开它；一个图标都不隐藏时，它会回到菜单栏。",
-                                      "While any icon is hidden, macOS doesn't show this app's icon: the app has no Apple-issued developer signature (one you built yourself, for example). Open it from the strip for now; with no icon hidden it returns to the menu bar."),
-                         label: L10n.t("macOS 不在菜单栏显示它，已在收纳条里", "macOS keeps it off the menu bar; in the strip for now"))
-        } else { noRoom }
-    }
-
-    private func tag(_ text: String, help: String, label: String) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(.quaternary))
-            .fixedSize()
-            .help(help)
-            .accessibilityLabel(label)
-    }
-
-    private var noRoom: some View {
         Text(L10n.t("放不下", "No room"))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.secondary)

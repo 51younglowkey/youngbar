@@ -123,9 +123,18 @@ extension BarApp {
         let title = NSMenuItem(title: name(for: key), action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
-        if mode != 0 { add(L10n.t("放回菜单栏", "Show in menu bar"), 0) }
-        if mode != 1 { add(L10n.t("隐藏（收进收纳条）", "Hide (in the strip)"), 1) }
-        if mode != 2 { add(L10n.t("始终隐藏", "Always hide"), 2) }
+        if fixedKeys.contains(key) {
+            // Nothing to choose: macOS keeps it off the bar either way.
+            let note = NSMenuItem(title: L10n.t("有图标隐藏时，macOS 不显示它：固定在收纳条里",
+                                                "macOS keeps it off the bar while icons are hidden: it stays in the strip"),
+                                  action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            menu.addItem(note)
+        } else {
+            if mode != 0 { add(L10n.t("放回菜单栏", "Show in menu bar"), 0) }
+            if mode != 1 { add(L10n.t("隐藏（收进收纳条）", "Hide (in the strip)"), 1) }
+            if mode != 2 { add(L10n.t("始终隐藏", "Always hide"), 2) }
+        }
         menu.addItem(.separator())
         let settingsItem = NSMenuItem(title: L10n.t("在设置中调整…", "Adjust in Settings…"), action: #selector(openLayoutSettings), keyEquivalent: "")
         settingsItem.target = self

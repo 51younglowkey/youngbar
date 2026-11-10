@@ -115,6 +115,14 @@ extension BarApp {
         shutOutKeys = shutOutKeys.filter { key in
             catalog[key]?.id.bundleID.map(running.contains) ?? false
         }
+        unlistedKeys = unlistedKeys.filter { key in
+            catalog[key]?.id.bundleID.map(running.contains) ?? false
+        }
+        fixedKeys = fixedKeys.filter { key in
+            catalog[key]?.id.bundleID.map(running.contains) ?? false
+        }
+        signatures = signatures.filter { running.contains($0.key) }
+        signatureChecked.formIntersection(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
         Task {
             await engine.setRunningBundles(runningBundleIDs())
             await reapplyModel()

@@ -64,6 +64,14 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// Icons listed a moment ago and in no list now, their app still
     /// running: kept listed while the app is asked whether it has an icon.
     var unlistedKeys: Set<String> = []
+    /// The icons with no mode to choose (`ShutOut.fixed`): the shut-out
+    /// ones, and those of apps without an Apple-issued signature that
+    /// another hidden icon keeps off the bar. Set on every refresh.
+    var fixedKeys: Set<String> = []
+    /// Per running app, whether its signature is Apple-issued, and the
+    /// processes looked at (`checkSignatures`).
+    var signatures: [String: Bool] = [:]
+    var signatureChecked: Set<pid_t> = []
     var shutOutWatch = ShutOut.Watch()
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
@@ -427,7 +435,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
         await refreshBarCopies()
         remember(snapshot)
         lookForShutOutIcons(snapshot)
-        overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(shutOutKeys)
+        checkSignatures()
+        overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(fixedKeys)
         positionControlBesideMenuIcons(in: snapshot)
         // The wallpaper or Dark Mode may have changed the bar's look.
         syncControlAppearance()
@@ -470,6 +479,10 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         listed.formUnion(unlistedKeys)
         presentKeys = listed
+        fixedKeys = ShutOut.fixed(shutOut: shutOutKeys, unsigned: unsignedKeys(), listed: listed,
+                                  walked: Set(snapshot.items.map { $0.id.sectionKey.rawValue }),
+                                  concealed: Set(snapshot.concealed.map { $0.sectionKey.rawValue }),
+                                  hidden: Set(modes.filter { $0.value > 0 }.keys).union(bulkHiddenKeys))
 
         var orderChanged = false
         // Nothing is "new" on the very first run: every icon is.

@@ -796,14 +796,13 @@ extension BarApp {
         func waitIdle() async { for _ in 0..<80 where busy { await settle(250) } }
         let originalModes = modes
         // `YOUNGBAR_SETTINGSUI_SHUTOUT=<bundle id>`: an app macOS keeps off
-        // the bar, set to Show first, so the run has a fixed row to step
-        // around. Its mode goes back with the others at the end.
+        // the bar. Waits until it is known as one, so the run has a fixed
+        // row to step around.
         if let bundle = ProcessInfo.processInfo.environment["YOUNGBAR_SETTINGSUI_SHUTOUT"],
            let key = catalog.first(where: { $0.value.id.bundleID == bundle && $0.key.hasPrefix("bundle:") })?.key {
-            if modes[key] ?? 0 != 0 { setMode(key: key, mode: 0); await settle(800); await waitIdle() }
-            for _ in 0..<80 where !shutOutKeys.contains(key) { await settle(250) }
+            for _ in 0..<80 where !fixedKeys.contains(key) { await settle(250) }
         }
-        result["fixedRowsAtStart"] = shutOutKeys.sorted().map { name(for: $0) }
+        result["fixedRowsAtStart"] = fixedKeys.sorted().map { name(for: $0) }
         let expected = ProcessInfo.processInfo.environment["YOUNGBAR_EXPECT_ORDER"]?
             .split(separator: ",").map(String.init) ?? savedOrder
         let originalLanguage = options[.language] ?? 0
@@ -1025,7 +1024,7 @@ extension BarApp {
         let hidden = rows.filter { $0.mode > 0 }.map(\.key)
         let firstShown = rows.firstIndex { $0.mode == 0 } ?? rows.count
         let strip = ShelfContents.keys(order: orderedKeys(), modes: modes, covered: [], includeAlwaysHidden: true)
-            .filter { !shutOutKeys.contains($0) }
+            .filter { !fixedKeys.contains($0) }
         return !rows[firstShown...].contains { $0.mode > 0 } && hidden == strip
             && (fixedStart == fixedEnd || fixedStart == hidden.count)
     }
@@ -1504,7 +1503,7 @@ extension BarApp {
         result["overflowAllShown"] = overflowKeys.sorted()
         // Nothing went under « or the notch: the bar never filled, and the
         // checks below would hold for an empty set. Say so instead of passing.
-        let wasCrowded = !overflowKeys.subtracting(shutOutKeys).isEmpty
+        let wasCrowded = !overflowKeys.subtracting(fixedKeys).isEmpty
         result["crowded"] = wasCrowded
         if !wasCrowded {
             result["inconclusive"] = "the bar did not fill up with every icon shown: open more menu-bar apps (or show more items from Control Center) and run again"
@@ -2307,11 +2306,11 @@ extension BarApp {
         // A Show icon macOS shuts out (an app without an Apple-issued
         // signature) is found once it has stayed missing for a while.
         if mode == 0, !onBar {
-            for _ in 0..<24 where !shutOutKeys.contains(where: { catalog[$0]?.id.bundleID == bundle }) {
+            for _ in 0..<24 where !fixedKeys.contains(where: { catalog[$0]?.id.bundleID == bundle }) {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
-        let shutOut = shutOutKeys.contains { catalog[$0]?.id.bundleID == bundle }
+        let shutOut = fixedKeys.contains { catalog[$0]?.id.bundleID == bundle }
         let inStrip = shelfKeys().contains { catalog[$0]?.id.bundleID == bundle }
         let inSettings = barEntries().contains { catalog[$0.key]?.id.bundleID == bundle }
         result["shutOutByMacOS"] = shutOut
@@ -2330,14 +2329,25 @@ extension BarApp {
     /// Menu Bar page open. Its row must never leave Settings (user report,
     /// 2026-11-10: after a click or two neither section had it), and set to
     /// Show it must end up in the fixed section and in the strip, and stay
-    /// there whatever the mode. `YOUNGBAR_SHUTOUT_PRESS=1` also presses it
+    /// there whatever the mode. One whose signature says so (`unsigned`)
+    /// must be there from the start, also set to Hide, and after every
+    /// step. Needs another icon set to Hide, as the fixed section does.
+    /// `YOUNGBAR_SHUTOUT_PRESS=1` also presses it
     /// from the strip and closes what opened with Esc;
     /// `YOUNGBAR_SHUTOUT_HOLD=<seconds>` waits with the window up for a
     /// screenshot (its number is in `shutout-window.json`). The saved mode is
-    /// put back at the end.
+    /// put back at the end. `YOUNGBAR_SHUTOUT_SHOWALL=1` then does "Show all"
+    /// (the row must leave the fixed section and the icon be on the bar) and
+    /// "Restore my layout" (fixed again).
     func runShutOutTest(bundle: String) async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "bundle": bundle]
         defer { writeJSON(result, name: "shutouttest.json") }
+        // The signature is read after the first refresh; an app that was
+        // off the bar before the first walk has no key until then.
+        let began = Date()
+        for _ in 0..<50 where signatures[bundle] == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        for _ in 0..<20 where !lists(bundle) { try? await Task.sleep(for: .milliseconds(100)) }
+        result["knownAfter"] = Date().timeIntervalSince(began)
         guard let key = catalog.first(where: { $0.value.id.bundleID == bundle && $0.key.hasPrefix("bundle:") })?.key,
               NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == bundle }) else {
             result["skipped"] = "not running, or no icon known"
@@ -2347,6 +2357,8 @@ extension BarApp {
         result["key"] = key
         result["savedMode"] = saved
         result["holdsAssertion"] = await engine.holdsAssertion
+        let unsigned = signatures[bundle] == false
+        result["unsigned"] = unsigned
         showWindow()
         settings?.select(.layout)
         try? await Task.sleep(for: .milliseconds(900))
@@ -2428,12 +2440,62 @@ extension BarApp {
         try? await Task.sleep(for: .milliseconds(500))
         result["restoredMode"] = modes[key] ?? 0
         result["placeRestored"] = place()
+        // "Show all": nothing is hidden, so it is a row like any other and on
+        // the bar; "Restore my layout" brings the fixed row back.
+        var showAllPassed = true
+        if ProcessInfo.processInfo.environment["YOUNGBAR_SHUTOUT_SHOWALL"] == "1" {
+            func watch(_ seconds: Double, until wanted: (String) -> Bool) async -> [String] {
+                var seen: [String] = []
+                let started = Date()
+                while Date().timeIntervalSince(started) < seconds {
+                    let now = place()
+                    if seen.last != now { seen.append(now) }
+                    if wanted(now), Date().timeIntervalSince(started) > 2 { break }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                return seen
+            }
+            // On the bar its slot in the saved order follows where it really
+            // is (`reconcileVisibleOrder`); put back afterwards.
+            let orderBefore = savedOrder
+            showAllApps()
+            for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+            let shown = await watch(12) { $0 != "fixed" }
+            let walk = await engine.snapshot()
+            let onBar = walk.items.contains { $0.id.sectionKey.rawValue == key }
+            result["showAllSeen"] = shown
+            result["showAllConcealed"] = walk.concealed.count
+            result["showAllOnBar"] = onBar
+            result["showAllInStrip"] = shelfKeys().contains(key)
+            if let hold = Double(ProcessInfo.processInfo.environment["YOUNGBAR_SHUTOUT_HOLD"] ?? "") {
+                try? await Task.sleep(for: .seconds(hold))
+            }
+            restoreAppModes()
+            for _ in 0..<50 where busy { try? await Task.sleep(for: .milliseconds(100)) }
+            let back = await watch(12) { $0 == "fixed" }
+            result["restoreSeen"] = back
+            if savedOrder != orderBefore {
+                result["orderMovedByShowAll"] = true
+                savedOrder = orderBefore
+                UserDefaults.standard.set(savedOrder, forKey: "itemOrder")
+                await engine.setModel(currentModel())
+            }
+            showAllPassed = shown.last != "fixed" && !shown.contains("none") && onBar
+                && back.last == "fixed" && !back.contains("none")
+            result["showAllPassed"] = showAllPassed
+        }
         settings?.close()
         let neverGone = !steps.contains { ($0["seen"] as? [String] ?? []).contains("none") }
         result["neverGone"] = neverGone
+        // Known from its signature: fixed before any click and after each.
+        let fixedThroughout = (result["placeAtStart"] as? String) == "fixed"
+            && !steps.contains { ($0["seen"] as? [String] ?? []).last != "fixed" || $0["inStrip"] as? Bool != true }
+            && (result["placeRestored"] as? String) == "fixed"
+        if unsigned { result["fixedThroughout"] = fixedThroughout }
         result["passed"] = neverGone && (result["placeAtEnd"] as? String) == "fixed"
             && (result["inStripAtEnd"] as? Bool == true) && (result["rowsGrouped"] as? Bool == true)
             && (result["restoredMode"] as? Int) == saved && (result["placeRestored"] as? String) != "none"
+            && (!unsigned || fixedThroughout) && showAllPassed
     }
 
     /// The button for `key` sending `action`, anywhere under `view`.

@@ -16,7 +16,41 @@
 /// again or its app quits: the mode doesn't change it. Dropped when the
 /// mode changed, a shut-out icon set to Hide was in no list at all, with
 /// no row left to set it back (user report, 2026-11-10).
+///
+/// Known ahead from the signature too (`fixed`): an app without an
+/// Apple-issued one is treated as shut out from the start, not only once
+/// it was set to Show and went missing (user request, 2026-11-10; an ad
+/// hoc signed app is shut out like a self-signed one, tried the same day).
 public enum ShutOut {
+    /// Keys with no mode of their own to choose: listed in the strip and
+    /// in their own section of Settings.
+    /// - Parameters:
+    ///   - shutOut: keys found to be shut out.
+    ///   - unsigned: keys of apps without an Apple-issued signature.
+    ///   - listed: every key Settings lists now.
+    ///   - walked: keys the walk lists, on the bar as far as it can tell.
+    ///   - concealed: keys the engine conceals right now.
+    ///   - hidden: keys set to Hide, by their mode or by "Hide all".
+    ///
+    /// An unsigned app's icon is one while an icon macOS does hide on
+    /// request (a signed app's, the system's) is concealed: its own mode
+    /// changes nothing then, and the walk isn't asked, which still lists
+    /// the icon for some seconds after hiding took effect (at launch it
+    /// was a bar row for four seconds). Otherwise it is one when the walk
+    /// doesn't list it, unless it is set to Hide and nothing else is:
+    /// with only unsigned ones hidden, their modes are what keeps icons
+    /// off the bar, and no row to set to Show would leave no way back. On
+    /// the bar ("Show all", or nothing hidden) it is a row like any other.
+    public static func fixed(shutOut: Set<String>, unsigned: Set<String>, listed: Set<String>,
+                             walked: Set<String>, concealed: Set<String>, hidden: Set<String>) -> Set<String> {
+        let othersConcealed = !concealed.subtracting(unsigned).isEmpty
+        let othersHidden = !hidden.intersection(listed).subtracting(unsigned).isEmpty
+        let known = unsigned.intersection(listed).filter {
+            othersConcealed || (!walked.contains($0) && (!hidden.contains($0) || othersHidden))
+        }
+        return shutOut.subtracting(unsigned).union(known)
+    }
+
     /// Keys the last refresh listed and this one doesn't, although their
     /// app still runs. They stay listed while the app is asked whether it
     /// still has an icon: an icon just set from Hide to Show that macOS

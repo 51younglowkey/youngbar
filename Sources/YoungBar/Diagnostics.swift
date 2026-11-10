@@ -223,7 +223,8 @@ extension BarApp {
         let shown = keys.filter { (modes[$0] ?? 0) == 0 && !overflowKeys.contains($0) }
         let hidden = keys.filter { modes[$0] == 1 }
         let always = keys.filter { modes[$0] == 2 }
-        let covered = keys.filter { overflowKeys.contains($0) }
+        let covered = keys.filter { overflowKeys.contains($0) && !fixedKeys.contains($0) }
+        let fixed = keys.filter { fixedKeys.contains($0) }
         let crashes = recentCrashTimes()
         let controlLines = controlReportLines(snapshot).joined(separator: "\n")
         return """
@@ -239,6 +240,7 @@ extension BarApp {
         \(L10n.t("隐藏", "Hidden")) (\(hidden.count)): \(list(hidden))
         \(L10n.t("始终隐藏", "Always hidden")) (\(always.count)): \(list(always))
         \(L10n.t("被 « 收走", "In macOS «")) (\(covered.count)): \(list(covered))
+        \(L10n.t("系统不显示", "Kept off by macOS")) (\(fixed.count)): \(list(fixed))
         """
     }
 }

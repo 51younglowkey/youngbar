@@ -123,7 +123,7 @@ extension BarApp {
         let title = NSMenuItem(title: name(for: key), action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
-        if shutOutKeys.contains(key) {
+        if fixedKeys.contains(key) {
             // Nothing to choose: macOS keeps it off the bar either way.
             let note = NSMenuItem(title: L10n.t("有图标隐藏时，macOS 不显示它：固定在收纳条里",
                                                 "macOS keeps it off the bar while icons are hidden: it stays in the strip"),

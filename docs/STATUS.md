@@ -305,6 +305,15 @@
 | 行为说明 | 保存为隐藏的自签应用，启动后是普通的隐藏行（有控件）；改成显示后 3–4 秒进固定段，之后改回隐藏也留在固定段，重启 YoungBar 才回到普通隐藏行。固定段里模式不是显示、而别的图标都不隐藏时，断言还在，它回不到菜单栏；出口是「全部显示」 | — |
 | 没验证 | 浅色、英文界面的固定段没截图；外接屏上没测；ad hoc 签名、Apple Development 证书的应用没试；批量操作（全部隐藏 / 显示）和导入配置之后固定段的表现没单独测 | — |
 | 另外看到的 | 每次启动 ••• 有约 2 秒放错：隐藏刚生效时遍历里还留着 Mustop 的旧位置（x1279，在 Stats 的范围里），被当成 « 那一堆，••• 先去 x1277，下一次遍历回到 x1151。和这次修的不是一回事，没改 | `events.log` 04:31:38、04:39:31、04:40:55 的 `JUMP … left of « x1317`，各自 1–2 秒后的 `JUMP … follows Stats x1191` |
+| 更正（同日）：一开始就认出自签应用 | ✅ 用户要求：不要等按了「显示」才进固定段。启动后按签名查每个运行中的应用（`anchor apple generic`），没有 Apple 签发签名的图标只要别的图标在隐藏，就直接在固定段和收纳条里，保存的是显示还是隐藏都一样 | `YOUNGBAR_SHUTOUTTEST`：Mustop（保存为显示、保存为隐藏各一次）、Maclean 预览、ad hoc 签名的探针应用都是 `placeAtStart:"fixed"`、`fixedThroughout:true`、每一步 `seen:["fixed"]`、`passed:true`；`knownAfter` 0.10–0.21 秒；设置截图（深色、中文，Mustop 保存为隐藏）：固定段里 Maclean 预览、Mustop、AdHocProbe；`events.log`：`no Apple-issued signature: …` 只有这三个应用，有签名的应用没有被列进去；`codesign -v -R='anchor apple generic' <pid>` 对三个都失败；单元测试 141 passed |
+| 更正「行为说明」 | 上面「保存为隐藏的自签应用，启动后是普通的隐藏行…重启 YoungBar 才回到普通隐藏行」不再成立：签名认得出的应用启动后就在固定段，重启也一样。别的图标都不隐藏时（「全部显示」，或没有图标设为隐藏）它是普通的行、在菜单栏上；只有没签名的图标设为隐藏时，它们保留显示 / 隐藏控件 | 「全部显示 / 恢复」见下一行；「只有没签名的图标设为隐藏」只有单元测试（`onlyUnsignedAppsHiddenKeepTheirModes`），没有真机测 |
+| 「全部显示」和「恢复」 | ✅ 全部显示后行离开固定段、图标回到菜单栏；恢复后回到固定段 | `YOUNGBAR_SHUTOUT_SHOWALL=1`：`showAllSeen:["fixed","bar"]`、`showAllConcealed:0`、`showAllOnBar:true`、`showAllInStrip:false`、`restoreSeen:["bar","fixed"]`；菜单栏截图 05:10:46 有 Mustop 的图标，05:10:53 没有 |
+| YoungBar 启动前就在跑的自签应用 | ✅ 这次发现并修了：设为显示的自签应用在 YoungBar 启动时已经不在菜单栏上，遍历、`concealed`、保存的模式里都没有它，重启 YoungBar 后收纳条和设置里都没有。现在查签名时直接问它有没有状态项 | 探针应用（之前没有保存过模式）：第一次跑自检 `skipped: not running, or no icon known`；修后 `events.log` 启动同一秒 `off the bar since before the first walk: AdHocProbe, Maclean 预览`，自检通过 |
+| ad hoc 签名 | ✅ 试了：和自签一样被系统拿掉，从收纳条能点开 | 探针应用 `pressOpened: 1108,40 161x58`、`pressLeftOpen:0` |
+| 带固定行时设置的其余操作（重跑） | ✅ | `YOUNGBAR_SETTINGSUITEST=1` + `YOUNGBAR_SETTINGSUI_SHUTOUT=studio.wuyiyang.mustop`：`fixedRowsAtStart:["Maclean 预览","Mustop","AdHocProbe"]`（没有改任何模式），各项 passed，`modesRestored`、`orderRestored`、`frameRestored` 都是 true |
+| 这一轮没验证 | Apple Development 证书的应用（过得了签名检查，只能靠原来等证据的那条路）；「只有没签名的图标设为隐藏」的真机表现；浅色、英文界面；外接屏；运行中的应用很多时查签名要多久（这台机器上和启动在同一秒）；Maclean 预览的弹窗这次没有截图确认已关（`pressLeftOpen:1`，和上面一样淡出慢） | — |
+| 顺带看到的 | 设为显示的自签图标一回到菜单栏（「全部显示」，或退出时赶上一次刷新），`reconcileVisibleOrder` 会把它在保存顺序里的位置改成真实位置（Mustop 从 Stats 前面到 WeChat 后面）；固定行不能拖，看不出区别，没改。自检里「全部显示」那一步会把顺序放回 | 自检 `orderMovedByShowAll:true`；退出前后导出的 defaults 对比 |
+| 启动时 ••• 放错 2 秒 | 04:58 之后 10 次启动没再出现：Mustop 在菜单栏上的旧位置从 x1279 变成了 x1324，不再落在 Stats 的范围里。原因没修，位置回去还会出现 | `events.log` 04:58:51 之后没有 `left of «` |
 
 ## 3. 验证边界（不许含糊）
 

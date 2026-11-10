@@ -83,13 +83,13 @@ extension BarApp {
     /// bar, then the bar's, each in order.
     func barEntries() -> [BarEntry] {
         let keys = LayoutOrder.grouped(previewOnly ? LayoutOrder.unique(savedOrder) : orderedKeys(), modes: modes,
-                                       fixed: shutOutKeys)
+                                       fixed: fixedKeys)
         return keys.map { key in
             let id = catalog[key]?.id ?? ItemID(rawValue: key)
             return BarEntry(key: key, name: name(for: key), image: fallbackImage(for: key),
                             mode: modes[key] ?? 0,
                             pinned: MenuBarPolicy.isPinnedSystemItem(id) || MenuBarPolicy.isPinnedAppleHost(id.bundleID),
-                            covered: overflowKeys.contains(key), shutOut: shutOutKeys.contains(key))
+                            covered: overflowKeys.contains(key), shutOut: fixedKeys.contains(key))
         }
     }
 

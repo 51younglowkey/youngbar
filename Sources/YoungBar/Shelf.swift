@@ -38,7 +38,7 @@ extension BarApp {
             if movesAway { closeShelf() }
             anchorDisplayID = display ?? pointerDisplayID
             // What the bar has no room for depends on the bar.
-            if let lastSnapshot { overflowKeys = computeOverflow(outOfSightKeys(lastSnapshot)) }
+            if let lastSnapshot { overflowKeys = computeOverflow(outOfSightKeys(lastSnapshot)).union(fixedKeys) }
             let event = NSApp.currentEvent
             includeAlwaysHidden = !fromKeyboard && !byHover && event?.type == .leftMouseUp && event?.modifierFlags.contains(.option) == true
             // Always the strip: it shows app icons, so nothing on the bar is
@@ -253,7 +253,7 @@ extension BarApp {
                 button.image = image
                 let outOfSight = overflowKeys.contains(key) && (modes[key] ?? 0) == 0
                 var tip = name(for: key)
-                if shutOutKeys.contains(key) {
+                if fixedKeys.contains(key) {
                     tip = L10n.t("\(tip)（有图标隐藏时，macOS 不显示它）", "\(tip) (macOS keeps it off the bar while icons are hidden)")
                 } else if outOfSight {
                     tip = L10n.t("\(tip)（菜单栏放不下）", "\(tip) (no room in the menu bar)")
@@ -432,7 +432,8 @@ extension BarApp {
         // One macOS keeps off the bar can't be revealed: pressed in place
         // wherever its slot is.
         if let element = pressableElement(for: key, item: item, pid: owner),
-           shutOutKeys.contains(key) || unlistedKeys.contains(key) || pressOpensNearStrip(key)
+           fixedKeys.contains(key) || unlistedKeys.contains(key) || unsignedKeys().contains(key)
+            || pressOpensNearStrip(key)
             || (overflowKeys.contains(key) && slotIsOnStripDisplay(key)) {
             // Third-party items take AXPress while still concealed: no
             // reveal (so nothing on the bar shifts), no pointer movement.

@@ -511,8 +511,8 @@ struct LayoutPane: View {
                 } header: {
                     Text(L10n.t("系统不显示：固定在收纳条里", "Kept off by macOS: fixed in the strip"))
                 } footer: {
-                    Text(L10n.t("有图标隐藏时，macOS 不显示这些应用的图标：它们没有 Apple 签发的开发者签名（比如自己编译的应用）。所以它们固定在收纳条里，不能单独设为显示或隐藏；一个图标都不隐藏时，它们会回到菜单栏。",
-                                "While any icon is hidden, macOS doesn't show these apps' icons: they have no Apple-issued developer signature (apps you built yourself, for example). So they stay in the strip and can't be set to Show or Hide on their own; with no icon hidden they return to the menu bar."))
+                    Text(L10n.t("有图标隐藏时，macOS 不显示这些应用的图标：它们没有 Apple 签发的开发者签名（比如自己编译的应用）。所以它们固定在收纳条里，不能单独设为显示或隐藏；别的图标都不隐藏时，它们和其他图标一样。",
+                                "While any icon is hidden, macOS doesn't show these apps' icons: they have no Apple-issued developer signature (apps you built yourself, for example). So they stay in the strip and can't be set to Show or Hide on their own; with no other icon hidden they are like any other icon."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

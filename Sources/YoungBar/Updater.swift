@@ -54,7 +54,15 @@ struct UpdateView: View {
                     .foregroundStyle(.secondary)
                 buttons { Button(L10n.t("好", "OK"), action: model.close).keyboardShortcut(.defaultAction) }
             case .available(let version, let notes):
-                title(L10n.t("发现新版本 \(version)", "YoungBar \(version) is available"))
+                // A test version is offered, never pressed on anyone.
+                let beta = AppVersion(version)?.beta != nil
+                title(beta ? L10n.t("有测试版 \(version)，可以不更新", "Test version \(version) is available (optional)")
+                           : L10n.t("发现新版本 \(version)", "YoungBar \(version) is available"))
+                if beta {
+                    Text(L10n.t("测试版只修了下面这些问题。遇到了再更新；没遇到的话点「稍后」，等正式版就行。",
+                                "A test version only fixes the problems below. Update if you have one of them; otherwise click Later and wait for the final version."))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(L10n.t("当前版本 \(model.current)。安装时 YoungBar 会退出（隐藏的图标先恢复显示），装好后自动重新打开。",
                             "You have \(model.current). YoungBar quits to install (hidden icons come back first) and reopens by itself."))
                     .foregroundStyle(.secondary)
@@ -256,7 +264,10 @@ extension BarApp {
         let tip = L10n.t("YoungBar：点击查看收纳的图标；右键选择要收纳的应用",
                          "YoungBar: click to show concealed icons; right-click to choose apps")
         let text = availableUpdate.map { release in
-            tip + L10n.t("\n有新版本 \(release.version)，右键菜单里更新", "\nYoungBar \(release.version) is available; update from the right-click menu")
+            release.version.beta != nil
+                ? tip + L10n.t("\n有测试版 \(release.version)（可以不更新），右键菜单里查看",
+                               "\nTest version \(release.version) is available (optional); see the right-click menu")
+                : tip + L10n.t("\n有新版本 \(release.version)，右键菜单里更新", "\nYoungBar \(release.version) is available; update from the right-click menu")
         } ?? tip
         for slot in controlSlots.values { slot.button.toolTip = text }
     }

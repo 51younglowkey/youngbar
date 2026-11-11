@@ -53,6 +53,8 @@ final class ControlSlot {
     var knownFrame: NSRect?
     var ownMoveUntil = Date.distantPast
     var hadIconToFollow = true
+    /// Away with the menu bar of an app in full screen (`syncBarActivity`).
+    var tucked = false
 
     init(displayID: CGDirectDisplayID, panel: BarControlPanel, button: BarControlButton) {
         self.displayID = displayID
@@ -95,7 +97,8 @@ extension BarApp {
     }
 
     func setControlsIgnoreMouse(_ ignore: Bool) {
-        for slot in controlSlots.values { slot.panel.ignoresMouseEvents = ignore }
+        controlsIgnoreMouse = ignore
+        for slot in controlSlots.values { slot.panel.ignoresMouseEvents = ignore || slot.tucked }
     }
 
     @objc func statusClicked(_ sender: Any?) {
@@ -116,7 +119,10 @@ extension BarApp {
     func configurationMenu() -> NSMenu {
         let menu = NSMenu(title: "YoungBar")
         if let release = availableUpdate {
-            let item = NSMenuItem(title: L10n.t("有新版本 \(release.version)，点此更新…", "YoungBar \(release.version) is available; update…"),
+            let title = release.version.beta != nil
+                ? L10n.t("有测试版 \(release.version)（可以不更新）…", "Test version \(release.version) is available (optional)…")
+                : L10n.t("有新版本 \(release.version)，点此更新…", "YoungBar \(release.version) is available; update…")
+            let item = NSMenuItem(title: title,
                                   action: #selector(checkForUpdates), keyEquivalent: "")
             item.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
             menu.addItem(item)
@@ -240,8 +246,8 @@ extension BarApp {
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         // `.fullScreenAuxiliary` stays: without it a full-screen space had
         // nothing to click at all (while anything is hidden macOS doesn't
-        // draw YoungBar's own item). The cost, still open: the control
-        // floats over the app when the full-screen menu bar is hidden.
+        // draw YoungBar's own item). There the control comes and goes with
+        // the menu bar instead (`syncBarActivity`).
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -343,15 +349,43 @@ extension BarApp {
 
     /// macOS dims the bar of the display that isn't active, icons included.
     /// A ••• at full strength there would be the one bright thing on that bar.
+    ///
+    /// And an app in full screen has no menu bar until the pointer reaches
+    /// the top edge: the ••• stayed, floating over the app (user reports,
+    /// 0.1.4 to 0.2.0). It is away with the bar there, and back while the
+    /// pointer is where the bar slides down, or while its strip is open.
     func syncBarActivity() {
-        guard controlSlots.count > 1 else {
-            controlSlots.values.first?.panel.alphaValue = 1
-            return
-        }
+        var anyFullScreen = false
+        let pointer = NSEvent.mouseLocation
         for slot in controlSlots.values {
-            let active = screen(for: slot.displayID).flatMap { MenuBarLook.isActiveBar(on: $0) } ?? true
-            let alpha: CGFloat = active ? 1 : Self.inactiveBarAlpha
+            let screen = screen(for: slot.displayID)
+            var tucked = false
+            if let screen, MenuBarLook.isFullScreen(on: screen) {
+                anyFullScreen = true
+                let bar = NSRect(x: screen.frame.minX, y: screen.frame.maxY - menuBarHeight(of: screen) - 2,
+                                 width: screen.frame.width, height: menuBarHeight(of: screen) + 4)
+                tucked = !NSMouseInRect(pointer, bar, false) && !(expanded && anchorSlot === slot)
+            }
+            if tucked != slot.tucked {
+                slot.tucked = tucked
+                slot.panel.ignoresMouseEvents = controlsIgnoreMouse || tucked
+            }
+            let active = controlSlots.count < 2 || (screen.flatMap { MenuBarLook.isActiveBar(on: $0) } ?? true)
+            let alpha: CGFloat = tucked ? 0 : active ? 1 : Self.inactiveBarAlpha
             if slot.panel.alphaValue != alpha { slot.panel.alphaValue = alpha }
+        }
+        // Nothing announces the pointer reaching the top edge: looked at five
+        // times a second, and only while some display shows a full-screen app.
+        if anyFullScreen, fullScreenWatch == nil {
+            let watch = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.syncBarActivity() }
+            }
+            watch.tolerance = 0.05
+            RunLoop.main.add(watch, forMode: .common)
+            fullScreenWatch = watch
+        } else if !anyFullScreen, let watch = fullScreenWatch {
+            watch.invalidate()
+            fullScreenWatch = nil
         }
     }
 

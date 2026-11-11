@@ -57,6 +57,23 @@ enum MenuBarLook {
         return MenuBarTheme.isDark(rawValue: raw)
     }
 
+    private typealias SpaceType = @convention(c) (Int32, UInt64) -> Int32
+
+    private static let spaceTypeCall: SpaceType? = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY),
+              let call = dlsym(handle, "SLSSpaceGetType") else { return nil }
+        return unsafeBitCast(call, to: SpaceType.self)
+    }()
+
+    /// Whether `screen` is showing an app in full screen, where macOS keeps
+    /// the menu bar away until the pointer reaches the top edge. The window
+    /// server's type for such a desktop is 4 (0 for an ordinary one; measured
+    /// on macOS 27, 2026-11-11). False when it can't say.
+    static func isFullScreen(on screen: NSScreen?) -> Bool {
+        guard let calls, let spaceTypeCall, let space = space(on: screen) else { return false }
+        return spaceTypeCall(calls.mainConnection(), space) == 4
+    }
+
     private typealias CopyActiveBar = @convention(c) (Int32) -> Unmanaged<CFString>?
 
     private static let activeBarCall: CopyActiveBar? = {

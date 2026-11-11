@@ -103,6 +103,8 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var nameCache: [String: String] = [:]
     /// One ••• per display's bar (`ControlPanel.swift`).
     var controlSlots: [CGDirectDisplayID: ControlSlot] = [:]
+    var controlsIgnoreMouse = false
+    var fullScreenWatch: Timer?
     /// The display the strip is open on; nil while it's closed.
     var anchorDisplayID: CGDirectDisplayID?
     /// The last walk: one copy of each item, and every display's copies of them.
@@ -190,6 +192,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
             return
         }
         #endif
+        let handOver = takeOverFromOtherCopies()
         if options[.language] == nil {
             // A fresh install starts in the Mac's language. An update from a
             // version that never saved one keeps Chinese, its old default.
@@ -205,6 +208,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         NSApp.setActivationPolicy(.accessory)
         startFlightRecorder()
+        if let handOver { flight.note(handOver) }
         // A previous synthetic drag can leave the global mouse association
         // off; reset it before any UI is shown.
         CGAssociateMouseAndMouseCursorPosition(1)
@@ -271,6 +275,31 @@ final class BarApp: NSObject, NSApplicationDelegate {
             // update again next time instead of never.
             UserDefaults.standard.set(version, forKey: "lastLaunchedVersion")
         }
+    }
+
+    /// Another YoungBar already running (the app was replaced by hand while
+    /// it ran, and opened again: macOS then starts a second process beside
+    /// the old one) is asked to quit, which puts its hidden icons back, and
+    /// waited for. Two of them would both hide, place and restore icons.
+    /// Returns a line for the event log, nil when this is the only copy.
+    func takeOverFromOtherCopies() -> String? {
+        guard let bundle = Bundle.main.bundleIdentifier else { return nil }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundle)
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        guard !others.isEmpty else { return nil }
+        for other in others { other.terminate() }
+        // Quitting restores every icon first, which takes a few seconds.
+        let deadline = Date().addingTimeInterval(20)
+        while others.contains(where: { !$0.isTerminated }), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        // Its session marker was still set when this process read it: that
+        // copy was running, not crashed.
+        previousSessionCrashed = false
+        let left = others.filter { !$0.isTerminated }.count
+        return left == 0
+            ? "another YoungBar was running; it quit before this one started"
+            : "another YoungBar was running and did not quit within 20 s"
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -647,7 +676,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
             let symbols: [SystemItem: String] = [.battery: "battery.100percent", .bluetooth: "network", .clock: "clock", .displays: "display", .keyboard: "keyboard", .volume: "speaker.wave.2", .wifi: "wifi", .screenMirroring: "airplayvideo", .primaryBentoBox: "switch.2"]
             return NSImage(systemSymbolName: symbols[system] ?? "circle", accessibilityDescription: name(for: key))
         }
+        // Never nothing: a slot without a picture can't be told from a gap.
         return id.bundleID.flatMap { icon(for: $0) }
+            ?? NSImage(systemSymbolName: "questionmark.app.fill", accessibilityDescription: name(for: key))
     }
 
     func settledSnapshot(for ids: Set<ItemID>) async -> EngineSnapshot {
@@ -665,9 +696,21 @@ final class BarApp: NSObject, NSApplicationDelegate {
 
     func icon(for bundle: String) -> NSImage? {
         if let cached = iconCache[bundle] { return cached }
-        let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle)
-        guard let url else { return NSImage(systemSymbolName: "app", accessibilityDescription: nil) }
-        let image = NSWorkspace.shared.icon(forFile: url.path)
+        // A helper inside another app's bundle isn't always registered as an
+        // application: the running process still has its icon. Without it
+        // the strip drew the outline of an empty square, which read as a
+        // slot with nothing in it (user report, 0.2.0).
+        let image: NSImage
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            image = NSWorkspace.shared.icon(forFile: url.path)
+        } else if let running = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }),
+                  let icon = running.icon ?? running.bundleURL.map({ NSWorkspace.shared.icon(forFile: $0.path) }) {
+            image = icon.copy() as? NSImage ?? icon
+        } else {
+            // Not cached: the app may be installed or running by the next look.
+            return NSImage(systemSymbolName: "questionmark.app.fill", accessibilityDescription: nil)
+                ?? NSImage(systemSymbolName: "app.fill", accessibilityDescription: nil)
+        }
         image.size = NSSize(width: 28, height: 28)
         iconCache[bundle] = image
         return image

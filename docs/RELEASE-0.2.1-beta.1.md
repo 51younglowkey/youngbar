@@ -2,12 +2,9 @@
 
 这是测试版，可以不更新。它只修了下面几个问题：遇到了再更新；没遇到的话点「稍后」，等正式版就行。
 
-## 优化
-
-- 打开新版本时，旧的会先自己退出
-
 ## 修复
 
+- 打开新版本时，旧的会先自己退出
 - 全屏时 ••• 跟菜单栏一起收起
 - 收纳条里取不到图标时不再留空
 - 启动时 ••• 不再先压在图标上
@@ -30,12 +27,9 @@
 
 This is a test version, and you can skip it. It only fixes the problems below: update if you have one of them; otherwise click Later and wait for the final version.
 
-## Improved
-
-- Opening a new version quits the old one first
-
 ## Fixed
 
+- Opening a new version quits the old one first
 - In full screen the ••• leaves with the menu bar
 - No empty slot in the strip for a missing icon
 - At launch the ••• no longer sits on an icon

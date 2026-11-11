@@ -70,6 +70,21 @@ plain fix goes straight to a final version.
 - Versions before 0.1.8 can't read a beta's number. It doesn't matter: they only
   ever see the latest final version.
 
+### 3.2 A test version everyone is offered (0.2.1-beta.1, 2026-11-11)
+
+When the fixes should reach people who have the bugs without a hand install:
+publish the beta as an ordinary release (not marked pre-release), so it is
+`releases/latest`.
+
+- 0.1.8 and later read the number and offer it; the update is always the
+  user's click. From 0.2.1-beta.1 on, the update window, the menu line and the
+  tooltip say "test version, optional". Older ones show it as a new version, so
+  the changelog must open by saying it is a test version and can be skipped.
+- The one-line install gives new users the beta while it is the latest.
+- 0.1.7 and earlier can't read the number: Check for Updates reports an error
+  until a final version is the latest again. Say so in the notes.
+- Follow it with the final version soon; someone on the beta is offered it.
+
 ## 4. Distribution channels
 
 - GitHub Releases: direct download

@@ -55,6 +55,8 @@ final class ControlSlot {
     var hadIconToFollow = true
     /// Away with the menu bar of an app in full screen (`syncBarActivity`).
     var tucked = false
+    /// What was last logged about full screen on this display.
+    var fullScreenNote: String?
 
     init(displayID: CGDirectDisplayID, panel: BarControlPanel, button: BarControlButton) {
         self.displayID = displayID
@@ -360,8 +362,21 @@ extension BarApp {
         for slot in controlSlots.values {
             let screen = screen(for: slot.displayID)
             var tucked = false
-            if let screen, MenuBarLook.isFullScreen(on: screen) {
-                anyFullScreen = true
+            // Watched while the desktop type says full screen, so the •••
+            // goes once the app's window has grown to fill the screen.
+            let fullScreenType = MenuBarLook.spaceType(on: screen) == 4
+            let fullScreen = fullScreenType && screen.map(MenuBarLook.hasFullScreenWindow) == true
+            if fullScreenType { anyFullScreen = true }
+            let note = !fullScreenType ? nil
+                : fullScreen ? "full screen: away with the bar"
+                : "full-screen desktop type, but the front window is not full screen: stays"
+            if note != slot.fullScreenNote {
+                if note != nil || slot.fullScreenNote != nil {
+                    flight.note("••• \(displayLabel(slot))\(note ?? "out of full screen")")
+                }
+                slot.fullScreenNote = note
+            }
+            if let screen, fullScreen {
                 let bar = NSRect(x: screen.frame.minX, y: screen.frame.maxY - menuBarHeight(of: screen) - 2,
                                  width: screen.frame.width, height: menuBarHeight(of: screen) + 4)
                 tucked = !NSMouseInRect(pointer, bar, false) && !(expanded && anchorSlot === slot)

@@ -178,6 +178,14 @@ extension BarApp {
             let first = ControlLayout.leadingIcon(icons, on: display, outOfSight: ControlLayout.outOfSight(icons, on: display))
             var line = "••• \(number): x\(Int(slot.panel.frame.minX)) y\(Int(slot.panel.frame.minY)) w\(Int(slot.panel.frame.width))"
             line += slot.panel.isVisible ? "" : " " + L10n.t("未显示", "not shown")
+            // Drawn at all, and why not: full screen tucks it away.
+            line += " · " + L10n.t("不透明度", "Opacity") + " \(String(format: "%.2f", slot.panel.alphaValue))"
+            if slot.tucked { line += " " + L10n.t("（全屏，已收起）", "(full screen, tucked away)") }
+            if slot.panel.ignoresMouseEvents { line += " · " + L10n.t("不接鼠标", "ignores clicks") }
+            if let type = MenuBarLook.spaceType(on: screen), type != 0 {
+                line += " · " + L10n.t("桌面类型", "Desktop type") + " \(type)"
+                    + (MenuBarLook.hasFullScreenWindow(on: screen) ? "" : " " + L10n.t("（前面的窗口不是全屏）", "(front window not full screen)"))
+            }
             if let check = controlCheck(snapshot, slot: slot) {
                 let gap = check.gapToIcon.map { " (\(Int($0)))" } ?? ""
                 line += " · " + L10n.t("在屏幕上", "On screen") + " \(mark(check.onScreen)) · "

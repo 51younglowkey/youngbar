@@ -65,13 +65,65 @@ enum MenuBarLook {
         return unsafeBitCast(call, to: SpaceType.self)
     }()
 
-    /// Whether `screen` is showing an app in full screen, where macOS keeps
-    /// the menu bar away until the pointer reaches the top edge. The window
-    /// server's type for such a desktop is 4 (0 for an ordinary one; measured
-    /// on macOS 27, 2026-11-11). False when it can't say.
-    static func isFullScreen(on screen: NSScreen?) -> Bool {
-        guard let calls, let spaceTypeCall, let space = space(on: screen) else { return false }
-        return spaceTypeCall(calls.mainConnection(), space) == 4
+    /// The window server's type for the desktop `screen` shows: 4 for an app
+    /// in full screen, 0 for an ordinary desktop (measured on macOS 27,
+    /// 2026-11-11). Nil when it can't say.
+    static func spaceType(on screen: NSScreen?) -> Int32? {
+        #if YOUNGBAR_TESTHOOKS
+        if ProcessInfo.processInfo.environment["YOUNGBAR_PRETEND_FULLSCREEN"] == "1" { return 4 }
+        #endif
+        guard let calls, let spaceTypeCall, let space = space(on: screen) else { return nil }
+        return spaceTypeCall(calls.mainConnection(), space)
+    }
+
+    /// Whether the front window on `screen` says it is in full screen
+    /// (`AXFullScreen`), asked of the app that owns it. Window bounds can't
+    /// tell: on a notched display a full-screen window starts below the
+    /// notch, exactly where a window filling an ordinary desktop starts.
+    ///
+    /// With the desktop type, this says an app is in full screen (macOS keeps
+    /// the menu bar away until the pointer reaches the top edge). The type
+    /// alone was measured on one Mac only, and a wrong 4 leaves the •••
+    /// invisible until the pointer reaches the bar (a user's ••• was gone
+    /// with 0.2.1-beta.1, issue #10).
+    static func hasFullScreenWindow(on screen: NSScreen) -> Bool {
+        #if YOUNGBAR_TESTHOOKS
+        if ProcessInfo.processInfo.environment["YOUNGBAR_PRETEND_FULLSCREEN_WINDOW"] == "1" { return true }
+        #endif
+        guard let number = screen.displayID,
+              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return false }
+        let display = CGDisplayBounds(number)
+        let own = ProcessInfo.processInfo.processIdentifier
+        // Front to back: the first ordinary window on this display.
+        let front = list.first { info in
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                  let pid = info[kCGWindowOwnerPID as String] as? Int32, pid != own,
+                  let dict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: dict) else { return false }
+            return display.contains(CGPoint(x: bounds.midX, y: bounds.midY))
+        }
+        guard let pid = front?[kCGWindowOwnerPID as String] as? Int32 else { return false }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.2)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+              let windows = value as? [AXUIElement] else { return false }
+        return windows.contains { window in
+            var full: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &full) == .success,
+                  (full as? Bool) == true else { return false }
+            var position: CFTypeRef?, size: CFTypeRef?
+            var origin = CGPoint.zero, extent = CGSize.zero
+            if AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &position) == .success,
+               AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &size) == .success,
+               let position, let size {
+                AXValueGetValue(position as! AXValue, .cgPoint, &origin)
+                AXValueGetValue(size as! AXValue, .cgSize, &extent)
+                return display.contains(CGPoint(x: origin.x + extent.width / 2, y: origin.y + extent.height / 2))
+            }
+            return true
+        }
     }
 
     private typealias CopyActiveBar = @convention(c) (Int32) -> Unmanaged<CFString>?

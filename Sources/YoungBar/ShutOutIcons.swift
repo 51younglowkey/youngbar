@@ -93,7 +93,8 @@ extension BarApp {
     /// Whether the running app's signature chains to Apple (Apple's own,
     /// the App Store, Developer ID, Apple Development): not self-signed and
     /// not ad hoc. Nil when the process can't be looked at. Asked of the
-    /// running code, which needs no pass over the bundle on disk.
+    /// running code, which needs no pass over the bundle on disk. Nil too
+    /// when the check fails for another reason than who signed it.
     nonisolated static func hasAppleIssuedSignature(pid: pid_t) -> Bool? {
         var code: SecCode?
         let attributes = [kSecGuestAttributePid: pid] as CFDictionary
@@ -101,7 +102,16 @@ extension BarApp {
         var requirement: SecRequirement?
         guard SecRequirementCreateWithString("anchor apple generic" as CFString, [], &requirement) == errSecSuccess,
               let requirement else { return nil }
-        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+        // Only a signature that doesn't meet the requirement (ad hoc and
+        // self-signed both answer that, tried 2026-11-26) or none at all is
+        // known not to be Apple-issued. Any other failure says nothing about
+        // who signed it, and a Developer ID app taken for unsigned is fixed
+        // in the strip, never on the bar.
+        switch SecCodeCheckValidity(code, [], requirement) {
+        case errSecSuccess: return true
+        case errSecCSReqFailed, errSecCSUnsigned: return false
+        default: return nil
+        }
     }
 
     /// Known single-icon keys and the app each belongs to: those are the
@@ -159,7 +169,21 @@ extension BarApp {
             // A walk since may have listed it after all.
             shutOut.subtract(presentKeys.subtracting(shutOutKeys).subtracting(unlistedKeys))
             shutOut.subtract(shutOutKeys)
-            guard !shutOut.isEmpty || !dropped.isEmpty else { return }
+            // A signed app's icon is only parked: landed, it shows.
+            var landedAny = false
+            for key in ShutOut.parked(found: shutOut, bundles: bundles, signatures: signatures).sorted() {
+                guard let bundle = bundles[key], let landed = await landMissing(bundle) else {
+                    // Not tried now: asked again later (`Watch.retry`).
+                    shutOut.remove(key)
+                    continue
+                }
+                if landed {
+                    shutOut.remove(key)
+                    unlistedKeys.remove(key)
+                    landedAny = true
+                }
+            }
+            guard !shutOut.isEmpty || !dropped.isEmpty || landedAny else { return }
             if !shutOut.isEmpty {
                 shutOutKeys.formUnion(shutOut)
                 unlistedKeys.subtract(shutOut)
@@ -172,6 +196,36 @@ extension BarApp {
             }
             await refresh()
         }
+    }
+
+    /// Brings back the icon of a signed app missing from the bar although
+    /// the app has one: hidden by omission (the engine wasn't told the app
+    /// runs), or parked by macOS (an item registered while icons were
+    /// hidden), which an adoption window lands. Whether the icon landed; false
+    /// once the app had its windows (`ShutOut.Adoptions`), so it is shut
+    /// out like an unsigned one; nil when it can't be tried now.
+    func landMissing(_ bundle: String) async -> Bool? {
+        for _ in 0..<50 where busy || syncing { try? await Task.sleep(for: .milliseconds(100)) }
+        guard !busy, !syncing, !quitting else { return nil }
+        syncing = true
+        defer { syncing = false }
+        // An app the engine doesn't know of is hidden by omission: a launch
+        // it wasn't told about. Told now, it may show without a window.
+        await engine.setRunningBundles(runningBundleIDs())
+        try? await Task.sleep(for: .milliseconds(500))
+        if await engine.freshSnapshot().items.contains(where: { $0.id.bundleID == bundle }) {
+            flight.note("\(bundle) back on the bar once the engine knew it runs")
+            return true
+        }
+        guard await engine.holdsAssertion else { return nil }
+        guard missingAdoptions.allow(bundle, now: Date().timeIntervalSinceReferenceDate) else {
+            flight.note("\(bundle) missing again, too often: kept in the strip")
+            return false
+        }
+        let adopted = await engine.openAdoptionWindow(for: bundle)
+        NSLog("YoungBar: \(bundle) \(adopted ? "landed" : "not seen") after going missing")
+        flight.note("\(bundle) \(adopted ? "landed" : "not seen") after going missing")
+        return adopted
     }
 
     /// An app whose icon was adopted and left the bar again as the window

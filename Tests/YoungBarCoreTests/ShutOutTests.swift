@@ -117,4 +117,21 @@ import Testing
                               concealed: ["bundle:mine", "bundle:adhoc"],
                               hidden: ["bundle:mine", "bundle:adhoc"]).isEmpty)
     }
+
+    @Test func aSignedAppMissingFromTheBarIsParkedNotShutOut() {
+        let found: Set<String> = ["bundle:timer", "bundle:chat", "bundle:old"]
+        let parked = ShutOut.parked(found: found, bundles: bundles,
+                                    signatures: ["timer": true, "chat": false])
+        // Signed: landed. Unsigned, or not looked at yet: shut out as before.
+        #expect(parked == ["bundle:timer"])
+    }
+
+    @Test func adoptionWindowsPerAppAreLimited() {
+        var adoptions = ShutOut.Adoptions()
+        let answers = [(0.0, "timer"), (60, "timer"), (120, "timer"), (180, "timer"), (180, "chat"),
+                       (601, "timer"), (602, "timer")].map { adoptions.allow($0.1, now: $0.0) }
+        // Three per app in ten minutes; another app has its own count; ten
+        // minutes after the first, one more.
+        #expect(answers == [true, true, true, false, true, true, false])
+    }
 }

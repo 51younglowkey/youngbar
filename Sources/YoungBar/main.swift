@@ -76,6 +76,9 @@ final class BarApp: NSObject, NSApplicationDelegate {
     var signaturesPending = false
     var signatureChecked: Set<pid_t> = []
     var shutOutWatch = ShutOut.Watch()
+    /// Adoption windows opened for a signed app's icon found off the bar
+    /// (`landMissing`), counted per app.
+    var missingAdoptions = ShutOut.Adoptions()
     /// Keys no version reads any more (options 0.1.4 turned into fixed
     /// behaviour) are dropped on load, so they don't linger in exports.
     var options: [String: Int] = {

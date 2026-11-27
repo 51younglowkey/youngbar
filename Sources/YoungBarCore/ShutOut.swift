@@ -81,6 +81,49 @@ public enum ShutOut {
         }.keys)
     }
 
+    /// Of the icons found off the bar with an item of their own, those to
+    /// land in an adoption window rather than shut out: their app's
+    /// signature is Apple-issued, so macOS would show the icon, and only
+    /// parked it, as it does an item registered while icons are hidden
+    /// (an app that rebuilds its item, or one whose launch window was
+    /// missed). Shut out, a Developer ID app's icon was stuck in the strip
+    /// under "no Apple-issued signature" until the app quit (user report,
+    /// 2026-11-25, Tendedero). An app whose signature isn't known yet is
+    /// left as it was.
+    /// - Parameters:
+    ///   - found: keys of Show icons missing from every walk whose app
+    ///     lists an item.
+    ///   - bundles: known single-icon keys and the app each belongs to.
+    ///   - signatures: per running app, whether its signature is Apple-issued.
+    public static func parked(found: Set<String>, bundles: [String: String],
+                              signatures: [String: Bool]) -> Set<String> {
+        found.filter { key in bundles[key].flatMap { signatures[$0] } == true }
+    }
+
+    /// How often a missing icon of one app is landed in an adoption window:
+    /// every window shows the hidden icons for a moment, so an app that
+    /// keeps losing its item is shut out after a few, like an unsigned one.
+    public struct Adoptions: Sendable {
+        /// Windows allowed per app within `span` seconds.
+        public static let limit = 3
+        public static let span: Double = 600
+
+        var tries: [String: [Double]] = [:]
+
+        public init() {}
+
+        /// Whether another window may open for `bundle` now; it counts if so.
+        public mutating func allow(_ bundle: String, now: Double) -> Bool {
+            let recent = (tries[bundle] ?? []).filter { now - $0 < Self.span }
+            guard recent.count < Self.limit else {
+                tries[bundle] = recent
+                return false
+            }
+            tries[bundle] = recent + [now]
+            return true
+        }
+    }
+
     /// When to ask an app whether it has an icon. Not at once: a starting
     /// app is missing for a few seconds before its icon lands. And not on
     /// every walk: an app that runs without an icon stays a suspect.

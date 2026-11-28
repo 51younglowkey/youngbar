@@ -432,7 +432,7 @@ extension BarApp {
         // One macOS keeps off the bar can't be revealed: pressed in place
         // wherever its slot is.
         if let element = pressableElement(for: key, item: item, pid: owner),
-           fixedKeys.contains(key) || unlistedKeys.contains(key) || unsignedKeys().contains(key)
+           fixedKeys.contains(key) || unlistedKeys.contains(key) || outsideKeys().contains(key)
             || pressOpensNearStrip(key)
             || (overflowKeys.contains(key) && slotIsOnStripDisplay(key)) {
             // Third-party items take AXPress while still concealed: no

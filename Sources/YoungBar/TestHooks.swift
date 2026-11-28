@@ -1685,10 +1685,10 @@ extension BarApp {
         await refresh()
         // An icon macOS keeps off the bar can't be concealed or shown again:
         // right after launch the walk still lists its old position, and the
-        // signatures come in a moment after the first refresh.
+        // install locations come in a moment after the first refresh.
         try? await Task.sleep(for: .seconds(2))
         await refresh()
-        let keptOff = fixedKeys.union(unsignedKeys())
+        let keptOff = fixedKeys.union(outsideKeys())
         let snapshot = await engine.freshSnapshot()
         guard let victim = snapshot.items.last(where: { item in
             guard item.frame != nil, let bundle = item.id.bundleID else { return false }
@@ -2310,8 +2310,8 @@ extension BarApp {
         onBar = await engine.freshSnapshot().items.contains { $0.id.bundleID == bundle && $0.frame != nil }
         result["onBarDuringWindow"] = seenOnce
         result["onBarAfterLaunch"] = onBar
-        // A Show icon macOS shuts out (an app without an Apple-issued
-        // signature) is found once it has stayed missing for a while.
+        // A Show icon macOS shuts out (an app outside /Applications) is
+        // found once it has stayed missing for a while.
         if mode == 0, !onBar {
             for _ in 0..<24 where !fixedKeys.contains(where: { catalog[$0]?.id.bundleID == bundle }) {
                 try? await Task.sleep(for: .milliseconds(500))
@@ -2331,12 +2331,12 @@ extension BarApp {
     }
 
     /// Opt-in (`YOUNGBAR_SHUTOUTTEST=<bundle id>`): an app macOS keeps off the
-    /// bar while anything is hidden (one without an Apple-issued signature),
+    /// bar while anything is hidden (one outside /Applications),
     /// switched between Show and Hide the way Settings does it, with the
     /// Menu Bar page open. Its row must never leave Settings (user report,
     /// 2026-11-10: after a click or two neither section had it), and set to
     /// Show it must end up in the fixed section and in the strip, and stay
-    /// there whatever the mode. One whose signature says so (`unsigned`)
+    /// there whatever the mode. One known to be outside (`outside`)
     /// must be there from the start, also set to Hide, and after every
     /// step. Needs another icon set to Hide, as the fixed section does.
     /// `YOUNGBAR_SHUTOUT_PRESS=1` also presses it
@@ -2349,10 +2349,10 @@ extension BarApp {
     func runShutOutTest(bundle: String) async {
         var result: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "bundle": bundle]
         defer { writeJSON(result, name: "shutouttest.json") }
-        // The signature is read after the first refresh; an app that was
+        // The install location is read after the first refresh; an app that was
         // off the bar before the first walk has no key until then.
         let began = Date()
-        for _ in 0..<50 where signatures[bundle] == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        for _ in 0..<50 where inApplications[bundle] == nil { try? await Task.sleep(for: .milliseconds(100)) }
         for _ in 0..<20 where !lists(bundle) { try? await Task.sleep(for: .milliseconds(100)) }
         result["knownAfter"] = Date().timeIntervalSince(began)
         guard let key = catalog.first(where: { $0.value.id.bundleID == bundle && $0.key.hasPrefix("bundle:") })?.key,
@@ -2364,8 +2364,8 @@ extension BarApp {
         result["key"] = key
         result["savedMode"] = saved
         result["holdsAssertion"] = await engine.holdsAssertion
-        let unsigned = signatures[bundle] == false
-        result["unsigned"] = unsigned
+        let outside = inApplications[bundle] == false
+        result["outside"] = outside
         showWindow()
         settings?.select(.layout)
         try? await Task.sleep(for: .milliseconds(900))
@@ -2494,15 +2494,15 @@ extension BarApp {
         settings?.close()
         let neverGone = !steps.contains { ($0["seen"] as? [String] ?? []).contains("none") }
         result["neverGone"] = neverGone
-        // Known from its signature: fixed before any click and after each.
+        // Known from where it is: fixed before any click and after each.
         let fixedThroughout = (result["placeAtStart"] as? String) == "fixed"
             && !steps.contains { ($0["seen"] as? [String] ?? []).last != "fixed" || $0["inStrip"] as? Bool != true }
             && (result["placeRestored"] as? String) == "fixed"
-        if unsigned { result["fixedThroughout"] = fixedThroughout }
+        if outside { result["fixedThroughout"] = fixedThroughout }
         result["passed"] = neverGone && (result["placeAtEnd"] as? String) == "fixed"
             && (result["inStripAtEnd"] as? Bool == true) && (result["rowsGrouped"] as? Bool == true)
             && (result["restoredMode"] as? Int) == saved && (result["placeRestored"] as? String) != "none"
-            && (!unsigned || fixedThroughout) && showAllPassed
+            && (!outside || fixedThroughout) && showAllPassed
     }
 
     /// The button for `key` sending `action`, anywhere under `view`.

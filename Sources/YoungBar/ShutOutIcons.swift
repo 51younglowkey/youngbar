@@ -4,73 +4,71 @@
 import AppKit
 import PelmetCore
 import PelmetEngine
-import Security
 import YoungBarCore
 
-/// Icons macOS takes off the bar while anything is hidden: apps without an
-/// Apple-issued signature (see `ShutOut`). They can't be put back, so they
-/// join the strip like icons the bar has no room for (`overflowKeys`), keep
-/// their saved mode, have a section of their own in Settings with no mode
-/// to choose, and return by themselves when nothing is hidden.
+/// Icons macOS takes off the bar while anything is hidden: apps outside
+/// /Applications (see `ShutOut`). They can't be put back, so they join the
+/// strip like icons the bar has no room for (`overflowKeys`), keep their
+/// saved mode, have a section of their own in Settings with no mode to
+/// choose, and return by themselves when nothing is hidden.
 ///
-/// The signature tells ahead (`checkSignatures`): such an app's icon is in
-/// that section from the start (`fixedKeys`), also while it is set to Hide
-/// and concealed like any other.
+/// Where the app is tells ahead (`checkLocations`): such an app's icon is
+/// in that section from the start (`fixedKeys`), also while it is set to
+/// Hide and concealed like any other.
 extension BarApp {
-    /// Keys of running apps whose signature is not Apple-issued.
-    func unsignedKeys() -> Set<String> {
-        Set(singleIconBundles().filter { signatures[$0.value] == false }.keys)
+    /// Keys of running apps outside /Applications.
+    func outsideKeys() -> Set<String> {
+        Set(singleIconBundles().filter { inApplications[$0.value] == false }.keys)
     }
 
-    /// Looks at the signature of each running app, once per process and
-    /// off the main actor, and refreshes when one turns out not to be
-    /// Apple-issued.
+    /// Looks where each running app is installed, once per process, and
+    /// refreshes when one turns out to be outside /Applications.
     ///
     /// Not only the apps with a known icon: one that was running before
     /// YoungBar started is off the bar by the first walk, so no walk ever
-    /// lists its icon (after a restart an ad hoc signed app was neither in
-    /// the strip nor in Settings, 2026-11-10). Such an app is asked for its
-    /// icon here and listed as shut out.
-    func checkSignatures() {
+    /// lists its icon (after a restart an app built on this Mac was neither
+    /// in the strip nor in Settings, 2026-11-10). Such an app is asked for
+    /// its icon here and listed as shut out.
+    func checkLocations() {
         guard started, !quitting else { return }
-        let first = signatureChecked.isEmpty
-        var asking: [(bundle: String, pid: pid_t, settled: Bool)] = []
+        let first = locationChecked.isEmpty
+        var asking: [(bundle: String, pid: pid_t, settled: Bool, inside: Bool?)] = []
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy != .prohibited {
             guard let bundle = app.bundleIdentifier, bundle != Bundle.main.bundleIdentifier,
-                  !bundle.hasPrefix("com.apple."), !signatureChecked.contains(app.processIdentifier) else { continue }
-            signatureChecked.insert(app.processIdentifier)
+                  !bundle.hasPrefix("com.apple."), !locationChecked.contains(app.processIdentifier) else { continue }
+            locationChecked.insert(app.processIdentifier)
             // A starting app's icon is still on its way: the adoption
             // window and the walks after it deal with that one.
             let settled = app.launchDate.map { Date().timeIntervalSince($0) > 10 } ?? true
-            asking.append((bundle, app.processIdentifier, settled))
+            asking.append((bundle, app.processIdentifier, settled, Self.isInApplications(app)))
         }
         guard !asking.isEmpty else { return }
-        signaturesPending = first
+        locationsPending = first
         Task {
             // Whatever comes of it, the ••• is placed once it is known.
             defer {
-                if signaturesPending {
-                    signaturesPending = false
+                if locationsPending {
+                    locationsPending = false
                     if let lastSnapshot { positionControlBesideMenuIcons(in: lastSnapshot) }
                 }
             }
-            var unsigned = Set<String>()
+            var outside = Set<String>()
             var withIcon = Set<String>()
             let hiding = await engine.holdsAssertion
-            for (bundle, pid, settled) in asking {
-                // Can't be told: counted as signed, so only what macOS
+            for (bundle, pid, settled, inside) in asking {
+                // Can't be told: counted as inside, so only what macOS
                 // does (`lookForShutOutIcons`) moves it.
-                let appleIssued = await Task.detached { BarApp.hasAppleIssuedSignature(pid: pid) }.value ?? true
-                signatures[bundle] = (signatures[bundle] ?? true) && appleIssued
-                guard !appleIssued else { continue }
-                unsigned.insert(bundle)
+                let inside = inside ?? true
+                inApplications[bundle] = (inApplications[bundle] ?? true) && inside
+                guard !inside else { continue }
+                outside.insert(bundle)
                 if hiding, settled, !lists(bundle),
                    await Task.detached(operation: { BarApp.hasStatusItem(pid: pid) }).value {
                     withIcon.insert(bundle)
                 }
             }
-            guard !unsigned.isEmpty, !quitting else { return }
-            flight.note("no Apple-issued signature: \(unsigned.sorted().joined(separator: ", "))")
+            guard !outside.isEmpty, !quitting else { return }
+            flight.note("outside /Applications: \(outside.sorted().joined(separator: ", "))")
             var found: [String] = []
             for bundle in withIcon where !lists(bundle) {
                 rememberUnlistedApp(bundle)
@@ -90,28 +88,12 @@ extension BarApp {
         presentKeys.contains { catalog[$0]?.id.bundleID == bundle }
     }
 
-    /// Whether the running app's signature chains to Apple (Apple's own,
-    /// the App Store, Developer ID, Apple Development): not self-signed and
-    /// not ad hoc. Nil when the process can't be looked at. Asked of the
-    /// running code, which needs no pass over the bundle on disk. Nil too
-    /// when the check fails for another reason than who signed it.
-    nonisolated static func hasAppleIssuedSignature(pid: pid_t) -> Bool? {
-        var code: SecCode?
-        let attributes = [kSecGuestAttributePid: pid] as CFDictionary
-        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else { return nil }
-        var requirement: SecRequirement?
-        guard SecRequirementCreateWithString("anchor apple generic" as CFString, [], &requirement) == errSecSuccess,
-              let requirement else { return nil }
-        // Only a signature that doesn't meet the requirement (ad hoc and
-        // self-signed both answer that, tried 2026-11-26) or none at all is
-        // known not to be Apple-issued. Any other failure says nothing about
-        // who signed it, and a Developer ID app taken for unsigned is fixed
-        // in the strip, never on the bar.
-        switch SecCodeCheckValidity(code, [], requirement) {
-        case errSecSuccess: return true
-        case errSecCSReqFailed, errSecCSUnsigned: return false
-        default: return nil
-        }
+    /// Whether the running app is installed in /Applications, the only
+    /// place from which macOS keeps its icon on the bar while it hides
+    /// others (`ShutOut.isInApplications`). Nil when it has no bundle path.
+    nonisolated static func isInApplications(_ app: NSRunningApplication) -> Bool? {
+        guard let url = app.bundleURL else { return nil }
+        return ShutOut.isInApplications(path: url.resolvingSymlinksInPath().path)
     }
 
     /// Known single-icon keys and the app each belongs to: those are the
@@ -169,9 +151,9 @@ extension BarApp {
             // A walk since may have listed it after all.
             shutOut.subtract(presentKeys.subtracting(shutOutKeys).subtracting(unlistedKeys))
             shutOut.subtract(shutOutKeys)
-            // A signed app's icon is only parked: landed, it shows.
+            // An /Applications app's icon is only parked: landed, it shows.
             var landedAny = false
-            for key in ShutOut.parked(found: shutOut, bundles: bundles, signatures: signatures).sorted() {
+            for key in ShutOut.parked(found: shutOut, bundles: bundles, inApplications: inApplications).sorted() {
                 guard let bundle = bundles[key], let landed = await landMissing(bundle) else {
                     // Not tried now: asked again later (`Watch.retry`).
                     shutOut.remove(key)
@@ -198,12 +180,12 @@ extension BarApp {
         }
     }
 
-    /// Brings back the icon of a signed app missing from the bar although
+    /// Brings back the icon of an /Applications app missing from the bar although
     /// the app has one: hidden by omission (the engine wasn't told the app
     /// runs), or parked by macOS (an item registered while icons were
     /// hidden), which an adoption window lands. Whether the icon landed; false
     /// once the app had its windows (`ShutOut.Adoptions`), so it is shut
-    /// out like an unsigned one; nil when it can't be tried now.
+    /// out like an outside one; nil when it can't be tried now.
     func landMissing(_ bundle: String) async -> Bool? {
         for _ in 0..<50 where busy || syncing { try? await Task.sleep(for: .milliseconds(100)) }
         guard !busy, !syncing, !quitting else { return nil }

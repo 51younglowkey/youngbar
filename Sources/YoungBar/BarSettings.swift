@@ -16,7 +16,7 @@ struct BarEntry {
     /// under the notch), so for now it opens from the strip.
     var covered = false
     /// Covered because macOS keeps it off the bar while anything is hidden
-    /// (an app without an Apple-issued signature), not for lack of room.
+    /// (an app outside /Applications), not for lack of room.
     var shutOut = false
 }
 

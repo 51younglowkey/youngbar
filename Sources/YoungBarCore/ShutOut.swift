@@ -4,12 +4,14 @@
 /// Icons macOS takes off the bar with the hidden ones, whatever their mode.
 ///
 /// The hide assertion lists the apps that stay, but macOS only honours the
-/// list for apps with an Apple-issued signature. The icon of a self-signed
-/// or ad hoc signed app (one built on this Mac, say) leaves the bar while
-/// anything is hidden, and the agent's tree no longer lists it: no walk
-/// sees it, so it was neither on the bar nor in the strip (2026-11-10;
-/// a Developer ID app in the same spot, treated the same, stayed). Its own
-/// app still lists the item, which is how it is told apart from an app that
+/// list for apps installed in /Applications (subfolders too). It knows any
+/// other app's item by the path of its executable rather than by its bundle,
+/// and such an item leaves the bar while anything is hidden, signed or not:
+/// a Developer ID app run from a temporary folder or ~/Applications went,
+/// and a self-signed one in /Applications stayed (2026-11-27, issue #11;
+/// what macOS records is in the control center's `trackedApplications`).
+/// The agent's tree no longer lists it then: no walk sees it. Its own app
+/// still lists the item, which is how it is told apart from an app that
 /// simply has no icon, and how the strip presses it.
 ///
 /// Found out while the icon is set to Show, and true until a walk lists it
@@ -17,38 +19,46 @@
 /// mode changed, a shut-out icon set to Hide was in no list at all, with
 /// no row left to set it back (user report, 2026-11-10).
 ///
-/// Known ahead from the signature too (`fixed`): an app without an
-/// Apple-issued one is treated as shut out from the start, not only once
-/// it was set to Show and went missing (user request, 2026-11-10; an ad
-/// hoc signed app is shut out like a self-signed one, tried the same day).
+/// Known ahead from where the app is (`fixed`): an app outside
+/// /Applications is treated as shut out from the start, not only once it
+/// was set to Show and went missing (user request, 2026-11-10).
 public enum ShutOut {
+    /// Whether macOS shows the icon of the app at `path` (its bundle, with
+    /// symbolic links resolved) while it hides others: whether it is in
+    /// /Applications. Not in ~/Applications, on a mounted disk image or
+    /// translocated: those were all hidden (2026-11-27).
+    public static func isInApplications(path: String) -> Bool {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true)
+        return parts.count >= 2 && parts[0] == "Applications"
+    }
+
     /// Keys with no mode of their own to choose: listed in the strip and
     /// in their own section of Settings.
     /// - Parameters:
     ///   - shutOut: keys found to be shut out.
-    ///   - unsigned: keys of apps without an Apple-issued signature.
+    ///   - outside: keys of apps outside /Applications.
     ///   - listed: every key Settings lists now.
     ///   - walked: keys the walk lists, on the bar as far as it can tell.
     ///   - concealed: keys the engine conceals right now.
     ///   - hidden: keys set to Hide, by their mode or by "Hide all".
     ///
-    /// An unsigned app's icon is one while an icon macOS does hide on
-    /// request (a signed app's, the system's) is concealed: its own mode
-    /// changes nothing then, and the walk isn't asked, which still lists
-    /// the icon for some seconds after hiding took effect (at launch it
-    /// was a bar row for four seconds). Otherwise it is one when the walk
-    /// doesn't list it, unless it is set to Hide and nothing else is:
-    /// with only unsigned ones hidden, their modes are what keeps icons
-    /// off the bar, and no row to set to Show would leave no way back. On
-    /// the bar ("Show all", or nothing hidden) it is a row like any other.
-    public static func fixed(shutOut: Set<String>, unsigned: Set<String>, listed: Set<String>,
+    /// An outside app's icon is one while an icon macOS does hide on
+    /// request (an /Applications app's, the system's) is concealed: its own
+    /// mode changes nothing then, and the walk isn't asked, which still
+    /// lists the icon for some seconds after hiding took effect (at launch
+    /// it was a bar row for four seconds). Otherwise it is one when the walk
+    /// doesn't list it, unless it is set to Hide and nothing else is: with
+    /// only outside ones hidden, their modes are what keeps icons off the
+    /// bar, and no row to set to Show would leave no way back. On the bar
+    /// ("Show all", or nothing hidden) it is a row like any other.
+    public static func fixed(shutOut: Set<String>, outside: Set<String>, listed: Set<String>,
                              walked: Set<String>, concealed: Set<String>, hidden: Set<String>) -> Set<String> {
-        let othersConcealed = !concealed.subtracting(unsigned).isEmpty
-        let othersHidden = !hidden.intersection(listed).subtracting(unsigned).isEmpty
-        let known = unsigned.intersection(listed).filter {
+        let othersConcealed = !concealed.subtracting(outside).isEmpty
+        let othersHidden = !hidden.intersection(listed).subtracting(outside).isEmpty
+        let known = outside.intersection(listed).filter {
             othersConcealed || (!walked.contains($0) && (!hidden.contains($0) || othersHidden))
         }
-        return shutOut.subtracting(unsigned).union(known)
+        return shutOut.subtracting(outside).union(known)
     }
 
     /// Keys the last refresh listed and this one doesn't, although their
@@ -82,27 +92,24 @@ public enum ShutOut {
     }
 
     /// Of the icons found off the bar with an item of their own, those to
-    /// land in an adoption window rather than shut out: their app's
-    /// signature is Apple-issued, so macOS would show the icon, and only
-    /// parked it, as it does an item registered while icons are hidden
-    /// (an app that rebuilds its item, or one whose launch window was
-    /// missed). Shut out, a Developer ID app's icon was stuck in the strip
-    /// under "no Apple-issued signature" until the app quit (user report,
-    /// 2026-11-25, Tendedero). An app whose signature isn't known yet is
-    /// left as it was.
+    /// land in an adoption window rather than shut out: their app is in
+    /// /Applications, so macOS would show the icon, and only parked it, as
+    /// it does an item registered while icons are hidden (an app that
+    /// rebuilds its item, or one whose launch window was missed). An app
+    /// whose place isn't known yet is left as it was.
     /// - Parameters:
     ///   - found: keys of Show icons missing from every walk whose app
     ///     lists an item.
     ///   - bundles: known single-icon keys and the app each belongs to.
-    ///   - signatures: per running app, whether its signature is Apple-issued.
+    ///   - inApplications: per running app, whether it is in /Applications.
     public static func parked(found: Set<String>, bundles: [String: String],
-                              signatures: [String: Bool]) -> Set<String> {
-        found.filter { key in bundles[key].flatMap { signatures[$0] } == true }
+                              inApplications: [String: Bool]) -> Set<String> {
+        found.filter { key in bundles[key].flatMap { inApplications[$0] } == true }
     }
 
     /// How often a missing icon of one app is landed in an adoption window:
     /// every window shows the hidden icons for a moment, so an app that
-    /// keeps losing its item is shut out after a few, like an unsigned one.
+    /// keeps losing its item is shut out after a few, like an outside one.
     public struct Adoptions: Sendable {
         /// Windows allowed per app within `span` seconds.
         public static let limit = 3

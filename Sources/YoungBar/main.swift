@@ -65,18 +65,18 @@ final class BarApp: NSObject, NSApplicationDelegate {
     /// running: kept listed while the app is asked whether it has an icon.
     var unlistedKeys: Set<String> = []
     /// The icons with no mode to choose (`ShutOut.fixed`): the shut-out
-    /// ones, and those of apps without an Apple-issued signature that
+    /// ones, and those of apps outside /Applications that
     /// another hidden icon keeps off the bar. Set on every refresh.
     var fixedKeys: Set<String> = []
-    /// Per running app, whether its signature is Apple-issued, and the
-    /// processes looked at (`checkSignatures`).
-    var signatures: [String: Bool] = [:]
-    /// The first signature check, at launch, is still running: the ••• waits
+    /// Per running app, whether it is installed in /Applications, and the
+    /// processes looked at (`checkLocations`).
+    var inApplications: [String: Bool] = [:]
+    /// The first location check, at launch, is still running: the ••• waits
     /// for it where it is (`refresh`).
-    var signaturesPending = false
-    var signatureChecked: Set<pid_t> = []
+    var locationsPending = false
+    var locationChecked: Set<pid_t> = []
     var shutOutWatch = ShutOut.Watch()
-    /// Adoption windows opened for a signed app's icon found off the bar
+    /// Adoption windows opened for an /Applications app's icon found off the bar
     /// (`landMissing`), counted per app.
     var missingAdoptions = ShutOut.Adoptions()
     /// Keys no version reads any more (options 0.1.4 turned into fixed
@@ -470,11 +470,11 @@ final class BarApp: NSObject, NSApplicationDelegate {
         await refreshBarCopies()
         remember(snapshot)
         lookForShutOutIcons(snapshot)
-        checkSignatures()
+        checkLocations()
         overflowKeys = computeOverflow(outOfSightKeys(snapshot)).union(fixedKeys)
-        // Until the first signatures are in, an icon macOS keeps off can't
+        // Until the first locations are in, an icon macOS keeps off can't
         // be told from one on the bar; that check refreshes when it is done.
-        if signaturesPending {
+        if locationsPending {
             lastSnapshot = snapshot
         } else {
             positionControlBesideMenuIcons(in: snapshot)
@@ -520,7 +520,7 @@ final class BarApp: NSObject, NSApplicationDelegate {
         }
         listed.formUnion(unlistedKeys)
         presentKeys = listed
-        fixedKeys = ShutOut.fixed(shutOut: shutOutKeys, unsigned: unsignedKeys(), listed: listed,
+        fixedKeys = ShutOut.fixed(shutOut: shutOutKeys, outside: outsideKeys(), listed: listed,
                                   walked: Set(snapshot.items.map { $0.id.sectionKey.rawValue }),
                                   concealed: Set(snapshot.concealed.map { $0.sectionKey.rawValue }),
                                   hidden: Set(modes.filter { $0.value > 0 }.keys).union(bulkHiddenKeys))
